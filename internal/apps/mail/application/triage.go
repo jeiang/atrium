@@ -67,6 +67,9 @@ func (s *Service) Triage(ctx context.Context, in TriageInput) (application.Read[
 			}
 			data.Check = found.Rows
 		}
+		if err := linkRules(ctx, q, data.Rows, data.Check); err != nil {
+			return err
+		}
 		if !in.Full {
 			return nil
 		}

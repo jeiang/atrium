@@ -41,6 +41,7 @@
   import { navigate, p } from '../../shell/router';
   import { useConfiguration } from '../assistant/assistant';
   import ChatActions from './ChatActions.svelte';
+  import ChatFiles from './ChatFiles.svelte';
   import { failureText } from './manage';
   import ParkedApproval from './ParkedApproval.svelte';
   import ScopeMenu from './ScopeMenu.svelte';
@@ -617,6 +618,9 @@
     <a class="chat__back link" href={p('/chat')}><Icon name="chevron" />All chats</a>
     <div class="chat__heading">
       <h1 class="chat__title" tabindex="-1">{title}</h1>
+      {#if id !== undefined && !invalid}
+        <ChatFiles thread={id} />
+      {/if}
       {#if thread && id !== undefined}
         <ChatActions {thread} {running} {phone} onwork={onWork} />
       {/if}

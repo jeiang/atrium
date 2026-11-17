@@ -13,6 +13,7 @@
   import { p, route } from '../../shell/router';
   import LibraryNav from './LibraryNav.svelte';
   import { blockedBy, episodeText, handleLink, type Problem, problemOf, sizeText, useItem } from './library';
+  import Poster from './Poster.svelte';
   import './library.css';
 
   const apps = useApps();
@@ -86,6 +87,13 @@
     {:else if !detail.data}
       <Skeleton lines={5} label="Loading this title" />
     {:else}
+      {#if target}
+        <div class="lib-item__art">
+          {#key `${target.kind}/${target.id}`}
+            <Poster kind={target.kind} id={target.id} title={detail.data.entry.title} lead />
+          {/key}
+        </div>
+      {/if}
       {#if detail.data.catalogue.stale}
         <Notice tone="warn" title="The catalogue may be out of date">
           The library server did not answer the last scan, so this is from

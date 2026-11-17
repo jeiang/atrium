@@ -9,6 +9,7 @@ import type {
   MediaLibraryFile,
   MediaQueueItem,
   MediaSelectInput,
+  MediaShow,
   MediaTorrent,
   TorrentControlInput,
   TorrentFile,
@@ -23,12 +24,17 @@ export interface MediaScenario {
   catalogue?: 'empty' | 'stale' | 'error';
   refuse?: { code: string; message: string; status?: number };
   delay?: number;
+  tmdb?: 'off' | 'error';
+  releases?: 'error';
+  poll?: 'failed' | 'partial';
+  art?: { none?: string[]; down?: string[] };
 }
 
 interface Store {
   torrents: MediaTorrent[];
   files: Record<string, TorrentFile[]>;
   channels: MediaChannel[];
+  polled: boolean;
   queue: MediaQueueItem[];
 }
 
@@ -215,12 +221,48 @@ function previewOf(item: MediaQueueItem): MediaFilingPreview {
   };
 }
 
+const shows: MediaShow[] = [
+  { id: 4101, name: 'Harbour Lights', year: '2023' },
+  { id: 4102, name: 'Harbour Lights Revisited', year: '2026' },
+  { id: 4201, name: 'Lantern Street', year: '2025' },
+  { id: 4301, name: 'Moss and Mortar', year: '2022' },
+  { id: 4302, name: 'Mortar Board', year: '' },
+];
+
+const imdbOfShow: Record<number, string> = { 4101: 'tt0000101', 4201: 'tt0000201', 4301: 'tt0000301' };
+
+const releasesOf: Record<string, string[]> = {
+  tt0000101: [
+    'Harbour.Lights.S02E08.1080p.WEB.h264',
+    'Harbour.Lights.S02E08.720p.HDTV.x264',
+    'Harbour.Lights.S02E07.2160p.WEB.h265',
+    'Harbour.Lights.S02E07.1080p.WEB.h264',
+  ],
+  tt0000301: [
+    'Moss.and.Mortar.S01E02.1080p.WEB.h264',
+    'Moss.and.Mortar.S01E02.720p.WEB.h264',
+    'Moss.and.Mortar.S01E01.1080p.WEB.h264',
+  ],
+};
+
+const artShades: Record<string, string> = { movie: '#5f6f3a', show: '#8a5a2b' };
+
+function artOf(kind: string, id: string): string {
+  const shade = artShades[kind] ?? '#6b6b4a';
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300" viewBox="0 0 200 300"><rect width="200" height="300" fill="${shade}"/><circle cx="100" cy="120" r="${40 + (id.charCodeAt(1) % 5) * 8}" fill="#f2e6c9" opacity="0.7"/></svg>`;
+}
+
+function imdbDigits(value: string): string | undefined {
+  const digits = /^(?:tt)?(\d{1,10})$/.exec(value.trim())?.[1];
+  return digits ? `tt${digits.padStart(7, '0')}` : undefined;
+}
+
 function error(code: string, message: string, status: number): Response {
   return HttpResponse.json({ error: { code, message } }, { status });
 }
 
 export function mediaHandlers(read: () => { media?: MediaScenario; apps?: AppsScenario }) {
-  let store: Store = { torrents: [], files: {}, channels: [], queue: [] };
+  let store: Store = { torrents: [], files: {}, channels: [], queue: [], polled: false };
   let seededFrom: string | undefined;
   let nextChannel = 10;
 
@@ -234,6 +276,7 @@ export function mediaHandlers(read: () => { media?: MediaScenario; apps?: AppsSc
         files: seedFiles(scenario),
         channels: seedChannels(scenario),
         queue: seedQueue(scenario),
+        polled: false,
       };
     }
     return store;
@@ -395,6 +438,68 @@ export function mediaHandlers(read: () => { media?: MediaScenario; apps?: AppsSc
       channels.splice(index, 1);
       return HttpResponse.json({ channel, polled: false });
     }),
+    http.get(`*${API_BASE}/media/shows`, async ({ request }) => {
+      await wait();
+      const blocked = gone();
+      if (blocked) return blocked;
+      if (scenario().tmdb === 'off') return error('not_configured', 'media_tmdb_token is not set', 503);
+      if (scenario().tmdb === 'error') return error('unavailable', 'TMDB did not answer.', 503);
+      const url = new URL(request.url);
+      const q = (url.searchParams.get('q') ?? '').trim().toLowerCase();
+      if (q === '') return error('invalid', 'Type a show name to search.', 422);
+      const limit = Number(url.searchParams.get('limit') ?? '20');
+      const start = Number(url.searchParams.get('cursor') ?? '0');
+      const all = shows.filter((show) => show.name.toLowerCase().includes(q));
+      const next = start + limit < all.length ? String(start + limit) : undefined;
+      return HttpResponse.json({ items: all.slice(start, start + limit), ...(next ? { next } : {}) });
+    }),
+    http.get(`*${API_BASE}/media/shows/:id`, async ({ params }) => {
+      await wait();
+      const blocked = gone();
+      if (blocked) return blocked;
+      if (scenario().tmdb === 'off') return error('not_configured', 'media_tmdb_token is not set', 503);
+      if (scenario().tmdb === 'error') return error('unavailable', 'TMDB did not answer.', 503);
+      const imdb = imdbOfShow[Number(params.id)];
+      return HttpResponse.json({ imdb: imdb ?? '', found: imdb !== undefined });
+    }),
+    http.get(`*${API_BASE}/media/channels/preview`, async ({ request }) => {
+      await wait();
+      const blocked = gone();
+      if (blocked) return blocked;
+      const url = new URL(request.url);
+      const imdb = imdbDigits(url.searchParams.get('imdb') ?? '');
+      if (!imdb) return error('invalid', 'Pick a show or enter an IMDb id first.', 422);
+      if (scenario().releases === 'error') return error('unavailable', 'The release feed did not answer.', 503);
+      const pattern = (url.searchParams.get('pattern') ?? '').trim();
+      let match: RegExp | undefined;
+      if (pattern !== '') {
+        try {
+          match = new RegExp(pattern, url.searchParams.get('case_sensitive') === 'true' ? '' : 'i');
+        } catch (failure) {
+          return error('invalid', `pattern "${pattern}": ${(failure as Error).message}`, 422);
+        }
+      }
+      const items = (releasesOf[imdb] ?? []).map((title) => ({ title, match: match?.test(title) ?? false }));
+      return HttpResponse.json({ items, matched: items.filter((item) => item.match).length });
+    }),
+    http.post(`*${API_BASE}/media/channels/poll`, async () => {
+      await wait();
+      const blocked = gone() ?? refusal();
+      if (blocked) return blocked;
+      const store = current();
+      if (store.channels.length === 0) return error('not_configured', 'no show is followed', 503);
+      if (scenario().poll === 'failed') return error('unavailable', 'Channel poll failed.', 503);
+      const fresh = store.polled ? [] : ['Harbour.Lights.S02E08.1080p.WEB.h264'];
+      store.polled = true;
+      for (const name of fresh) {
+        const hash = `poll${store.torrents.length}`;
+        store.torrents.push({ hash, name, state: 'metaDL', tags: 'media', progress: 0, size: null });
+        store.files[hash] = [];
+      }
+      if (scenario().poll === 'partial')
+        return error('effect_partial', 'Channel poll stopped after adding torrents.', 409);
+      return HttpResponse.json({ added: fresh.length, errors: 0 });
+    }),
     http.get(`*${API_BASE}/media/queue`, async () => {
       await wait();
       return gone() ?? HttpResponse.json({ items: current().queue });
@@ -444,6 +549,19 @@ export function mediaHandlers(read: () => { media?: MediaScenario; apps?: AppsSc
       const entry = entries.find((item) => item.kind === params.kind && item.id === params.id);
       if (!entry) return error('not_found', 'The library has no such title.', 404);
       return HttpResponse.json({ entry, items: files[entry.id] ?? [], catalogue: catalogue(scenario()) });
+    }),
+    http.get(`*${API_BASE}/media/art/:kind/:id`, async ({ params }) => {
+      await wait();
+      const blocked = gone();
+      if (blocked) return blocked;
+      const kind = String(params.kind);
+      const id = String(params.id);
+      if (!entries.some((entry) => entry.kind === kind && entry.id === id))
+        return error('not_found', 'Not found.', 404);
+      const art = scenario().art;
+      if (art?.down?.includes(id)) return error('unavailable', 'The library server did not answer.', 503);
+      if (art?.none?.includes(id)) return error('not_found', 'Not found.', 404);
+      return new HttpResponse(artOf(kind, id), { headers: { 'Content-Type': 'image/svg+xml' } });
     }),
     http.get(`*${API_BASE}/media/files/:id/link`, async ({ params }) => {
       await wait();

@@ -5,6 +5,7 @@
 }: {
   perSystem = {
     pkgs,
+    go,
     self',
     ...
   }: let
@@ -563,7 +564,19 @@
 
         inherit (pkgs.callPackage ../nix/web.nix {}) web-lint web-size;
 
-        web-playwright-pin = pkgs.runCommand "atrium-web-playwright-pin" {nativeBuildInputs = [pkgs.jq];} ''
+        ci-pins = pkgs.runCommand "atrium-ci-pins" {nativeBuildInputs = [pkgs.jq];} ''
+          want() {
+            pinned=$(jq -r --arg k "$1" '.[$k] // "missing"' ${../.ci/pins.json})
+            if [ "$pinned" != "$2" ]; then
+              echo ".ci/pins.json pins $1 $pinned; Nix selects $2: pin $1 to $2" >&2
+              exit 1
+            fi
+          }
+          want go ${go.version}
+          want node ${pkgs.nodejs_24.version}
+          want golangciLint ${pkgs.golangci-lint.version}
+          want biome ${pkgs.biome.version}
+          want sqlcipher ${sqlcipherLib.version}
           driver=${pkgs.playwright-driver.version}
           for name in @playwright/test playwright playwright-core; do
             pinned=$(jq -r --arg p "node_modules/$name" '.packages[$p].version // "missing"' ${../web/package-lock.json})

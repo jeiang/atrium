@@ -9,6 +9,7 @@
   import List from '../../shared/ui/List.svelte';
   import ListRow from '../../shared/ui/ListRow.svelte';
   import Page from '../../shared/ui/Page.svelte';
+  import Segmented from '../../shared/ui/Segmented.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
   import { p, route } from '../../shell/router';
   import { useSpaces } from './knowledge';
@@ -17,9 +18,14 @@
   import './knowledge.css';
 
   const LEDE = 'Each space keeps its subjects, chats, tasks and files together.';
+  const SHELVES = [
+    { value: 'active', label: 'Active' },
+    { value: 'archived', label: 'Archived' },
+  ] as const;
 
   let phone = $state(false);
   let creating = $state(false);
+  let shelf = $state('active');
 
   $effect(() => {
     const query = matchMedia('(width < 861px)');
@@ -30,7 +36,7 @@
   const raw = $derived(route.params.space);
   const id = $derived(raw !== undefined && /^[1-9]\d*$/.test(raw) ? Number(raw) : undefined);
   const invalid = $derived(raw !== undefined && id === undefined);
-  const spaces = useSpaces();
+  const spaces = useSpaces(() => shelf === 'archived');
   const rows = $derived(spaces.data?.pages.flatMap((page) => page.items) ?? []);
   const offline = $derived(unreachable(spaces));
 
@@ -58,6 +64,7 @@
     level: 2 | 3,
   )}
   <div class="subjects__region" aria-busy={spaces.isFetching || undefined}>
+    <Segmented label="Which spaces" options={SHELVES} bind:value={shelf} />
     {#if offline}
       <ViewState kind="offline" title="Cannot reach atrium" {level}>
         Spaces load again when the connection returns.
@@ -74,12 +81,16 @@
           <Button onclick={onRetry}>Try again</Button>
         {/snippet}
       </ViewState>
+    {:else if rows.length === 0 && shelf === 'archived'}
+      <ViewState kind="empty" title="No archived spaces" {level}>
+        Spaces you archive move here. Restore one from its page.
+      </ViewState>
     {:else if rows.length === 0}
       <ViewState kind="empty" title="No spaces yet" {level}>
         A space gathers the subjects, chats and files of one project. Make one with New space.
       </ViewState>
     {:else}
-      <List label="Spaces">
+      <List label={shelf === 'archived' ? 'Archived spaces' : 'Spaces'}>
         {#each rows as space (space.id)}
           <ListRow
             title={space.name}

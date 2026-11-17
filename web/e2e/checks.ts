@@ -27,7 +27,16 @@ export async function gotoShell(page: Page, path: string): Promise<void> {
   await page.evaluate(() => document.fonts.ready);
 }
 
+async function settled(page: Page): Promise<void> {
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((animation) => animation.playState !== 'running' || animation.effect?.getTiming().iterations === Infinity),
+  );
+}
+
 export async function expectNoHorizontalScroll(page: Page): Promise<void> {
+  await settled(page);
   const overflow = await page.evaluate(() => {
     const root = document.documentElement;
     return { scroll: root.scrollWidth, client: root.clientWidth };
@@ -39,6 +48,7 @@ export async function expectNoHorizontalScroll(page: Page): Promise<void> {
 }
 
 export async function expectTouchTargets(page: Page, scope = 'body'): Promise<void> {
+  await settled(page);
   const failures = await page.evaluate(
     ({ selector, size, scope }) => {
       const describe = (el: Element): string => {
@@ -60,6 +70,21 @@ export async function expectTouchTargets(page: Page, scope = 'body'): Promise<vo
           el.checkVisibility()
         );
       };
+      const measured = (el: Element, rect: DOMRect): string => {
+        const moved: string[] = [];
+        for (let up: Element | null = el; up; up = up.parentElement) {
+          const style = getComputedStyle(up);
+          const parts = [
+            style.transform !== 'none' ? `transform ${style.transform}` : '',
+            style.scale !== 'none' ? `scale ${style.scale}` : '',
+            style.translate !== 'none' ? `translate ${style.translate}` : '',
+            style.rotate !== 'none' ? `rotate ${style.rotate}` : '',
+            style.zoom !== '1' && style.zoom !== 'normal' && style.zoom !== '' ? `zoom ${style.zoom}` : '',
+          ].filter(Boolean);
+          if (parts.length > 0) moved.push(`${describe(up)} ${parts.join(' ')}`);
+        }
+        return `exact ${rect.width.toFixed(3)}x${rect.height.toFixed(3)} px, device pixel ratio ${devicePixelRatio}, visual viewport scale ${visualViewport?.scale ?? 1}, transforms ${moved.length > 0 ? moved.join('; ') : 'none'}`;
+      };
       const half = size / 2;
       const found: string[] = [];
       const squares: { name: string; x: number; y: number }[] = [];
@@ -71,7 +96,9 @@ export async function expectTouchTargets(page: Page, scope = 'body'): Promise<vo
         el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
         const rect = el.getBoundingClientRect();
         if (rect.width < size || rect.height < size) {
-          found.push(`${name}: ${Math.round(rect.width)}x${Math.round(rect.height)} px, needs ${size}x${size} px`);
+          found.push(
+            `${name}: ${Math.round(rect.width)}x${Math.round(rect.height)} px, needs ${size}x${size} px (${measured(el, rect)})`,
+          );
           continue;
         }
         const cx = rect.left + rect.width / 2;
@@ -88,7 +115,7 @@ export async function expectTouchTargets(page: Page, scope = 'body'): Promise<vo
             const hit = document.elementFromPoint(cx + dx, cy + dy);
             if (hit && (hit === el || el.contains(hit) || (hit.contains(el) && !hit.matches(selector)))) continue;
             found.push(
-              `${name}: point (${Math.round(dx)}, ${Math.round(dy)}) from its center hits ${hit ? describe(hit) : 'nothing'}`,
+              `${name}: point (${Math.round(dx)}, ${Math.round(dy)}) from its center hits ${hit ? describe(hit) : 'nothing'} (${measured(el, rect)})`,
             );
           }
         }
@@ -111,6 +138,7 @@ export async function expectTouchTargets(page: Page, scope = 'body'): Promise<vo
 const shellEdges = ['.rail', '.tabbar'];
 
 export async function expectRoundedSurfaces(page: Page, windowEdge: readonly string[] = []): Promise<void> {
+  await settled(page);
   const failures = await page.evaluate(
     (allowed) => {
       const describe = (el: Element): string => {
@@ -214,15 +242,8 @@ export async function expectRoundedSurfaces(page: Page, windowEdge: readonly str
 }
 
 export async function expectNoSeriousAxeFindings(page: Page): Promise<void> {
-  await page.waitForFunction(
-    () =>
-      !document.querySelector('[data-arming]') &&
-      document
-        .getAnimations()
-        .every(
-          (animation) => animation.playState !== 'running' || animation.effect?.getTiming().iterations === Infinity,
-        ),
-  );
+  await page.waitForFunction(() => !document.querySelector('[data-arming]'));
+  await settled(page);
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'])
     .analyze();
@@ -255,6 +276,7 @@ const colorProperties = [
 ];
 
 export async function expectNoBlue(page: Page, maxChroma = 0.02): Promise<void> {
+  await settled(page);
   const failures = await page.evaluate(
     ({ properties, limit }) => {
       const canvas = document.createElement('canvas');

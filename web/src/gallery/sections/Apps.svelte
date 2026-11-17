@@ -11,12 +11,12 @@
     seedApps().map((app) => (app.id === 'mail' ? { ...app, enabled: false } : app)),
     '1',
   );
-  const blocked = mailOff.filter((app) => app.id === 'parcels');
+  const blocked = mailOff.filter((app) => app.id === 'packages');
   const grafana = all.filter((app) => app.id === 'grafana');
   const refusal: Outcome = {
     tone: 'warn',
     title: 'Another app needs it',
-    text: 'Parcels needs Mail. Turn it off first.',
+    text: 'Packages needs Mail. Turn it off first.',
     open: [],
   };
   const stale: Outcome = {

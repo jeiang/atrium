@@ -8,6 +8,8 @@
   import { isActive, p, route } from '../../shell/router';
   import InstructionsEditor from './InstructionsEditor.svelte';
   import { useInstructions, useSubjects } from './knowledge';
+  import ProfilePage from './ProfilePage.svelte';
+  import ReviewPage from './ReviewPage.svelte';
   import SubjectList from './SubjectList.svelte';
   import SubjectPage from './SubjectPage.svelte';
   import './knowledge.css';
@@ -22,10 +24,12 @@
 
   const listing = $derived(isActive('/knowledge/subjects'));
   const standing = $derived(isActive('/knowledge/instructions'));
+  const reviewing = $derived(isActive('/knowledge/review'));
+  const aboutMe = $derived(isActive('/knowledge/me'));
   const raw = $derived(route.params.id);
   const named = $derived(raw !== undefined && /^[1-9]\d*$/.test(raw) ? Number(raw) : undefined);
   const invalid = $derived(raw !== undefined && named === undefined);
-  const opening = $derived(!listing && !standing && raw === undefined);
+  const opening = $derived(!listing && !standing && !reviewing && !aboutMe && raw === undefined);
 
   const instructions = useInstructions();
   const first = useSubjects(() => ({ q: '', kind: '', scope: '' }));
@@ -63,10 +67,14 @@
 </script>
 
 {#snippet pane()}
-  {#if shown === undefined}
+  {#if shown === undefined && !reviewing && !aboutMe}
     <h1 class="visually-hidden">Knowledge</h1>
   {/if}
-  {#if invalid}
+  {#if reviewing}
+    <ReviewPage />
+  {:else if aboutMe}
+    <ProfilePage {phone} />
+  {:else if invalid}
     <ViewState kind="empty" title="This page does not exist" level={2}>
       The address does not name a knowledge page. Pick a subject instead.
     </ViewState>
@@ -101,7 +109,7 @@
 
 {#if listing}
   <Page title="Knowledge" lede="Everything you and the assistant keep, newest first.">
-    <SubjectList selected={shown} level={2} />
+    <SubjectList selected={shown} level={2} {phone} />
   </Page>
 {:else if phone}
   <div class="knowledge knowledge--phone">
@@ -111,7 +119,7 @@
 {:else}
   <div class="knowledge">
     <nav class="knowledge__nav" aria-label="Knowledge subjects">
-      <SubjectList selected={shown} {standing} level={2} />
+      <SubjectList selected={shown} {standing} level={2} {phone} />
     </nav>
     <div class="knowledge__pane">
       {@render pane()}

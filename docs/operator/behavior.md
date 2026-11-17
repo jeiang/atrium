@@ -568,6 +568,14 @@ Mail is one sidebar entry. Its tabs are Decisions (`/triage`, which links each
 message page), Rules (`/rules`) and Status (`/live`); Mail settings stay at `/settings/mail`.
 With the Mail module off, the entry, its tabs and its pages are gone.
 
+Rules and decisions link both ways. A decision made by an operator rule names
+that rule: its id, a plain title such as "File into Bills", and a link to the
+rule. If the rule was edited or replaced by an import after the decision, the
+decision says "Rule changed"; if the rule was deleted, it shows the id and
+"Rule removed". Each rule in the list shows how many decisions it made, and its
+edit page lists them, newest first, 20 at a time. These are reads only:
+stored rules and decisions are not rewritten.
+
 - Shadow records what automatic actions would do and makes no automatic
   mailbox writes.
 - Live automatic writes also require no pause, go-live eligibility, verified

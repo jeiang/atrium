@@ -1,4 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig } from '@playwright/test';
+
+type Engine = 'chromium' | 'firefox' | 'webkit';
+
+const engines: Engine[] = JSON.parse(readFileSync(new URL('./e2e/engines.json', import.meta.url), 'utf8'));
 
 export default defineConfig({
   testDir: 'e2e',
@@ -13,9 +18,5 @@ export default defineConfig({
     baseURL: process.env.ATRIUM_E2E_URL,
     trace: 'off',
   },
-  projects: [
-    { name: 'chromium', use: { browserName: 'chromium' } },
-    { name: 'firefox', use: { browserName: 'firefox' } },
-    { name: 'webkit', use: { browserName: 'webkit' } },
-  ],
+  projects: engines.map((engine) => ({ name: engine, use: { browserName: engine } })),
 });

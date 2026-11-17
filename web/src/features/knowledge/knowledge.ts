@@ -1,25 +1,38 @@
 import { createInfiniteQuery, createQuery, type QueryClient } from '@tanstack/svelte-query';
 import {
   ApiError,
+  type ChangeKnowledgeBatch,
   type ChangeKnowledgeChanged,
   type ChangeKnowledgeLink,
+  type KnowledgeFieldsScope,
   type KnowledgeLink,
   type KnowledgeLinkRequestRelation,
   type KnowledgeLinkRequestTargetKind,
+  type KnowledgeMatchingRequestState,
   type KnowledgeSubjectsKind,
   type KnowledgeSubjectsScope,
   knowledgeConfirm,
+  knowledgeConfirmMatching,
+  knowledgeConfirmSelected,
+  knowledgeCreate,
   knowledgeDetail,
   knowledgeEdit,
   knowledgeInstructions,
   knowledgeLink,
   knowledgeLinks,
+  knowledgeList,
   knowledgeMap,
+  knowledgeProfile,
+  knowledgePurge,
   knowledgeRestore,
   knowledgeRetract,
+  knowledgeRetractRun,
+  knowledgeSpaceArchive,
   knowledgeSpaceCreate,
   knowledgeSpaceDetail,
   knowledgeSpaceEdit,
+  knowledgeSpaceFileDelete,
+  knowledgeSpaceFileUpload,
   knowledgeSpaceList,
   knowledgeSubject,
   knowledgeSubjects,
@@ -28,6 +41,7 @@ import {
   reviewUndoEffect,
   searchAll,
 } from '../../contract';
+import { plural } from '../../shared/assistant/format';
 import { outcomeUnknown, refusedOffline } from '../../shared/device.svelte';
 import type { ListOption } from '../../shared/ui/Listbox.svelte';
 
@@ -88,6 +102,39 @@ export function useSubjects(filter: () => SubjectFilter) {
       meta: { topics: TOPICS },
     };
   });
+}
+
+export interface ReviewFilter {
+  state: KnowledgeMatchingRequestState;
+  q: string;
+  scope: '' | KnowledgeFieldsScope;
+}
+
+export function useReview(filter: () => ReviewFilter) {
+  return createInfiniteQuery(() => {
+    const { state, q, scope } = filter();
+    return {
+      queryKey: ['knowledge', 'list', state, q, scope],
+      queryFn: async ({ pageParam, signal }) =>
+        ok(
+          await knowledgeList(
+            { state, q: q || undefined, scope: scope || undefined, cursor: pageParam || undefined, limit: PAGE },
+            { signal },
+          ),
+        ).data,
+      initialPageParam: '',
+      getNextPageParam: (last) => last.next_cursor ?? undefined,
+      meta: { topics: TOPICS },
+    };
+  });
+}
+
+export function useProfile() {
+  return createQuery(() => ({
+    queryKey: ['knowledge', 'profile'],
+    queryFn: async ({ signal }) => ok(await knowledgeProfile({ signal })).data,
+    meta: { topics: TOPICS },
+  }));
 }
 
 export function useInstructions() {
@@ -191,6 +238,42 @@ export async function handleUndoEffects(effects: readonly number[]): Promise<voi
   for (const effect of effects) ok(await reviewUndoEffect(effect, oneGesture()));
 }
 
+export async function handleCreate(fields: {
+  title: string;
+  body: string;
+  scope: KnowledgeFieldsScope;
+  private: boolean;
+  pinned: boolean;
+}): Promise<ChangeKnowledgeChanged> {
+  return ok(await knowledgeCreate(fields, oneGesture()));
+}
+
+export async function handleConfirmSelected(ids: readonly number[]): Promise<ChangeKnowledgeBatch> {
+  return ok(await knowledgeConfirmSelected({ ids: [...ids] }, oneGesture()));
+}
+
+export async function handleConfirmMatching(filter: ReviewFilter): Promise<ChangeKnowledgeBatch> {
+  const { state, q, scope } = filter;
+  return ok(await knowledgeConfirmMatching({ state, q: q || undefined, scope: scope || undefined }, oneGesture()));
+}
+
+export async function handleRetractRun(runId: number): Promise<ChangeKnowledgeBatch> {
+  return ok(await knowledgeRetractRun({ run_id: runId }, oneGesture()));
+}
+
+export async function handlePurge(id: number): Promise<void> {
+  ok(await knowledgePurge(id, oneGesture()));
+}
+
+export function batchText(batch: ChangeKnowledgeBatch, done: (count: number) => string): string {
+  const { committed, refused, failed } = batch.data;
+  const parts = [done(committed.length)];
+  if (refused.length)
+    parts.push(`${plural(refused.length, 'record was', 'records were')} refused: ${refused[0]?.message}.`);
+  if (failed.length) parts.push(`${plural(failed.length, 'record')} failed: ${failed[0]?.message}.`);
+  return parts.join(' ');
+}
+
 export function refreshKnowledge(client: QueryClient): Promise<void> {
   return client.invalidateQueries({ queryKey: ['knowledge'] });
 }
@@ -207,15 +290,23 @@ export function useMap(id: () => number | undefined) {
   });
 }
 
-export function useSpaces() {
-  return createInfiniteQuery(() => ({
-    queryKey: ['knowledge', 'spaces'],
-    queryFn: async ({ pageParam, signal }) =>
-      ok(await knowledgeSpaceList({ cursor: pageParam || undefined, limit: PAGE }, { signal })),
-    initialPageParam: '',
-    getNextPageParam: (last) => last.next_cursor ?? undefined,
-    meta: { topics: TOPICS },
-  }));
+export function useSpaces(archived: () => boolean) {
+  return createInfiniteQuery(() => {
+    const shelf = archived();
+    return {
+      queryKey: ['knowledge', 'spaces', shelf],
+      queryFn: async ({ pageParam, signal }: { pageParam: string; signal: AbortSignal }) =>
+        ok(
+          await knowledgeSpaceList(
+            { archived: shelf || undefined, cursor: pageParam || undefined, limit: PAGE },
+            { signal },
+          ),
+        ),
+      initialPageParam: '',
+      getNextPageParam: (last: { next_cursor?: string | null }) => last.next_cursor ?? undefined,
+      meta: { topics: TOPICS },
+    };
+  });
 }
 
 export function useSpace(id: () => number | undefined) {
@@ -251,6 +342,18 @@ export async function handleCreateSpace(fields: { name: string; effort: string; 
 
 export async function handleRenameSpace(id: number, name: string): Promise<void> {
   ok(await knowledgeSpaceEdit(id, { name }, oneGesture()));
+}
+
+export async function handleArchiveSpace(id: number, archived: boolean): Promise<void> {
+  ok(await knowledgeSpaceArchive(id, { archived }, oneGesture()));
+}
+
+export async function handleUploadFiles(space: number, files: readonly File[]): Promise<number> {
+  return ok(await knowledgeSpaceFileUpload(space, { upload: [...files] }, oneGesture())).file_ids?.length ?? 0;
+}
+
+export async function handleDeleteFile(space: number, file: number): Promise<void> {
+  ok(await knowledgeSpaceFileDelete(space, file, oneGesture()));
 }
 
 export async function handleAddToSpace(

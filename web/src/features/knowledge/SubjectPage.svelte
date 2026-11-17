@@ -8,6 +8,7 @@
   import Markdown from '../../shared/markdown/Markdown.svelte';
   import Badge from '../../shared/ui/Badge.svelte';
   import Button from '../../shared/ui/Button.svelte';
+  import Dialog from '../../shared/ui/Dialog.svelte';
   import List from '../../shared/ui/List.svelte';
   import ListRow from '../../shared/ui/ListRow.svelte';
   import Notice from '../../shared/ui/Notice.svelte';
@@ -18,12 +19,15 @@
   import ViewState from '../../shared/ui/ViewState.svelte';
   import { navigate, p } from '../../shell/router';
   import {
+    batchText,
     dialogOpen,
     failureText,
     handleConfirm,
+    handlePurge,
     handleRemoveLink,
     handleRestore,
     handleRetract,
+    handleRetractRun,
     handleSaveEdit,
     handleUndoEffects,
     isStale,
@@ -65,6 +69,12 @@
   let removing = $state<number>();
   let linking = $state(false);
   let mapButton = $state<HTMLButtonElement>();
+  let purging = $state(false);
+  let purgeBusy = $state(false);
+  let purgeFailed = $state<string>();
+  let runConfirm = $state(false);
+  let runBusy = $state(false);
+  let runFailed = $state<string>();
 
   const data = $derived(page.data);
   const subject = $derived(data?.subject);
@@ -72,6 +82,9 @@
   const incoming = $derived(liveLinks(links.data?.incoming));
   const offline = $derived(unreachable(page));
   const missing = $derived(page.error instanceof ApiError && page.error.status === 404);
+  const sameRun = $derived(history.data?.same_run ?? []);
+  const runId = $derived(subject?.source?.run_id);
+  const runCount = $derived(sameRun.length + 1);
 
   $effect(() => {
     void id;
@@ -280,6 +293,59 @@
     }
   }
 
+  function onAskPurge(): void {
+    purgeFailed = undefined;
+    purging = true;
+  }
+
+  async function onPurge(): Promise<void> {
+    if (purgeBusy || !subject) return;
+    const title = subject.title || 'Untitled';
+    purgeBusy = true;
+    purgeFailed = undefined;
+    try {
+      await handlePurge(id);
+      purging = false;
+      toast(`Deleted for good: ${title}.`);
+      await navigate(phone ? '/knowledge/subjects' : '/knowledge');
+      await refreshKnowledge(client);
+    } catch (error) {
+      purgeFailed = failure(error);
+    } finally {
+      purgeBusy = false;
+    }
+  }
+
+  function onAskRetractRun(): void {
+    runFailed = undefined;
+    runConfirm = true;
+  }
+
+  async function onRetractRun(): Promise<void> {
+    if (runBusy || runId == null) return;
+    runBusy = true;
+    runFailed = undefined;
+    try {
+      const batch = await handleRetractRun(runId);
+      runConfirm = false;
+      const effects = batch.effect_ids ?? [];
+      toast(
+        batchText(batch, (count) => `Retracted ${plural(count, 'record')} from this run. Kept in history.`),
+        {
+          action:
+            effects.length > 0
+              ? { label: 'Undo', run: () => void handleUndo(effects, 'Restored the records from this run.') }
+              : undefined,
+        },
+      );
+      await refreshKnowledge(client);
+    } catch (error) {
+      runFailed = failure(error);
+    } finally {
+      runBusy = false;
+    }
+  }
+
   function onLink(): void {
     linking = true;
   }
@@ -447,6 +513,7 @@
           The assistant no longer uses this page. It is kept in history.
           {#snippet action()}
             <Button pending={busy === 'restore'} onclick={handleRestorePage}>Restore</Button>
+            <Button variant="danger" onclick={onAskPurge}>Delete for good</Button>
           {/snippet}
         </Notice>
       {/if}
@@ -550,6 +617,29 @@
         {/if}
       </Section>
 
+      {#if runId != null && sameRun.length > 0 && !subject.retracted}
+        <Section title="From the same run" meta={plural(sameRun.length, 'other record')}>
+          {#snippet actions()}
+            <Button size="sm" variant="quiet" onclick={onAskRetractRun}>Retract the run</Button>
+          {/snippet}
+          <List label="From the same run">
+            {#each sameRun as other (other.id)}
+              <ListRow
+                title={other.title}
+                meta="Written by {writerLabel(other.writer)} · edited {formatDay(other.updated_at)}"
+                href={p('/knowledge/:id', { params: { id: String(other.id) } })}
+              >
+                {#snippet end()}
+                  {#if !other.confirmed}
+                    <Badge tone="warn">Unconfirmed</Badge>
+                  {/if}
+                {/snippet}
+              </ListRow>
+            {/each}
+          </List>
+        </Section>
+      {/if}
+
       <Section title="History">
         {#if history.isPending}
           <div class="kpage-links-loading"><ViewState kind="loading" title="Loading history" /></div>
@@ -592,4 +682,39 @@
     {/if}
   </article>
   <LinkDialog bind:open={linking} {id} title={subject.title} {phone} />
+  <Dialog
+    bind:open={purging}
+    sheet={phone}
+    title="Delete {subject.title || 'this page'} for good?"
+    pending={purgeBusy}
+    initialFocus="cancel"
+  >
+    <p>This removes the page, its links and its history from atrium. It cannot be undone.</p>
+    {#if purgeFailed}
+      <Notice tone="error" variant="inline">{purgeFailed}</Notice>
+    {/if}
+    {#snippet actions()}
+      <Button data-cancel disabled={purgeBusy} onclick={() => (purging = false)}>Cancel</Button>
+      <Button variant="danger" pending={purgeBusy} onclick={onPurge}>Delete for good</Button>
+    {/snippet}
+  </Dialog>
+  <Dialog
+    bind:open={runConfirm}
+    sheet={phone}
+    title="Retract {runCount} records from this run?"
+    pending={runBusy}
+    initialFocus="cancel"
+  >
+    <p>
+      This retracts {subject.title || 'this page'} and {plural(sameRun.length, 'other record')} the same run wrote. The
+      assistant stops using them. They stay in history, and you can undo it.
+    </p>
+    {#if runFailed}
+      <Notice tone="error" variant="inline">{runFailed}</Notice>
+    {/if}
+    {#snippet actions()}
+      <Button data-cancel disabled={runBusy} onclick={() => (runConfirm = false)}>Cancel</Button>
+      <Button variant="danger" pending={runBusy} onclick={onRetractRun}>Retract {runCount} records</Button>
+    {/snippet}
+  </Dialog>
 {/if}

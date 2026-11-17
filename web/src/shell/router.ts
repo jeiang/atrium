@@ -14,6 +14,7 @@ const unavailable = () => ({ default: Unavailable });
 
 const knowledge = () => preloadMarkdown(import('../features/knowledge/KnowledgePage.svelte').catch(unavailable));
 const spaces = () => preloadMarkdown(import('../features/knowledge/SpacesPage.svelte').catch(unavailable));
+const filePage = () => preloadMarkdown(import('../features/files/FilePage.svelte').catch(unavailable));
 
 const settingsPage = () => import('../features/settings/SettingsPage.svelte').catch(unavailable);
 const calendar = () => import('../apps/calendar/CalendarPage.svelte').catch(unavailable);
@@ -32,6 +33,7 @@ export const { p, navigate, isActive, route } = createRouter(
       '/': () => import('../features/chats/ChatsPage.svelte').catch(unavailable),
       '/new': () => preloadMarkdown(import('../features/chats/ChatPage.svelte').catch(unavailable)),
       '/:id': () => preloadMarkdown(import('../features/chats/ChatPage.svelte').catch(unavailable)),
+      '/:id/files/:file': filePage,
       meta: { title: 'Chats' },
     },
     '/plan': {
@@ -49,8 +51,11 @@ export const { p, navigate, isActive, route } = createRouter(
       '/': knowledge,
       '/subjects': knowledge,
       '/instructions': knowledge,
+      '/review': knowledge,
+      '/me': knowledge,
       '/map': () => import('../features/knowledge/MapPage.svelte').catch(unavailable),
-      '/spaces': { '/': spaces, '/:space': spaces },
+      '/files': () => import('../features/files/FilesPage.svelte').catch(unavailable),
+      '/spaces': { '/': spaces, '/:space': spaces, '/:space/files/:file': filePage },
       '/:id': knowledge,
       meta: { title: 'Knowledge' },
     },
@@ -65,6 +70,10 @@ export const { p, navigate, isActive, route } = createRouter(
         meta: { title: 'All apps' },
       },
       '/calendar': { '/': calendar, '/week': calendar, '/candidates': calendar, meta: { title: 'Calendar' } },
+      '/packages': {
+        '/': () => import('../apps/packages/PackagesPage.svelte').catch(unavailable),
+        meta: { title: 'Packages' },
+      },
       '/torrents': {
         '/': () => import('../apps/torrents/DownloadsPage.svelte').catch(unavailable),
         meta: { title: 'Downloads' },
