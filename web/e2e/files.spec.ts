@@ -48,7 +48,9 @@ test.describe('files in spaces and chats', () => {
   test('a space lists its files and opens a preview', async ({ page }) => {
     await openGarden(page);
     await expect(spaceFiles(page).getByRole('listitem')).toHaveCount(2);
-    await spaceFiles(page).getByRole('link', { name: /garden-seeds\.csv/ }).click();
+    await spaceFiles(page)
+      .getByRole('link', { name: /garden-seeds\.csv/ })
+      .click();
     await expect(page).toHaveURL(/\/knowledge\/spaces\/5\/files\/602$/);
     await expect(page.getByRole('heading', { level: 1, name: 'garden-seeds.csv' })).toBeVisible();
     const table = page.getByRole('table', { name: 'garden-seeds.csv' });
@@ -75,7 +77,9 @@ test.describe('files in spaces and chats', () => {
     const writes = await sent(page);
     expect(writes.map((item) => [item.method, item.path])).toEqual([['POST', '/web/v1/knowledge/spaces/5/files']]);
     expect(writes[0]?.key).toMatch(UUID);
-    await spaceFiles(page).getByRole('link', { name: /shed-notes\.txt/ }).click();
+    await spaceFiles(page)
+      .getByRole('link', { name: /shed-notes\.txt/ })
+      .click();
     await expect(page.getByText('Paint the door sage green.')).toBeVisible();
   });
 
@@ -223,7 +227,10 @@ test.describe('files in spaces and chats', () => {
         });
       });
       await page.getByRole('button', { name: 'Delete bed-plan.md' }).click();
-      await page.getByRole('dialog', { name: 'Delete bed-plan.md?' }).getByRole('button', { name: 'Delete file' }).click();
+      await page
+        .getByRole('dialog', { name: 'Delete bed-plan.md?' })
+        .getByRole('button', { name: 'Delete file' })
+        .click();
       await expect(
         page.locator('.toast__text', { hasText: 'bed-plan.md was already deleted. The list has been reloaded.' }),
       ).toBeVisible();
@@ -281,7 +288,9 @@ test.describe('files in spaces and chats', () => {
     test('an unopened preview says so', async ({ page }) => {
       await openGarden(page);
       await goUnreachable(page);
-      await spaceFiles(page).getByRole('link', { name: /garden-seeds\.csv/ }).click();
+      await spaceFiles(page)
+        .getByRole('link', { name: /garden-seeds\.csv/ })
+        .click();
       await expect(page.getByRole('heading', { name: 'Cannot reach atrium' })).toBeVisible();
     });
   });
