@@ -11,6 +11,7 @@ import type {
 } from '../contract';
 import { API_BASE } from '../contract';
 import type { AppsScenario } from './apps';
+import { correctionRefusal } from './mail';
 
 export interface MailManageScenario {
   status?: 'shadow' | 'live' | 'ineligible' | 'watch' | 'error';
@@ -492,6 +493,34 @@ export function mailManageHandlers(read: () => { mailManage?: MailManageScenario
       return HttpResponse.json({
         data: { items, check: check.slice(0, 5), total: rows.length, next_cursor: next },
         revision: revision(),
+      });
+    }),
+    http.post(`*${API_BASE}/mail/messages/:id/correction`, async ({ params, request }) => {
+      const body = (await request.clone().json()) as { folder?: string; mode?: string };
+      await wait();
+      const refused = correctionRefusal(body);
+      if (refused) return refused;
+      const s = current();
+      const row = s.decisions.find((item) => item.message_id === Number(params.id));
+      if (!row) return error('invalid', `unknown message ${String(params.id)}`, 422);
+      const folder = body.folder as string;
+      row.corrected_to = folder;
+      if (scenario().command === 'unknown') return HttpResponse.error();
+      const correction = {
+        message_id: row.message_id,
+        account: row.account,
+        folder,
+        ts: Date.now() / 1000,
+        source: 'web',
+      };
+      const live = s.status.mode === 'live';
+      return HttpResponse.json({
+        data: {
+          correction,
+          note: live ? ' The message was moved.' : '',
+          outcome: live ? 'ok' : 'deferred',
+          effect_ids: [],
+        },
       });
     }),
     http.get(`*${API_BASE}/mail/status`, async () => {

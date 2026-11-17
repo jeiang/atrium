@@ -9,6 +9,7 @@ import {
   type MailSearchHit,
   type MessageActionResult,
   mailAccounts,
+  mailCorrect,
   mailDraftCreate,
   mailDraftDiscard,
   mailDraftForward,
@@ -83,7 +84,7 @@ export function useMessage(id: () => number | undefined) {
       queryKey: ['mail', 'message', target],
       queryFn: async ({ signal }): Promise<MailMessage | null> => {
         try {
-          return ok(await mailMessage(target as number, { signal })).data;
+          return ok(await mailMessage(target as number, undefined, { signal })).data;
         } catch (error) {
           if (error instanceof ApiError && error.status === 404) return null;
           throw error;
@@ -93,6 +94,35 @@ export function useMessage(id: () => number | undefined) {
       meta: { topics: MAIL_TOPICS, persist: false },
     };
   });
+}
+
+export function useAccountFolders(account: () => string, enabled: () => boolean) {
+  return createQuery(() => {
+    const target = account();
+    return {
+      queryKey: ['mail', 'folders', target],
+      queryFn: async ({ signal }) =>
+        ok(await mailSearch({ account: target, folders: true, limit: 1 }, { signal })).data.folders ?? [],
+      enabled: target !== '' && enabled(),
+      meta: { topics: MAIL_TOPICS, persist: false },
+    };
+  });
+}
+
+export interface Corrected {
+  text: string;
+  settled: boolean;
+  effect?: number;
+}
+
+export async function handleCorrect(id: number, folder: string): Promise<Corrected> {
+  const change = ok(await mailCorrect(id, { folder, mode: 'immediate' }));
+  const { correction, note, outcome } = change.data;
+  return {
+    text: `Corrected to ${correction.folder}.${note}`,
+    settled: outcome === 'ok' || outcome === 'deferred',
+    effect: change.undoable === false ? undefined : change.effect_ids?.[0],
+  };
 }
 
 export function useQueueLink(id: () => number | undefined) {
