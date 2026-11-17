@@ -200,9 +200,18 @@ func failure(capability string, err error) (connections.Result, bool) {
 		case status.Refused() && status.Step == StepRoot:
 			return connections.Result{Capability: capability, State: connections.NeedsReauth, Reason: "iCloud refused the app password"}, true
 		case status.Refused():
-			return connections.Result{Capability: capability, State: connections.Failing, Reason: fmt.Sprintf("iCloud accepted the app password but refused the %s request (HTTP %d)", status.Step, status.Status)}, true
+			reason := "iCloud accepted the app password but refused " + status.Refusal()
+			for i, other := range status.Also {
+				if i == 0 {
+					reason += "; also refused "
+				} else {
+					reason += " and "
+				}
+				reason += other.Refusal()
+			}
+			return connections.Result{Capability: capability, State: connections.Failing, Reason: reason}, true
 		case status.Status >= http.StatusInternalServerError:
-			return connections.Result{Capability: capability, State: connections.Failing, Reason: err.Error()}, true
+			return connections.Result{Capability: capability, State: connections.Failing, Reason: fmt.Sprintf("iCloud failed the %s request on %s (HTTP %d)", status.Step, status.Host, status.Status)}, true
 		}
 		return connections.Result{}, false
 	}

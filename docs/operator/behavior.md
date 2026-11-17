@@ -434,8 +434,12 @@ contacts or calendar mirror sync whose first request the server refuses (401
 or 403) marks `carddav` or `caldav` as needing reauth. A refusal after that
 first request accepted the password, a server error, a network error, a TLS
 error, or a discovery step that points at a host the credential may not go to
-marks it failing, and the reason names the step. A later session or sync that
-works marks the capability ok again. These four have no grace window, so the
+marks it failing, and the reason names the step. A refusal or server error
+also names the host class (the configured host, the partition host the root
+named, or a sibling host) without the request address, and a refusal says
+whether it carried a `WWW-Authenticate` challenge and lists the other
+refusals of the same discovery. A later session or sync that works marks the
+capability ok again. These four have no grace window, so the
 first failure notifies at once and the recovery notifies once. Errors about one message,
 such as a refused recipient, a missing mailbox or an unknown SMTP outcome, do
 not change the connection. Only a change of state class is written: a repeated
