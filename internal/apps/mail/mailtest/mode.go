@@ -3,6 +3,7 @@ package mailtest
 import (
 	"testing"
 
+	"github.com/jeiang/atrium/internal/apps/mail/accounts"
 	"github.com/jeiang/atrium/internal/config"
 )
 
@@ -15,7 +16,7 @@ func UseAccounts(t testing.TB, st *config.State, logins map[string]string) {
 		if !ok {
 			continue
 		}
-		a, err := config.NewAccount(preset, "", preset, login, true)
+		a, err := accounts.NewAccount(preset, "", preset, login, true)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -151,7 +151,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		},
 		Packages: []string{"internal/apps/mail"},
 		Tables: []string{"accounts", "corrections", "decisions", "drafts", "events", "flag_decisions", "live_baseline", "live_state",
-			"mail_scans", "mailboxes", "message_fts", "messages", "rules", "watch_dismissed"},
+			"mail_accounts", "mail_scans", "mailboxes", "message_fts", "messages", "rules", "watch_dismissed"},
 		Operations:      operations,
 		Bindings:        append(bindings, finalBindings()...),
 		Recover:         recoverDrafts,

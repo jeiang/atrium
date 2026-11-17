@@ -181,6 +181,7 @@ var defaults sync.Map
 
 type AccountSync struct {
 	Accounts  config.HostAccountsFunc
+	Rows      config.AccountRowsFunc
 	Validate  func(context.Context, config.Host) error
 	Reconcile func(context.Context, *sql.Tx, config.Host) error
 	Reload    func(context.Context, *Store) error

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/apps/mail/accounts"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
@@ -96,7 +97,7 @@ func Mode(ctx context.Context, q db.Querier) (string, error) {
 
 func UncertainDest(ctx context.Context, q db.Querier, account string) (string, error) {
 	spec, ok := config.From(ctx).Account(account)
-	if !ok || spec.UncertainDest() == "" {
+	if !ok || accounts.UncertainDest(spec) == "" {
 		return "", nil
 	}
 	r := endpoint.Read(ctx, q)

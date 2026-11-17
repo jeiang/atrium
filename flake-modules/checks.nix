@@ -85,11 +85,7 @@
           capabilities = ["embeddings"];
         };
       };
-      mailAccounts.icloud = {
-        preset = "icloud";
-        login = "operator@icloud.example";
-        passwordFile = "/run/secrets/icloud-app-password";
-      };
+      accounts.icloud = icloudAccount;
       secretFiles = {
         "action_links.action_link_key" = "/run/secrets/action-link-key";
         "media.link_key" = "/run/secrets/media-link-key";
@@ -104,6 +100,42 @@
     failing = system: builtins.filter (lib.hasInfix "services.atrium") (map (a: a.message) (builtins.filter (a: !a.assertion) system.config.assertions));
     refusedWith = text: atrium: builtins.any (lib.hasInfix text) (failing (host ({web.allowedHost = "atrium.example.org";} // atrium)));
 
+    icloudAccount = {
+      preset = "icloud";
+      login = "operator@icloud.example";
+      passwordFile = "/run/secrets/icloud-app-password";
+    };
+    accountsRenamed = let
+      withAccounts = atrium: host ({web.allowedHost = "atrium.example.org";} // atrium);
+      renamed = withAccounts {accounts.icloud = icloudAccount;};
+      legacy = withAccounts {mailAccounts.icloud = icloudAccount;};
+      loads = system: builtins.filter (lib.hasPrefix "LoadCredential=") (lib.splitString "\n" system.config.systemd.units."atrium.service".text);
+      conn = system: system.config.services.atrium.renderedHost.connections."mail/icloud";
+      renameWarned = system: builtins.any (lib.hasInfix "services.atrium.mailAccounts is renamed to services.atrium.accounts") system.config.warnings;
+    in
+      assert failing renamed == [] && failing legacy == [];
+      assert renameWarned legacy && !(renameWarned renamed);
+      assert renamed.config.services.atrium.renderedHost == legacy.config.services.atrium.renderedHost;
+      assert loads renamed == loads legacy && builtins.elem "LoadCredential=mail-account-icloud:/run/secrets/icloud-app-password" (loads renamed);
+      assert
+        conn renamed
+        == {
+          kind = "mail";
+          label = "icloud";
+          config = {
+            preset = "icloud";
+            login = "operator@icloud.example";
+            auth_method = "password";
+            enabled = "true";
+          };
+          capabilities = ["imap" "smtp"];
+          credential_files."mail/icloud/password" = "\${CREDENTIALS_DIRECTORY}/mail-account-icloud";
+        };
+      assert (conn (withAccounts {accounts.icloud = icloudAccount // {capabilities = ["imap"];};})).capabilities == ["imap"];
+      assert refusedWith "services.atrium.mailAccounts and services.atrium.accounts are both set" {
+        accounts.icloud = icloudAccount;
+        mailAccounts.home = icloudAccount;
+      }; true;
     exampleEvaluates = assert failing nixos == [] && failing defaults == []; true;
     hostKeyRefused = assert refusedWith "unknown key core.not_a_key" {host.core.not_a_key = true;}; true;
     operatorKeyRefused = assert refusedWith "atrium settings set monthly_budget_usd" {host.assistant.monthly_budget_usd = 1;}; true;
@@ -524,7 +556,7 @@
     assert let
       entered = host {
         web.allowedHost = "atrium.example.org";
-        mailAccounts.home = {
+        accounts.home = {
           preset = "icloud";
           login = "operator@icloud.example";
         };
@@ -593,7 +625,7 @@
           touch $out
         '';
 
-        module = assert exampleEvaluates && defaultAuth && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && chatEndpointRefused && embeddingDependencyKept && connectionRefused && notionConnectionRefused && mediaAgentRefused && mainWithoutMedia && mediaAgentUnit && emergencyOptionsRefused && backupOptionsRefused && opsPortRefused && credentialsMatch && backupInServe && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig && deployCheck;
+        module = assert exampleEvaluates && accountsRenamed && defaultAuth && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && chatEndpointRefused && embeddingDependencyKept && connectionRefused && notionConnectionRefused && mediaAgentRefused && mainWithoutMedia && mediaAgentUnit && emergencyOptionsRefused && backupOptionsRefused && opsPortRefused && credentialsMatch && backupInServe && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig && deployCheck;
           pkgs.linkFarm "atrium-units" (map (name: {
               inherit name;
               path = unit name;

@@ -25,7 +25,7 @@ no default; a `null` default is not a usable credential or listener value.
 | `port` | port | `8480` | Public listener port. |
 | `host` | TOML-compatible attribute set | `{}` | Read-only host requirements rendered to `ATRIUM_HOST_CONFIG`. Unknown, retired, operator-only, or compiled tuning keys fail evaluation with their destination. Module flags are host-declarable exceptions among operator settings. |
 | `connections` | attribute set of connection submodules | `{}` | Host-owned connections keyed by id; fields are below. |
-| `mailAccounts` | attribute set of mail account submodules | `{}` | Generates `mail/<id>` connections and, for an account with `passwordFile`, its password credential; fields are below. |
+| `accounts` | attribute set of mail account submodules | `{}` | Generates `mail/<id>` connections with their capabilities and, for an account with `passwordFile`, its password credential; fields are below. `mailAccounts` is the old name: it still evaluates for one release with a warning and the same output, setting both fails evaluation, and it is removed in the release after the one that adds `accounts`. |
 | `secretFiles` | attribute set of strings | `{}` | App signing key file paths, delivered through `LoadCredential`. Only `action_links.action_link_key` and `media.link_key` are accepted. |
 | `database.keyFile` | null or string | `null` | Absolute host key-file path, delivered as the `db-key` credential. |
 | `initialTimezone` | null or string | `config.time.timeZone` | Seeds `tz` only when no operator value exists. |
@@ -68,15 +68,16 @@ contacting a changed endpoint.
 
 ### Mail account fields
 
-| Field of `mailAccounts.<id>` | Type | Default | Effect |
+| Field of `accounts.<id>` | Type | Default | Effect |
 | --- | --- | --- | --- |
 | `label` | null or string | `null` | Display name, falling back to the account id. |
 | `preset` | `"icloud"` or `"gmail"` | Required | Supplies provider hosts and folder behavior. |
 | `login` | string | Required | IMAP/SMTP login. |
 | `passwordFile` | null or string | `null` | App-password file delivered as `mail-account-<id>`; the file then owns the password, and the UI shows it as set in host configuration and refuses a new value. When null, the operator enters the password in Settings, Connections and it is stored in the database. |
 | `enabled` | boolean | `true` | Whether the account is opened and synced. |
+| `capabilities` | list of `"imap"` and `"smtp"` | `["imap" "smtp"]` | Capabilities of the `mail/<id>` connection: `imap` reads and files, `smtp` sends. |
 
-Generated accounts use password authentication and `imap`/`smtp` capabilities.
+Generated accounts use password authentication and, by default, `imap`/`smtp` capabilities.
 The account id keys cached mail and must remain stable. Operator-added accounts
 can also use the application's supported OAuth flows; the shorthand above is
 for host-owned password accounts.
