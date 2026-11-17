@@ -7,6 +7,7 @@ import {
   gotoShell,
 } from './checks.ts';
 import { expect, goUnreachable, layouts, test, unreachableConsole, useScenario } from './fixtures.ts';
+import { expectLostAnswer } from './lost.ts';
 
 const edges = ['.rail', '.tabbar', 'dialog.sheet', 'dialog.dialog'];
 const hash = '0123456789abcdef0123456789abcdef01234567';
@@ -298,4 +299,33 @@ test.describe('add and files layouts', () => {
       });
     });
   }
+});
+
+test.describe('torrents with a lost answer', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, allowConsole: unreachableConsole });
+
+  test('an add whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'POST',
+      path: '/media/torrents',
+      open: '/apps/torrents',
+      press: async (page) => {
+        await addPanel(page).getByLabel('Magnet link').fill(magnet);
+        await addPanel(page).getByRole('button', { name: 'Add', exact: true }).click();
+      },
+    });
+  });
+
+  test('a file choice whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'PUT',
+      path: '/media/torrents/a1/files',
+      open: '/apps/torrents',
+      press: async (page) => {
+        await torrent(page, 'a1').getByRole('button', { name: 'Files in Harbour.Lights.S02E07.1080p.WEB' }).click();
+        await files(page).getByRole('button', { name: 'Select all' }).click();
+        await files(page).getByRole('button', { name: 'Apply' }).click();
+      },
+    });
+  });
 });

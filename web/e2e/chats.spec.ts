@@ -20,6 +20,7 @@ import {
   unreachableConsole,
   useScenario,
 } from './fixtures.ts';
+import { expectLostAnswer } from './lost.ts';
 
 const edgeSurfaces = ['.rail', '.tabbar'];
 const desktop = layouts[2] ?? { name: 'desktop', width: 1440, height: 900, touch: false };
@@ -543,6 +544,38 @@ test.describe('composer', () => {
     await refreshed;
     await expect(composer(page)).toHaveValue('Half-written question');
     await expect(composer(page)).toBeFocused();
+  });
+});
+
+test.describe('the composer with a lost answer', () => {
+  test.use({ viewport: { width: desktop.width, height: desktop.height }, allowConsole: unreachableConsole });
+
+  test('a scope change whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'PATCH',
+      path: '/threads/9/options',
+      open: '/chat/9',
+      scenario: { chat: { speed: 8 } },
+      press: async (page) => {
+        await page.getByRole('button', { name: 'Sonnet 5.5 · high' }).click();
+        await page.getByRole('menuitem', { name: /^Opus 5\.5/ }).click();
+        await composer(page).fill('Compare the two shops');
+        await page.getByRole('button', { name: 'Send' }).click();
+      },
+    });
+  });
+
+  test('a new chat whose answer is lost reads as unknown and is never sent again', async ({ page }) => {
+    await expectLostAnswer(page, {
+      method: 'POST',
+      path: '/threads',
+      open: '/chat/new',
+      scenario: { chat: { speed: 8 } },
+      press: async (page) => {
+        await composer(page).fill('Plan a picnic for Sunday');
+        await page.getByRole('button', { name: 'Send' }).click();
+      },
+    });
   });
 });
 
