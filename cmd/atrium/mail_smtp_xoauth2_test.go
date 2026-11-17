@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -210,6 +211,22 @@ func TestDraftSendOverXOAUTH2RefreshesTheTokenOnlyAtAuth(t *testing.T) {
 	var id int64
 	if err := d.Read.QueryRow("SELECT id FROM drafts WHERE account = 'oauth' AND status = 'draft'").Scan(&id); err != nil {
 		t.Fatalf("the agent did not save a draft: %v", err)
+	}
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("s1", "mail_draft_send", map[string]any{"draft_id": id})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("tried")))
+	ran := runApp(t, "agent", "run", "--text", "send that draft now")
+	if names := offeredTools(t, api, ran); !slices.Contains(names, "draft_email_create") || slices.ContainsFunc(names, func(n string) bool { return strings.Contains(n, "send") }) {
+		t.Fatalf("an agent run is offered a send tool or no mail tools: %v", names)
+	}
+	if _, data := smtp.seen(); data != "" {
+		t.Fatalf("an agent run reached SMTP:\n%s", data)
+	}
+	var attempts int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.draft-send'").Scan(&attempts); err != nil || attempts != 0 {
+		t.Fatalf("an agent run reached mail.draft-send: %d audit rows, %v", attempts, err)
+	}
+	if err := d.Read.QueryRow("SELECT id FROM drafts WHERE id = ? AND status = 'draft'", id).Scan(&id); err != nil {
+		t.Fatalf("the draft left the draft state after an agent run: %v", err)
 	}
 	if _, err := d.Write.Exec("UPDATE connections SET checked_at = unixepoch() WHERE checked_at IS NULL"); err != nil {
 		t.Fatal(err)

@@ -1612,6 +1612,8 @@ func (s *Store) Disconnect(ctx context.Context, id ID, commits ...Commit) error 
 	})
 }
 
+const observeRefresh = time.Minute
+
 func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Result) error {
 	var (
 		previous State
@@ -1623,11 +1625,12 @@ func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Resul
 		var (
 			currentRevision int64
 			resultsJSON     string
+			priorReason     string
 			kind            Kind
 			priorAt         *float64
 		)
-		if err := tx.QueryRowContext(ctx, "SELECT revision, results_json, state, kind, checked_at FROM connections WHERE id = ?", id).
-			Scan(&currentRevision, &resultsJSON, &previous, &kind, &priorAt); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT revision, results_json, state, reason, kind, checked_at FROM connections WHERE id = ?", id).
+			Scan(&currentRevision, &resultsJSON, &previous, &priorReason, &kind, &priorAt); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return UnknownID(id)
 			}
@@ -1661,6 +1664,7 @@ func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Resul
 			}
 		}
 		at := s.now()
+		priorStored := previous
 		carryGrace(results, prior, previous, grace, at)
 		var stored State
 		stored, reason = aggregate(results, nil)
@@ -1670,6 +1674,9 @@ func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Resul
 			return err
 		}
 		now := float64(at.UnixNano()) / 1e9
+		if stored == priorStored && reason == priorReason && string(raw) == resultsJSON && priorAt != nil && now-*priorAt < observeRefresh.Seconds() {
+			return nil
+		}
 		res, err := tx.ExecContext(ctx,
 			"UPDATE connections SET state = ?, reason = ?, checked_at = ?, results_json = ?, updated_at = ? WHERE id = ? AND revision = ?",
 			stored, reason, now, string(raw), now, id, revision)

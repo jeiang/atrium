@@ -61,6 +61,16 @@ async function workerReady(page: Page): Promise<void> {
     await navigator.serviceWorker.ready;
   });
   await expect.poll(() => shellCaches(page)).toHaveLength(1);
+  await expect.poll(() => facesLoaded(page)).toBe(true);
+}
+
+function facesLoaded(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const link = document.querySelector<HTMLLinkElement>('link[rel="stylesheet"][href*="/assets/faces-"]');
+    if (!link?.sheet || document.fonts.status !== 'loaded') return false;
+    const faces = [...document.fonts].filter((face) => face.family.includes('Alegreya Sans'));
+    return faces.some((face) => face.status === 'loaded') && !faces.some((face) => face.status === 'loading');
+  });
 }
 
 function shellCaches(page: Page): Promise<string[]> {

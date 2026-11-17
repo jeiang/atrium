@@ -17,7 +17,7 @@
   import Skeleton from '../../shared/ui/Skeleton.svelte';
   import { toast } from '../../shared/ui/toast.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
-  import { useApps } from '../../shell/manifest';
+  import { appGone, useApps } from '../../shell/manifest';
   import NotFound from '../../shell/NotFound.svelte';
   import { p } from '../../shell/router';
   import TorrentCard from './TorrentCard.svelte';
@@ -136,7 +136,7 @@
   }
 </script>
 
-{#if apps.data && !app?.enabled}
+{#if appGone(apps, 'torrents')}
   <NotFound />
 {:else}
   <Page title="Downloads" eyebrow="Torrents" {lede}>

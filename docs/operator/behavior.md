@@ -523,6 +523,10 @@ it through `atrium settings set mail_mode shadow|live`; the change is audited.
 Pause/resume does not change the mode or grant
 go-live eligibility.
 
+Mail is one sidebar entry. Its tabs are Decisions (`/triage`, which links each
+message page) and Rules (`/rules`); Mail settings stay at `/settings/mail`.
+With the Mail module off, the entry, its tabs and its pages are gone.
+
 - Shadow records what automatic actions would do and makes no automatic
   mailbox writes.
 - Live automatic writes also require no pause, go-live eligibility, verified

@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/apps/mail"
+	"github.com/jeiang/atrium/internal/apps/mail/mailtest"
+	mailrun "github.com/jeiang/atrium/internal/apps/mail/run"
+	"github.com/jeiang/atrium/internal/apps/mail/scans"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/mailtest"
-	mailrun "github.com/jeiang/atrium/internal/mail/run"
-	"github.com/jeiang/atrium/internal/mail/scans"
 	"github.com/jeiang/atrium/internal/passrun"
 )
 

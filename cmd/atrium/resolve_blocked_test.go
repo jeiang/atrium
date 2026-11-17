@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/apps/mail/mailops"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
 )
 

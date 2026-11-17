@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/apps/calendar/caldavtest"
+	"github.com/jeiang/atrium/internal/apps/mail/tracking"
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/unit"
 )

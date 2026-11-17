@@ -7,6 +7,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/apps/calendar/calendarmodule"
 	"github.com/jeiang/atrium/internal/apps/library/librarymodule"
+	"github.com/jeiang/atrium/internal/apps/mail"
+	"github.com/jeiang/atrium/internal/apps/mail/mailmodule"
 	"github.com/jeiang/atrium/internal/apps/serverops/serveropsmodule"
 	"github.com/jeiang/atrium/internal/apps/torrents"
 	"github.com/jeiang/atrium/internal/apps/torrents/torrentsmodule"
@@ -17,8 +19,6 @@ import (
 	"github.com/jeiang/atrium/internal/contacts/contactsmodule"
 	"github.com/jeiang/atrium/internal/core/coremodule"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/mailmodule"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/notify/notifymodule"

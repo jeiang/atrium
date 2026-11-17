@@ -19,10 +19,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/testutil/embedstub"
 	"github.com/jeiang/atrium/internal/testutil/mailscript"
 )

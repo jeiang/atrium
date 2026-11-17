@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/apps/mail/imapclient"
 	"github.com/jeiang/atrium/internal/auth/oidc/oidctest"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
 )
 
 func authTokenApp(t *testing.T) *cli.App {

@@ -53,8 +53,26 @@ claims about the running application. Operator contracts are in
   lookup report's `mail_message` id is unknown, and queued event candidates
   are not listed. Event candidates read invitations and message bodies from
   the feed; the mail pass still calls them, passing its paid event judge.
-  The drafts and packages attention sources live in
-  `internal/mail/attentionsources`.
+  The whole Mail app lives in `internal/apps/mail`, and `internal/mail` no
+  longer exists. The root package holds the store (the message client,
+  queries, roles, settings and tuning); beside it are the IMAP client,
+  connection opener, message and MIME parsers, search, sync, rules, router,
+  triage, applier, live mode, executors, drafts with the operator's draft
+  send, the SMTP sender, replay, scans and deletions, the attention sources
+  (drafts and packages), accounts and Gmail sign-in, package tracking and
+  watches, the application service, the CLI (`mailcmd`), the pages
+  (`pages`, `reviewpages`, `accountpages`), the agent mail tools
+  (`mailtools`), the declaration (`mailmodule`) and the test fakes
+  (`mailtest`). The mail write gate is `WriteGate` in
+  `internal/apps/mail/client.go`, called only by the client's `gate.check`;
+  the shared consent scopes (approved proposal, operator send, automatic
+  writes) stay in `internal/safety` and the pause check in `internal/pause`.
+  The draft card kind and the live-action rows reach Review through the Mail
+  declaration's review kinds. Mail is one navigation entry, the `mail_app`
+  hub labelled Mail, with Decisions (`/triage`, where message pages also
+  belong) and Rules (`/rules`) as its tabs; Mail settings stay at
+  `/settings/mail`. With Mail off the entry, its tabs and its pages are
+  gone.
 - The core `signals` unit (`internal/signals` for the domain,
   `internal/signals/signalsmodule` for its service, API routes, Loops page,
   `open_loops` tool and declaration) owns open loops, commitments and
@@ -78,6 +96,17 @@ claims about the running application. Operator contracts are in
   name and the `openloops_*` setting keys are unchanged.
   `internal/communications` is a platform package, so the unit-boundary
   guard rejects any import of Mail from core outside its listed exceptions.
+  No exception covers the mail write path: `tools/adapterboundary` fails
+  when a Go file outside the Mail unit, composition roots included, imports
+  `internal/apps/mail/applier`, `internal/apps/mail/live`,
+  `internal/apps/mail/drafts` (draft send) or `internal/apps/mail/smtp`,
+  and when any
+  Go file outside the `internal/apps/mail` package calls `WriteGate`. The
+  agent mail tools (`internal/apps/mail/mailtools`) are adapters: they reach
+  mail only through `internal/apps/mail/application`, whose draft send
+  carries the single `operator_send` authority that no agent run holds, and
+  the guard fails when they import the mail write path. It also fails on
+  any file under `internal/mail`.
 - Internal undoable tools can act directly and record undo. External,
   irreversible, or paid tools follow their declared approval policy and the
   permission table. This is enforced in code, not left to the prompt.
@@ -793,7 +822,10 @@ claims about the running application. Operator contracts are in
   update trigger skips updates that change only the bookkeeping columns
   `checked_at`, `last_ok_at` and `updated_at`; they move without a
   revision, so using or checking a connection with an unchanged result
-  publishes no `connections` change. The append-only
+  publishes no `connections` change. A use that observes the same state,
+  reason and results as a check recorded within the last minute writes
+  nothing, so `checked_at` lags by at most a minute, below the 1 and 5
+  minute recheck windows. The append-only
   `operation_audit` table records application commands. Both are owned by
   `internal/application/state`. Notification inbox, channel and device controls,
   and delivery commands use `notifications.*` operations. The
@@ -1914,7 +1946,7 @@ claims about the running application. Operator contracts are in
 - **Drafts are written, edited and sent in chat.**
 - **Skills are removed.**
 - **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its `module.Declaration` and that render and save through one shared path. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Export and Media each have a page with their connections and sections, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
-- **Scheduled runs** are managed from chat, with a list in Library. **Projects** became **spaces** in Knowledge. **Mail rules** live under Library.
+- **Scheduled runs** are managed from chat, with a list in Library. **Projects** became **spaces** in Knowledge. **Mail rules** and **decisions** live under the one Mail entry.
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.
 - **New web client:** a plain Svelte 5 client is being built under `web/`, typed from `docs/api/openapi.json` and calling same-origin `/web/v1`. The binary embeds its production build and serves it at `/next/`, but nothing links to it yet; the server-rendered UI remains the web UI. Its design tokens are DTCG JSON in `design/tokens/`, built by Style Dictionary into CSS cascade layers with light and dark values: brown neutrals, a moss accent, an olive "ok", no blue, Alegreya Sans and Fira Mono; the build fails on a blue hue, a zero radius, type under 12 px or a contrast pair under its ratio.

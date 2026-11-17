@@ -1,0 +1,228 @@
+package mailmodule
+
+import (
+	"context"
+	"errors"
+	"slices"
+
+	"github.com/go-chi/chi/v5"
+
+	"github.com/jeiang/atrium/internal/apps/mail"
+	"github.com/jeiang/atrium/internal/apps/mail/accountpages"
+	"github.com/jeiang/atrium/internal/apps/mail/accounts"
+	mailapp "github.com/jeiang/atrium/internal/apps/mail/application"
+	"github.com/jeiang/atrium/internal/apps/mail/attentionsources"
+	"github.com/jeiang/atrium/internal/apps/mail/drafts"
+	mailembedding "github.com/jeiang/atrium/internal/apps/mail/embedding"
+	"github.com/jeiang/atrium/internal/apps/mail/executors"
+	"github.com/jeiang/atrium/internal/apps/mail/imapclient"
+	"github.com/jeiang/atrium/internal/apps/mail/live"
+	"github.com/jeiang/atrium/internal/apps/mail/mailconn"
+	mailtools "github.com/jeiang/atrium/internal/apps/mail/mailtools"
+	"github.com/jeiang/atrium/internal/apps/mail/pages"
+	"github.com/jeiang/atrium/internal/apps/mail/reviewpages"
+	"github.com/jeiang/atrium/internal/apps/mail/run"
+	mailsync "github.com/jeiang/atrium/internal/apps/mail/sync"
+	"github.com/jeiang/atrium/internal/apps/mail/tracking"
+	"github.com/jeiang/atrium/internal/assistant/classifier"
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
+	"github.com/jeiang/atrium/internal/assistant/service"
+	"github.com/jeiang/atrium/internal/attention"
+	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
+	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/review"
+	"github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/scheduler/jobcmd"
+	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/unit"
+	"github.com/jeiang/atrium/internal/web"
+)
+
+type Module struct {
+	Clients   func(config.Config) mail.OpenFunc
+	Now       func() float64
+	Jobs      jobworker.Dependencies
+	Resources module.Resources
+}
+
+func (m Module) classifiers(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, now func() float64) (*classifier.Service, error) {
+	if m.Jobs.Classifier == nil {
+		return nil, errors.New("the mail pass is not bound to a classifier")
+	}
+	svc := service.New(ctx, d, cfg, env, nil)
+	svc.Now = now
+	return m.Jobs.Classifier(ctx, svc)
+}
+
+func AttentionSources() []attention.Source {
+	return []attention.Source{attentionsources.Drafts(), attentionsources.Packages()}
+}
+
+func Requirements() []module.Requirement {
+	return []module.Requirement{
+		{Name: "service/embedding", Check: func(ctx context.Context, p module.Probe) (string, error) {
+			return endpoint.EmbeddingConfigured(ctx, p.Q)
+		}},
+		module.ConnectionHealth(endpoint.EmbeddingID),
+	}
+}
+
+func SettingGroups() []settings.Group {
+	return []settings.Group{
+		{Name: "safety", Title: "Safety", Keys: []string{mail.KeyWriteCap}},
+		{Name: "loops", Title: "Open loops", Keys: []string{
+			config.KeyLoopsWaitingAfterDays, config.KeyLoopsRemindAheadDays, config.KeyLoopsRemindHour, config.KeyLoopsSnoozeDefaultDays,
+		}},
+		{Name: "packages", Title: "Packages", Keys: []string{tracking.KeyDestinationCountry, tracking.KeyDestinationPostcode}},
+	}
+}
+
+func (m Module) opener(cfg config.Config) mail.OpenFunc {
+	if m.Clients == nil {
+		return imapclient.Opener(cfg)
+	}
+	return m.Clients(cfg)
+}
+
+func (m Module) toolService(tc *tool.Context) *mailapp.Service {
+	return mailapp.NewDrafts(tc.DB, tc.Cfg, tc.Env, tc.Now, tc.Ledger).WithOpen(m.opener(tc.Cfg))
+}
+
+func (m Module) ToolDefinitions() []module.ToolDefinition {
+	return mailtools.Definitions(m.toolService)
+}
+
+func (m Module) ProposeKinds() []proposals.Definition {
+	return mailtools.Proposals(m.toolService)
+}
+
+func (m Module) Declare(mc module.Context) module.Declaration {
+	mailCmds := m.mailCommands(mc.Env)
+	cmds := []*cli.Command{
+		jobcmd.Delegating(mailCmds.SyncCommand(), run.SyncJobKey, "account"),
+		mailCmds.RulesCommand(),
+		mailCmds.ShadowReportCommand(),
+		mailCmds.ReindexCommand(),
+		mailCmds.LiveCommand(),
+		mailCmds.ReplayCommand(),
+	}
+	cmds = append(cmds, mailCmds.ScanCommands()...)
+	cmds = append(cmds, mailCmds.RefreshCommands()...)
+	cmds = append(cmds, mailCmds.TrackingCommands()...)
+	operations, bindings := mailReadOperations()
+	accountOps, accountBindings := mailAccountOperations()
+	operations = append(operations, accountOps...)
+	bindings = append(bindings, accountBindings...)
+	ruleOps, ruleBindings := mailRuleOperations()
+	operations = append(operations, ruleOps...)
+	bindings = append(bindings, ruleBindings...)
+	draftOps, draftBindings := mailDraftOperations()
+	operations = append(operations, draftOps...)
+	bindings = append(bindings, draftBindings...)
+	mailboxOps, mailboxBindings := mailMailboxOperations()
+	operations = append(operations, mailboxOps...)
+	bindings = append(bindings, mailboxBindings...)
+	loopOps, loopBindings := mailLoopOperations()
+	operations = append(operations, loopOps...)
+	bindings = append(bindings, loopBindings...)
+	scanOps, scanBindings := mailScanOperations()
+	operations = append(operations, scanOps...)
+	bindings = append(bindings, scanBindings...)
+	passOps, passBindings := mailPassOperations()
+	operations = append(operations, passOps...)
+	bindings = append(bindings, passBindings...)
+	bindings = append(bindings, m.mailAPIRoutes(nil)...)
+	bindings = append(bindings, mailWorkRoutes(nil, m)...)
+	bindings = append(bindings, mailPassRoutes(nil, m)...)
+	bindings = append(bindings, mailDraftRoutes(nil, m)...)
+	return module.Declaration{
+		Name:  unit.Mail,
+		Title: "Mail",
+		App:   true,
+		Needs: []module.Need{
+			{Kind: connections.Kind(endpoint.KindEmbedding), Capability: "embeddings", Features: []string{"mail search"}},
+			{Kind: mailconn.Kind, Soft: true, Capability: mailconn.CapabilityIMAP, Features: []string{"mail sync"}},
+			{Kind: mailconn.Kind, Soft: true, Capability: mailconn.CapabilitySMTP, Features: []string{"mail sending"}},
+			{Kind: tracking.KindShip24, Soft: true, Capability: "api", Features: []string{"package tracking"}},
+		},
+		Packages: []string{"internal/apps/mail"},
+		Tables: []string{"accounts", "corrections", "decisions", "drafts", "events", "flag_decisions", "live_baseline", "live_state",
+			"mail_scans", "mailboxes", "message_fts", "messages", "package_events", "packages", "rules", "watch_dismissed"},
+		Operations:      operations,
+		Bindings:        append(bindings, finalBindings()...),
+		Recover:         recoverDrafts,
+		HasOperatorData: accounts.ExistsAny,
+		EffectOrigins:   []module.EffectOrigin{{Name: ledger.AutoOrigin}, {Name: "operator_send"}, {Name: "tracking", Direct: true}},
+		Refs:            Refs(),
+		Communications:  feed{env: mc.Env},
+		Attachments:     []module.Attachment{draftAttachment()},
+		Settings:        slices.Concat(mail.Settings(), tracking.SettingsDefs()),
+		Host:            mail.HostSettings(),
+		Attention:       AttentionSources(),
+		Search:          SearchSources(),
+		Jobs:            []scheduler.Definition{trackingJob(m.Jobs), m.syncJob(mc.Env), m.scanJob(mc.Env)},
+		ServiceSets:     m.watchServices(mc.Env),
+		ServiceSetName:  "mail/watch",
+		Requires:        Requirements(),
+		Pages: []web.Page{
+			{Module: func(_ chi.Router, d *web.Deps) {
+				m.mailAPIRoutes(d)
+				mailWorkRoutes(d, m)
+				mailPassRoutes(d, m)
+				mailDraftRoutes(d, m)
+			}},
+			{Module: pages.Module(m.pageEffects), Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
+				{Hub: true, Label: "Mail", Icon: "mail", Page: "mail_app", Order: 25},
+				{Section: "mail_app", Label: "Decisions", URL: "/triage", Icon: "route", Page: "triage", Order: 10},
+				{Section: "mail_app", Label: "Rules", URL: "/rules", Icon: "scroll-text", Page: "rules", Order: 20},
+				{Label: "Mail", URL: "/settings/mail", Page: "mail", Settings: true, Primary: true, Order: 15},
+			}},
+			{Module: pages.PauseModule(mailPageService)},
+			{Module: reviewpages.MailModule(reviewpages.Options{Compose: m.reviewServices(mc.Tools)}), Templates: reviewpages.Templates(), Nav: []web.NavItem{
+				{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30},
+			}},
+			{Module: accountpages.Module(mailPageService, mailSettingsService), Templates: accountpages.Templates()},
+		},
+		Groups:   SettingGroups(),
+		Commands: cmds,
+		Leaves: map[string]module.Leaf{
+			"live pause":  {Always: true},
+			"live resume": {Always: true},
+			"live status": {Always: true},
+			"replay":      {Always: true},
+		},
+		Tools:        m.ToolDefinitions(),
+		ProposeKinds: m.ProposeKinds(),
+		Effects: func(d module.EffectDeps) module.Effects {
+			open := m.opener(d.Cfg)
+			e := &executors.Executors{DB: d.DB, Ledger: d.Ledger, Open: open, Now: d.Now}
+			return module.Effects{
+				Proposals: e.Proposals(unit.Mail),
+				Undo:      slices.Concat(e.Undo(), mailUndo(d.Ledger, open), live.Undo(open, d.DB)),
+				Resolve:   live.Resolve(),
+				Sync:      executors.SyncAfter(&mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: d.Now}, open),
+			}
+		},
+		ReviewKinds: func(d module.ReviewDeps) review.Kinds {
+			open := m.opener(d.Cfg)
+			l := &live.Live{DB: d.DB, Cfg: d.Cfg, Store: d.Ledger, Open: open, Registry: d.Registry, Now: d.Now}
+			store := &drafts.Store{DB: d.DB, Cfg: d.Cfg, Ledger: d.Ledger, Open: open, Now: d.Now}
+			return review.Kinds{Mode: mail.Mode, Needs: drafts.ReviewNeeds, Drafts: store.ReviewDrafts, Actions: l.ReviewActions()}
+		},
+		ActivityCategory: unit.Mail,
+		Connections:      slices.Concat(Connections(), tracking.Connections()),
+		AccountSync:      mailconn.AccountSync(),
+		Corpora:          []embed.Corpus{mailembedding.Corpus},
+		Queues:           Queues(),
+		Metrics:          Metrics(),
+		ProposalScan:     ProposalScan(),
+	}
+}
