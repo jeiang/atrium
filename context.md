@@ -808,7 +808,9 @@ claims about the running application. Operator contracts are in
   scheduled run and records a skip status when the gate refuses. A run that
   ends `error` after a run that did not sends one System push
   (`job-failed:<run id>`, linking its thread or `/scheduled?run=<id>`);
-  repeated failures push nothing until a success.
+  repeated failures push nothing until a success. `GET /schedules/runs`
+  (`assistant.schedule.runs`) pages every schedule's runs newest first, the
+  same rows as `GET /schedules/{job_id}/runs`; run rows carry `job_id`.
 - The built-in modules are always compiled
   in. One compiled `module.Declaration` catalog supplies the registration
   path for module pages, commands, tools, settings, connections, hooks,
@@ -1360,6 +1362,16 @@ claims about the running application. Operator contracts are in
   unknown outcome refuses further operator writes to that event until it is
   resolved. Birthdays and `birthday-` uids are refused as read-only. Pause
   does not block these writes: they are operator consent.
+- `GET /calendar/events` rows carry `target` (the calendar id the event
+  routes and writes take: `icloud`, `google` or `birthdays`; `calendar`
+  stays the collection name), `read_only` (Birthdays), `all_day`,
+  `recurring`, `notes` and, for writable events, `revision`, the same value
+  the event read returns (an iCloud occurrence carries its series revision);
+  false and empty values are omitted.
+  The listing and `GET /calendar/calendars` (`calendar.calendars`: each
+  calendar's id, name, `read_only` and `available`) carry `today` and
+  `timezone`, the server's date and zone from `config.Location`. The
+  `calendar_list` tool output keeps its older row shape.
 - The knowledge export is export-only and has one destination, a Markdown
   folder declared by the host (`export.export_obsidian_dir`). The daily
   `knowledge-export` job renders live, non-expired records into it and
@@ -1756,15 +1768,17 @@ claims about the running application. Operator contracts are in
   overdue, due-soon and needs-decision attention items (`attention`;
   waiting-on-them loops and packages are left out). Order: asks oldest
   first, then items with a due time by due, then the rest oldest first,
-  ties on id. A module that is off hides only its own items. `total` and
-  `counts` ignore the filter and page and are the Needs you count of
+  ties on id. A module that is off hides only its own items. The `kind` and
+  `module` filters narrow the items; `total` and
+  `counts` ignore the filters and page and are the Needs you count of
   `/shell` and the web badge, computed by the same function
   (`reviewapp.Service.NeedsCount`). Item ids are
   `<source type>:<source id>`; `GET /queue/{item_id}` returns one item, so
   `proposal:<id>` and `draft:<id>` resolve the old proposal and draft
   addresses. `GET /pending` keeps its older proposals-plus-drafts count.
   Open-loop attention items carry `loop_id` (the `open_loops` rowid the
-  `/mail/loops/{loop_id}/...` verbs take). `GET /home` returns `needs_you`
+  `/mail/loops/{loop_id}/...` verbs take), and proposal items carry
+  `proposal_kind` (the proposal's kind). `GET /home` returns `needs_you`
   (`total`, `counts`, and the first three `items`) from the same queue read,
   and its revision folds in the queue revision.
 - `POST /commitments/{ref}/snooze` (`commitments.snooze`, body `until` in Unix

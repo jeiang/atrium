@@ -33,7 +33,7 @@ func scheduleOperations() ([]application.Definition, []application.Binding) {
 	uses := func(names ...application.Name) []application.Name { return names }
 	return []application.Definition{
 			asstapp.DescribeScheduleCreate(), asstapp.DescribeScheduleUpdate(), asstapp.DescribeScheduleEnabled(),
-			asstapp.DescribeScheduleCancel(), asstapp.DescribeScheduleList(), asstapp.DescribeScheduleHistory(),
+			asstapp.DescribeScheduleCancel(), asstapp.DescribeScheduleList(), asstapp.DescribeScheduleHistory(), asstapp.DescribeScheduleRuns(),
 			asstapp.DescribeScheduleAdd(), asstapp.DescribeScheduleRunNow(),
 		}, append(scheduleAPIBindings(nil), []application.Binding{
 			{Kind: application.HTML, Target: "GET /scheduled", Uses: uses(asstapp.ScheduleListName, asstapp.ScheduleHistoryName)},
