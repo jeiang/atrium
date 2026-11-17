@@ -191,14 +191,23 @@ func outcome(capability string, err error) (connections.Result, bool) {
 	if err == nil {
 		return connections.Result{Capability: capability, State: connections.OK, Reason: "the mirror sync works"}, true
 	}
+	return failure(capability, err)
+}
+
+func failure(capability string, err error) (connections.Result, bool) {
 	if status, ok := errors.AsType[*StatusError](err); ok {
 		switch {
-		case status.Status == http.StatusUnauthorized || status.Status == http.StatusForbidden:
+		case status.Refused() && status.Step == StepRoot:
 			return connections.Result{Capability: capability, State: connections.NeedsReauth, Reason: "iCloud refused the app password"}, true
+		case status.Refused():
+			return connections.Result{Capability: capability, State: connections.Failing, Reason: fmt.Sprintf("iCloud accepted the app password but refused the %s request (HTTP %d)", status.Step, status.Status)}, true
 		case status.Status >= http.StatusInternalServerError:
 			return connections.Result{Capability: capability, State: connections.Failing, Reason: err.Error()}, true
 		}
 		return connections.Result{}, false
+	}
+	if untrusted, ok := errors.AsType[*UntrustedError](err); ok {
+		return connections.Result{Capability: capability, State: connections.Failing, Reason: untrusted.Error()}, true
 	}
 	if errors.As(err, new(net.Error)) || errors.As(err, new(*tls.CertificateVerificationError)) ||
 		errors.As(err, new(tls.AlertError)) || errors.As(err, new(tls.RecordHeaderError)) {
@@ -310,12 +319,13 @@ func testICloud(ctx context.Context, lease *connections.Lease, caps []connection
 			continue
 		}
 		collections, err := client.Collections(ctx, kind)
-		var status *StatusError
 		switch {
-		case errors.As(err, &status) && (status.Status == http.StatusUnauthorized || status.Status == http.StatusForbidden):
-			results = append(results, connections.Result{Capability: cap.Name, State: connections.NeedsReauth, Reason: "iCloud refused the app password"})
 		case err != nil:
-			results = append(results, connections.Result{Capability: cap.Name, State: connections.Failing, Reason: err.Error()})
+			result, ok := failure(cap.Name, err)
+			if !ok {
+				result = connections.Result{Capability: cap.Name, State: connections.Failing, Reason: err.Error()}
+			}
+			results = append(results, result)
 		default:
 			data, _ := json.Marshal(map[string]any{"collections": len(collections)})
 			reason := fmt.Sprintf("%d collections", len(collections))

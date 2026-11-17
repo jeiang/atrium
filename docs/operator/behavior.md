@@ -430,11 +430,13 @@ capability failing, and a login the server refuses marks it as needing reauth,
 as the scheduled check does. An SMTP session that cannot connect or greet marks
 `smtp` failing, and a refused login (codes 530 to 535) marks it as needing
 reauth. A
-contacts or calendar mirror sync that the server refuses (401 or 403) marks
-`carddav` or `caldav` as needing reauth, and a server error, network error or
-TLS error marks it failing. A later session or sync that works marks the
-capability ok again. These four have no grace window, so the first failure
-notifies at once and the recovery notifies once. Errors about one message,
+contacts or calendar mirror sync whose first request the server refuses (401
+or 403) marks `carddav` or `caldav` as needing reauth. A refusal after that
+first request accepted the password, a server error, a network error, a TLS
+error, or a discovery step that points at a host the credential may not go to
+marks it failing, and the reason names the step. A later session or sync that
+works marks the capability ok again. These four have no grace window, so the
+first failure notifies at once and the recovery notifies once. Errors about one message,
 such as a refused recipient, a missing mailbox or an unknown SMTP outcome, do
 not change the connection. Only a change of state class is written: a repeated
 failure or a repeated success writes nothing and sends no notice. A one-shot
