@@ -56,7 +56,9 @@ type TraceInput struct {
 type ObserveHealthInput struct {
 	ID        ID
 	Recovered bool
-	Start     bool
+	// Capability is the capability a runtime request used, when known.
+	Capability string
+	Start      bool
 }
 type CheckInput struct {
 	Changed bool
@@ -209,6 +211,11 @@ func (s *Service) ObserveHealth(ctx context.Context, in ObserveHealthInput) (app
 	}
 	var ids, checked []ID
 	for _, v := range views {
+		if in.ID != "" && in.Recovered && v.ID == in.ID && v.Idle == "" && capabilityFailed(v, in.Capability) {
+			// A real request to the failing capability worked: that is the
+			// recovery, so no check request is sent.
+			return application.Change[struct{}]{}, s.store.Recover(ctx, v, in.Capability)
+		}
 		if !checkable(v) || v.Idle != "" || in.ID != "" && !wanted(v, in) || in.ID == "" && !due(v, in.Start) {
 			continue
 		}
@@ -301,6 +308,15 @@ func wanted(v View, in ObserveHealthInput) bool {
 		return failed(v) && olderThan(v, time.Minute)
 	}
 	return olderThan(v, 5*time.Minute)
+}
+
+func capabilityFailed(v View, capability string) bool {
+	for _, r := range v.Results {
+		if capability != "" && r.Capability == capability {
+			return r.State == connections.Failing || r.State == connections.NeedsReauth
+		}
+	}
+	return false
 }
 
 func olderThan(v View, age time.Duration) bool {

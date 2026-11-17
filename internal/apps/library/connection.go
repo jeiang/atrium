@@ -25,6 +25,7 @@ func Connections() []connections.Definition {
 		{
 			Kind:            KindTMDB,
 			Offers:          []string{"api", "images"},
+			Serves:          map[string]string{"url": "api", "images_url": "images"},
 			CredentialSlots: []string{"read_token"},
 			Validate:        validateTMDBConnection,
 			Test:            testTMDBConnection,

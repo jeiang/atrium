@@ -1114,7 +1114,7 @@ func (l *Lease) http(name, key string, o transport.Options) (*http.Client, error
 	if client, ok := l.shared.clients[key]; ok {
 		return client, nil
 	}
-	client, err := l.newClient(o, u)
+	client, err := l.newClient(name, o, u)
 	if err != nil {
 		return nil, err
 	}
@@ -1146,7 +1146,7 @@ func (l *Lease) client(name string, timeout time.Duration, follow bool) (*http.C
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return nil, fmt.Errorf("connections: %s endpoint %q must be an http or https URL", l.id, endpoint)
 	}
-	return l.newClient(transport.Options{Timeout: timeout, FollowRedirects: follow}, u)
+	return l.newClient(name, transport.Options{Timeout: timeout, FollowRedirects: follow}, u)
 }
 
 func (l *Lease) StreamClient(name string, header time.Duration) (*http.Client, error) {
@@ -1176,7 +1176,7 @@ func (l *Lease) StreamClient(name string, header time.Duration) (*http.Client, e
 	tr := client.Transport.(*http.Transport)
 	tr.Proxy = nil
 	tr.DisableCompression = true
-	client = l.reporting(client)
+	client = l.reporting(name, client)
 	l.shared.clients[key] = client
 	return client, nil
 }
@@ -1234,7 +1234,7 @@ func (s *Store) Remove(ctx context.Context, id ID) error {
 	})
 }
 
-func (l *Lease) newClient(o transport.Options, base *url.URL) (*http.Client, error) {
+func (l *Lease) newClient(name string, o transport.Options, base *url.URL) (*http.Client, error) {
 	if o.Timeout <= 0 && o.Connect <= 0 {
 		o.Timeout = defaultTimeout
 		if l.options.Timeout > 0 {
@@ -1249,7 +1249,7 @@ func (l *Lease) newClient(o transport.Options, base *url.URL) (*http.Client, err
 	if o.FollowRedirects && base != nil {
 		guardOrigin(client, base)
 	}
-	return l.reporting(client), nil
+	return l.reporting(name, client), nil
 }
 
 // Transport returns a client for a connection whose destinations are not a
@@ -1258,7 +1258,7 @@ func (l *Lease) Transport() (*http.Client, error) {
 	if l.closed {
 		return nil, errors.New("connections: the lease is closed")
 	}
-	return l.newClient(transport.Options{}, nil)
+	return l.newClient("", transport.Options{}, nil)
 }
 
 func (l *Lease) OwnerCredential(ctx context.Context) (string, error) {
@@ -1631,6 +1631,16 @@ func (s *Store) Disconnect(ctx context.Context, id ID, commits ...Commit) error 
 
 const observeRefresh = time.Minute
 
+// Recover records capability as ok after a real request to it succeeded,
+// without a check request. A row changed since v was read is left alone.
+func (s *Store) Recover(ctx context.Context, v View, capability string) error {
+	err := s.Observe(ctx, v.ID, v.revision, Result{Capability: capability, State: OK})
+	if errors.As(err, new(*Conflict)) {
+		return nil
+	}
+	return err
+}
+
 func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Result) error {
 	var (
 		previous State
@@ -1695,8 +1705,8 @@ func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Resul
 			return nil
 		}
 		res, err := tx.ExecContext(ctx,
-			"UPDATE connections SET state = ?, reason = ?, checked_at = ?, results_json = ?, updated_at = ? WHERE id = ? AND revision = ?",
-			stored, reason, now, string(raw), now, id, revision)
+			"UPDATE connections SET state = ?, reason = ?, checked_at = ?, last_ok_at = CASE WHEN ? = 'ok' THEN ? ELSE last_ok_at END, results_json = ?, updated_at = ? WHERE id = ? AND revision = ?",
+			stored, reason, now, stored, now, string(raw), now, id, revision)
 		if err != nil {
 			return err
 		}

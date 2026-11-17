@@ -348,10 +348,13 @@ A failing or needs-reauth connection is checked again automatically only after
 its failure backoff: 1 hour after its last check while it has been failing for
 less than an hour, then 3, 6 and 12 hours as it keeps failing, counted from its
 last success (or from when it first needed reauthorization). Until then, a
-start, a failed request and a successful request to the same connection (for
-example to a sibling capability that still works) do not check it. Test,
-`connections test`, `connections check` and a credential change still check it
-at once, and a passing check clears the backoff. A connection's first failing result
+start, a failed request and a successful request to another capability of the
+same connection do not check it. A real request that works on the failing
+capability itself (any request from a kind with one capability, or from an
+endpoint the kind maps to that capability, such as TMDB `url` for `api`)
+marks that capability ok at once and ends the backoff, with no check request.
+Test, `connections test`, `connections check` and a credential change still
+check it at once, and a passing check clears the backoff. A connection's first failing result
 notifies once, including the first result after a host change; an unchanged
 failing result does not notify again. A host-declared connection removed from
 the host file is disabled with the reason `removed from host configuration`,

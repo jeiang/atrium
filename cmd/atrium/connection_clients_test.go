@@ -85,11 +85,17 @@ func TestTMDBRequestFailureReachesConnectionHealth(t *testing.T) {
 	if code, body, _ := fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns", nil); code != http.StatusOK || !strings.Contains(body, "Lanterns") {
 		t.Fatalf("channels search: %d %.300s", code, body)
 	}
+	// Let the start check settle and age it past the 5 minute limit, so the
+	// failed request below is the one that triggers the check.
+	waitFor(t, func() bool { state := connectionState(t, dir, "service/tmdb"); return state != "" && state != "untested" })
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	if _, err := d.Write.Exec("UPDATE connections SET checked_at = ? WHERE id = 'service/tmdb'", float64(time.Now().Add(-10*time.Minute).Unix())); err != nil {
+		t.Fatal(err)
+	}
 	status.Store(http.StatusInternalServerError)
 	_, _, _ = fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns+again", nil)
 	waitFor(t, func() bool { return connectionState(t, dir, "service/tmdb") == "failing" })
 
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	observed := func() (rows, noop, foreign int) {
 		t.Helper()
 		if err := d.Read.QueryRow(`SELECT COUNT(*), COALESCE(SUM(outcome = 'noop'), 0), COALESCE(SUM(actor <> 'service:connection-health' OR source <> 'job'), 0)
@@ -176,5 +182,40 @@ func TestAFailingConnectionIsNotRecheckedByBootOrRuntimeFailuresInsideItsBackoff
 	var reason string
 	if err := d.Read.QueryRow("SELECT reason FROM connections WHERE id = 'service/tmdb'").Scan(&reason); err != nil || reason == "seeded" {
 		t.Fatalf("the recheck after the backoff did not record: reason %q err %v", reason, err)
+	}
+
+	// Failing for 2 hours: the backoff is 3 hours from the last check. The
+	// refused request left the row needing reauthorization, so the time is
+	// counted from reauth_at.
+	before = observed()
+	if _, err := d.Write.Exec("UPDATE connections SET checked_at = ?, last_ok_at = ?, reauth_at = ? WHERE id = 'service/tmdb'",
+		float64(now.Add(-2*time.Hour).Unix()), float64(now.Add(-4*time.Hour).Unix()), float64(now.Add(-4*time.Hour).Unix())); err != nil {
+		t.Fatal(err)
+	}
+	_, _, _ = fetch(t, s.client, http.MethodGet, s.base+"/apps/media/channels?q=Lanterns+still", nil)
+	if _, err := d.Write.Exec("UPDATE connections SET checked_at = ? WHERE id = 'service/tmdb'", float64(now.Add(-3*time.Hour-time.Minute).Unix())); err != nil {
+		t.Fatal(err)
+	}
+	_, _, _ = fetch(t, s.client, http.MethodGet, s.base+"/apps/media/channels?q=Lanterns+later", nil)
+	waitFor(t, func() bool { return observed() > before })
+	if rows := observed() - before; rows != 1 {
+		t.Fatalf("observe-health rows after a refused request inside a 3 hour backoff and one after it: %d, want 1", rows)
+	}
+
+	// A real request that works recovers the connection at once, inside its
+	// backoff, without a check request of its own.
+	before = observed()
+	status.Store(0)
+	if code, body, _ := fetch(t, s.client, http.MethodGet, s.base+"/apps/media/channels?q=Lanterns+back", nil); code != http.StatusOK || !strings.Contains(body, "Lanterns") {
+		t.Fatalf("channels search after TMDB came back: %d %.300s", code, body)
+	}
+	sent := calls.Load()
+	waitFor(t, func() bool { return connectionState(t, dir, "service/tmdb") == "ok" })
+	if extra := calls.Load() - sent; extra != 0 || observed() != before {
+		t.Fatalf("recovery sent %d check requests and %d observe-health rows, want none", extra, observed()-before)
+	}
+	var lastOK float64
+	if err := d.Read.QueryRow("SELECT COALESCE(last_ok_at, 0) FROM connections WHERE id = 'service/tmdb'").Scan(&lastOK); err != nil || lastOK < float64(now.Unix()) {
+		t.Fatalf("recovery did not record the last success: %v %v", lastOK, err)
 	}
 }
