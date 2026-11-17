@@ -63,3 +63,19 @@ test.describe('Long lists stay put under the finger', () => {
     await expect.poll(() => page.locator('.mail-item-wrap').count()).toBeGreaterThan(30);
   });
 });
+
+test.describe('The Inbox stays put when the queue arrives', () => {
+  const desktop = layouts[2] ?? { name: 'desktop', width: 1440, height: 900, touch: false };
+  for (const layout of [phone, desktop]) {
+    test(`at ${layout.name}`, async ({ page }) => {
+      await page.setViewportSize({ width: layout.width, height: layout.height });
+      await useScenario(page, { inbox: { readDelay: 1000 } });
+      const list = page.locator(layout.touch ? '.deck' : '.inbox');
+      await page.goto('/inbox');
+      await expect(list.locator('.skel-group').first()).toBeVisible();
+      const before = await list.evaluate((el) => el.getBoundingClientRect().top);
+      await expect(page.locator('.page-lede')).toContainText('waiting on you');
+      expect(await list.evaluate((el) => el.getBoundingClientRect().top)).toBe(before);
+    });
+  }
+});
