@@ -10,12 +10,16 @@ import (
 )
 
 type Row struct {
-	UID      string
-	Calendar string
-	Start    Value
-	End      Value
-	Title    string
-	Location string
+	UID       string
+	Calendar  string
+	Target    Target
+	Start     Value
+	End       Value
+	Title     string
+	Location  string
+	Notes     string
+	Recurring bool
+	Revision  string
 }
 
 func (r Row) Dict(tz *time.Location) map[string]any {
@@ -23,6 +27,19 @@ func (r Row) Dict(tz *time.Location) map[string]any {
 		"uid": r.UID, "calendar": r.Calendar, "start": fmtValue(r.Start, tz),
 		"end": fmtValue(r.End, tz), "title": r.Title, "location": r.Location,
 	}
+}
+
+func (r Row) Detail(tz *time.Location) map[string]any {
+	out := r.Dict(tz)
+	out["target"] = string(r.Target)
+	out["read_only"] = r.Target == Birthdays
+	out["all_day"] = r.Start.isDate()
+	out["recurring"] = r.Recurring
+	out["notes"] = r.Notes
+	if r.Revision != "" {
+		out["revision"] = r.Revision
+	}
+	return out
 }
 
 type icsEvent struct {
@@ -401,8 +418,9 @@ func overlaps(s, e, ws, we time.Time) bool {
 	return s.Before(we) && (e.After(ws) || !s.Before(ws))
 }
 
-func (ev *icsEvent) row(calendar string, start, end Value, tz *time.Location) Row {
-	return Row{UID: ev.uidKey(), Calendar: calendar, Start: start, End: end, Title: ev.summary, Location: ev.location}
+func (ev *icsEvent) row(calendar string, start, end Value, recurring bool, revision string) Row {
+	return Row{UID: ev.uidKey(), Calendar: calendar, Start: start, End: end, Title: ev.summary, Location: ev.location,
+		Notes: ev.description, Recurring: recurring, Revision: revision}
 }
 
 func EventsInICS(data []byte, calendar string, ws, we time.Time, tz *time.Location, notes *[]string, maxOccurrences int) ([]Row, error) {
@@ -428,6 +446,13 @@ func EventsInICS(data []byte, calendar string, ws, we time.Time, tz *time.Locati
 			masters[uid] = ev
 		}
 	}
+	revision := func(uid string) string {
+		master, err := masterEvent(events, uid, tz)
+		if err != nil {
+			return ""
+		}
+		return master.Revision
+	}
 	var out []Row
 	for _, uid := range masterOrder {
 		comp := masters[uid]
@@ -447,6 +472,7 @@ func EventsInICS(data []byte, calendar string, ws, we time.Time, tz *time.Locati
 		if err != nil {
 			return nil, err
 		}
+		recurring, rev := len(comp.rrules) > 0 || comp.hasRDate, revision(uid)
 		for _, occ := range occs {
 			if _, hidden := skip[asDT(occ, tz).Unix()]; hidden {
 				continue
@@ -456,7 +482,7 @@ func EventsInICS(data []byte, calendar string, ws, we time.Time, tz *time.Locati
 				return nil, err
 			}
 			if overlaps(asDT(occ, tz), asDT(occEnd, tz), ws, we) {
-				out = append(out, comp.row(calendar, occ, occEnd, tz))
+				out = append(out, comp.row(calendar, occ, occEnd, recurring, rev))
 			}
 		}
 	}
@@ -471,7 +497,7 @@ func EventsInICS(data []byte, calendar string, ws, we time.Time, tz *time.Locati
 				return nil, err
 			}
 			if overlaps(asDT(start, tz), asDT(end, tz), ws, we) {
-				out = append(out, comp.row(calendar, start, end, tz))
+				out = append(out, comp.row(calendar, start, end, true, revision(uid)))
 			}
 		}
 	}

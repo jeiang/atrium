@@ -14,6 +14,15 @@ type ListInput struct {
 	Start    string `json:"start"`
 	End      string `json:"end"`
 	Calendar string `json:"calendar,omitempty"`
+	Detail   bool   `json:"detail,omitempty"`
+}
+
+type CalendarsInput struct{}
+
+type CalendarList struct {
+	Calendars []calendar.Source `json:"calendars"`
+	Today     string            `json:"today"`
+	Timezone  string            `json:"timezone"`
 }
 
 type Listing struct {
@@ -49,12 +58,33 @@ func (s *Service) List(ctx context.Context, in ListInput) (application.Read[List
 		return application.Read[Listing]{}, classify(err)
 	}
 	marked := len(listing.Events) > 0
-	out := Listing{Value: listing.Dict(), Messages: marked, Untrusted: marked, PII: slices.ContainsFunc(listing.Events, func(r calendar.Row) bool { return r.Calendar == calendar.Birthdays })}
+	value := listing.Dict()
+	if in.Detail {
+		value = listing.Detail(time.UnixMicro(int64(s.now() * 1e6)))
+	}
+	out := Listing{Value: value, Messages: marked, Untrusted: marked, PII: slices.ContainsFunc(listing.Events, func(r calendar.Row) bool { return r.Calendar == calendar.Birthdays })}
 	rev, err := s.read(ctx, ListName, []string{state.Calendar, state.Settings, state.Connections}, in, out.Value)
 	if err != nil {
 		return application.Read[Listing]{}, err
 	}
 	return application.Read[Listing]{Revision: rev, Data: out}, nil
+}
+
+func (s *Service) Calendars(ctx context.Context, _ CalendarsInput) (application.Read[CalendarList], error) {
+	set, err := calendar.LoadSettings(ctx, s.db.Read)
+	if err != nil {
+		return application.Read[CalendarList]{}, err
+	}
+	tz, err := calendar.Zone(ctx, s.env)
+	if err != nil {
+		return application.Read[CalendarList]{}, err
+	}
+	out := CalendarList{Calendars: calendar.Sources(ctx, set), Today: time.UnixMicro(int64(s.now() * 1e6)).In(tz).Format(time.DateOnly), Timezone: tz.String()}
+	rev, err := s.read(ctx, CalendarsName, []string{state.Calendar, state.Settings, state.Connections}, nil, out)
+	if err != nil {
+		return application.Read[CalendarList]{}, err
+	}
+	return application.Read[CalendarList]{Revision: rev, Data: out}, nil
 }
 
 func (s *Service) FindSlot(ctx context.Context, in FindSlotInput) (application.Read[Slots], error) {
