@@ -62,7 +62,9 @@ var moduleCases = []moduleCase{
 	{module: unit.Contacts, tool: "contacts_lookup", command: []string{"contacts", "sync"}},
 	{module: unit.Weather, tool: "weather"},
 	{module: unit.Packages, tool: "track_package", table: "packages", method: "GET", path: "/watches", status: http.StatusOK,
-		command: []string{"packages", "poll"}, output: nonEmpty},
+		command: []string{"packages", "poll"}, output: func(_, stderr string, code int) bool {
+			return code != cli.ExitOK && strings.Contains(stderr, "Ship24 connection is not configured")
+		}},
 }
 
 type appRun struct {

@@ -153,7 +153,7 @@ func (s *Service) Track(ctx context.Context, in TrackInput) (application.Change[
 
 func scope(ctx context.Context) (*int64, *int64) {
 	inv, ok := application.InvocationOf(ctx)
-	if !ok {
+	if !ok || inv.ThreadID == 0 || inv.RunID == 0 {
 		return nil, nil
 	}
 	return &inv.ThreadID, &inv.RunID

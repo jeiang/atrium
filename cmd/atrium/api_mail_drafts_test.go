@@ -110,7 +110,7 @@ func TestDraftSendOnceAndLoops(t *testing.T) {
 		t.Fatalf("active packages after dismissing: %v", active)
 	}
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/packages/999/dismiss", token, nil), http.StatusNotFound, "not_found")
-	for _, old := range []string{"/api/v1/mail/packages", "/api/v2/mail/packages"} {
+	for _, old := range []string{"/api/v1/mail/packages", "/api/v1/mail/packages/1/dismiss"} {
 		if got := s.do(http.MethodGet, old, token, nil); got.status != http.StatusNotFound {
 			t.Fatalf("retired %s answered %d %s", old, got.status, got.body)
 		}

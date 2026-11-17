@@ -224,15 +224,15 @@
     },
     {
       "kind": "group",
-      "module": "mail",
+      "module": "packages",
       "name": "packages",
       "title": "Packages",
-      "url": "/settings/mail",
+      "url": "/settings/packages",
       "fields": [
         {
           "key": "mail_ship24_destination_country",
           "label": "Destination country",
-          "module": "mail",
+          "module": "packages",
           "type": "string",
           "multi": false,
           "choices": [],
@@ -248,7 +248,7 @@
         {
           "key": "mail_ship24_destination_postcode",
           "label": "Destination postcode",
-          "module": "mail",
+          "module": "packages",
           "type": "string",
           "multi": false,
           "choices": [],
@@ -842,6 +842,31 @@
         {
           "key": "mail_enabled",
           "label": "Mail app is on",
+          "module": "core",
+          "type": "bool",
+          "multi": false,
+          "choices": [],
+          "default": "false",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "apps",
+          "restart": false
+        }
+      ]
+    },
+    {
+      "kind": "module",
+      "module": "packages",
+      "name": "packages",
+      "title": "packages",
+      "url": "/settings/packages",
+      "fields": [
+        {
+          "key": "packages_enabled",
+          "label": "Packages app is on",
           "module": "core",
           "type": "bool",
           "multi": false,

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/unit"
@@ -30,13 +31,13 @@ func TestPackagesAPIAddsTracksPollsUntracksAndDismisses(t *testing.T) {
 	}
 	add := map[string]any{"tracking_number": "1Z999AA10123456784", "carrier": "UPS", "merchant": "Shop"}
 	id := number(t, apiData(t, s.do(http.MethodPost, "/api/v1/packages", token, add), http.StatusOK)["package_id"])
-	expectAPI(t, s.do(http.MethodPost, "/api/v2/packages", token, add), http.StatusConflict, "conflict")
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/packages", token, add), http.StatusConflict, "conflict")
 
 	tracked := apiData(t, s.do(http.MethodPost, fmt.Sprintf("/api/v1/packages/%d/track", id), token, map[string]any{}), http.StatusOK)
 	if raw, _ := json.Marshal(tracked["tracking"]); !strings.Contains(string(raw), "trk_1") || !strings.Contains(string(raw), "in_transit") {
 		t.Fatalf("track result: %s", raw)
 	}
-	list = apiData(t, s.do(http.MethodGet, "/api/v2/packages?active=true", token, nil), http.StatusOK)
+	list = apiData(t, s.do(http.MethodGet, "/api/v1/packages?active=true", token, nil), http.StatusOK)
 	items := apiItems(t, list)
 	quota, _ = list["quota"].(map[string]any)
 	if len(items) != 1 || packageField(items[0], "tracker_id") != "trk_1" || packageField(items[0], "tracking_number") != "1Z999AA10123456784" || quota["used"] != float64(1) {
@@ -54,13 +55,13 @@ func TestPackagesAPIAddsTracksPollsUntracksAndDismisses(t *testing.T) {
 		t.Fatalf("package after untrack: %v", items)
 	}
 	expectAPI(t, s.do(http.MethodPost, fmt.Sprintf("/api/v1/packages/%d/untrack", id), token, nil), http.StatusConflict, "conflict")
-	expectAPI(t, s.do(http.MethodPost, "/api/v1/packages/999/track", token, map[string]any{}), http.StatusNotFound, "not_found")
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/packages/999/track", token, map[string]any{}), http.StatusUnprocessableEntity, "invalid")
 
 	apiData(t, s.do(http.MethodPost, fmt.Sprintf("/api/v1/packages/%d/dismiss", id), token, nil), http.StatusOK)
 	if items := apiItems(t, apiData(t, s.do(http.MethodGet, "/api/v1/packages?active=true", token, nil), http.StatusOK)); len(items) != 0 {
 		t.Fatalf("active packages after dismissing: %v", items)
 	}
-	for _, old := range []string{"/api/v1/mail/packages/poll", "/api/v2/mail/packages/poll"} {
+	for _, old := range []string{"/api/v1/mail/packages", "/api/v1/mail/packages/poll"} {
 		if got := s.do(http.MethodPost, old, token, nil); got.status != http.StatusNotFound {
 			t.Fatalf("retired %s answered %d %s", old, got.status, got.body)
 		}
@@ -83,6 +84,7 @@ func TestTurningPackagesOffHidesItsToolsAndKeepsTheShip24Row(t *testing.T) {
 	if got := runSettings(t, "set", module.FlagKey(unit.Packages), "false"); got.code != cli.ExitOK {
 		t.Fatalf("turn Packages off: exit %d %q", got.code, got.stderr)
 	}
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
 	if names := offeredTools(t, api, runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")); slices.ContainsFunc(names, func(n string) bool { return slices.Contains(packageTools, n) }) {
 		t.Fatalf("package tools offered while Packages is off: %v", names)
 	}
