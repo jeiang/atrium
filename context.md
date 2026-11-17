@@ -426,7 +426,13 @@ claims about the running application. Operator contracts are in
   is refused, still answered 422 with the same message). `PUT
   /api/v1/assistant/defaults` (bearer only) takes the same three fields
   (`model`, `effort`, `context_limit`) through the same operation and
-  validation, answering 422 `invalid` with that message.
+  validation, answering 422 `invalid` with that message. An optional
+  `If-Match` with the `GET /assistant/configuration` ETag refuses a stale
+  save with 412 `precondition_failed`; without it the save applies as before.
+  `GET /assistant/tools` (`assistant.tools`) reports the runtime registry of
+  the enabled modules: per tool its name, description, permission channel
+  (`none`, a channel key, or `by_arguments` when `ChannelOf` decides), effect
+  and run kinds, so worker-only tools list only `worker`.
   The catalog also records whether a model accepts a forced `tool_choice`
   (`any` or a named tool): only Haiku does, and the loop sends the request
   to Sonnet and Opus without it. The loop ends a run with a clear thread
@@ -788,7 +794,11 @@ claims about the running application. Operator contracts are in
   approval selection is invalid input (`atrium proposals approve` exits 2,
   the API answers 422 `bad_selection`) and records no effect. Every readable table has insert, update and delete triggers
   that bump one counter per scope in `read_revisions` (lease, heartbeat and
-  streamed run event writes do not); the append-only
+  streamed run event writes do not). Since migration 7 the `connections`
+  update trigger skips updates that change only the bookkeeping columns
+  `checked_at`, `last_ok_at` and `updated_at`; they move without a
+  revision, so using or checking a connection with an unchanged result
+  publishes no `connections` change. The append-only
   `operation_audit` table records application commands. Both are owned by
   `internal/application/state`. Notification inbox, channel and device controls,
   and delivery commands use `notifications.*` operations. The
@@ -833,6 +843,13 @@ claims about the running application. Operator contracts are in
   repeated failures push nothing until a success. `GET /schedules/runs`
   (`assistant.schedule.runs`) pages every schedule's runs newest first, the
   same rows as `GET /schedules/{job_id}/runs`; run rows carry `job_id`.
+  Run now's 202 body carries the requested run id as `run`;
+  `GET /schedules/{job_id}/runs/{run_id}` (`assistant.schedule.run-read`)
+  returns that one row, whose `thread_id` is null until serve starts it.
+  `GET /schedules/preview?schedule=` (`assistant.schedule.preview`) parses a
+  cadence with `scheduler.Parse` in the server zone and steps
+  `Spec.NextAfter` for the next 5 runs; an unparsable cadence is 422
+  `invalid` on `schedule`.
 - The built-in modules are always compiled
   in. One compiled `module.Declaration` catalog supplies the registration
   path for module pages, commands, tools, settings, connections, hooks,
@@ -1848,7 +1865,9 @@ claims about the running application. Operator contracts are in
   `precondition_failed` with the current `revision`; per-key and cross-field
   (`Def.Peers`) failures, checked against the final state, return 422 with one
   field per key; a pinned or unoffered key refuses the whole request. Success
-  returns the keys and the new revision. Operations marked
+  returns the keys and the new revision. `PUT /permissions` takes an optional
+  `If-Match` with the `GET /permissions` ETag (settings and review scopes),
+  checked in the write transaction; a stale tag is 412. Operations marked
   `x-atrium-undoable` are `review.approve` and the local-undoable or audited
   conditional operations of modules that register ledger undoers; a command
   response with `effect_ids` also carries `undoable`. Proposal payloads carry

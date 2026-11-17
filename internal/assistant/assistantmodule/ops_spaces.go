@@ -15,7 +15,7 @@ func assistantService(d *web.Deps) *asstapp.Service {
 func spaceOperations() ([]application.Definition, []application.Binding) {
 	return []application.Definition{
 			asstapp.DescribeSpaceCreate(), asstapp.DescribeSpaceEdit(), asstapp.DescribeSpaceArchive(),
-			asstapp.DescribeSpaceDetail(), asstapp.DescribeSpaceList(), asstapp.DescribeConfiguration(), asstapp.DescribeDefaultsSet(), asstapp.DescribeSubagentRoles(),
+			asstapp.DescribeSpaceDetail(), asstapp.DescribeSpaceList(), asstapp.DescribeConfiguration(), asstapp.DescribeDefaultsSet(), asstapp.DescribeSubagentRoles(), asstapp.DescribeToolCatalog(),
 		}, append(spaceAPIBindings(nil), []application.Binding{
 			{Kind: application.HTML, Target: "GET /projects/new", Uses: []application.Name{asstapp.ConfigurationName}},
 			{Kind: application.HTML, Target: "POST /projects", Uses: []application.Name{asstapp.SpaceCreateName, asstapp.ConfigurationName}},

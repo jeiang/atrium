@@ -18,7 +18,8 @@
   import './calendar.css';
 
   const apps = useApps();
-  const app = $derived(apps.data?.find((item) => item.id === 'calendar'));
+  const settled = $derived(apps.isFetchedAfterMount || !apps.isFetching);
+  const app = $derived(settled ? apps.data?.find((item) => item.id === 'calendar') : undefined);
   const current = $derived(
     isActive('/apps/calendar/week') ? 'week' : isActive('/apps/calendar/candidates') ? 'candidates' : 'agenda',
   );
@@ -63,7 +64,7 @@
   }
 </script>
 
-{#if apps.data && !app?.enabled}
+{#if settled && apps.data && !app?.enabled}
   <NotFound />
 {:else}
   <Page title="Calendar" eyebrow="Apps">

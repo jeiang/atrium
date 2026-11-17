@@ -1,6 +1,21 @@
 package application
 
+import "strings"
+
 type Revision string
+
+func (r Revision) Matches(ifMatch string) bool {
+	if strings.TrimSpace(ifMatch) == "" {
+		return true
+	}
+	for tag := range strings.SplitSeq(ifMatch, ",") {
+		tag = strings.TrimSpace(tag)
+		if tag == "*" || strings.Trim(strings.TrimPrefix(tag, "W/"), `"`) == string(r) {
+			return true
+		}
+	}
+	return false
+}
 
 type Read[T any] struct {
 	Revision Revision `json:"revision"`
