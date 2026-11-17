@@ -41,6 +41,22 @@ func TestAConnectionFlappingAcrossARestartIsNoticedOncePerFlapWindow(t *testing.
 			var checked float64
 			_ = d.Read.QueryRow("SELECT state, reason, results_json, notice_json, COALESCE(checked_at,0) FROM connections WHERE id = 'service/tmdb'").Scan(&state, &reason, &results, &notice, &checked)
 			t.Logf("connection row at failure: %s %s %s %s %.0f now %d", state, reason, results, notice, checked, time.Now().Unix())
+			if rows, err := d.Read.Query("SELECT title, body FROM notifications WHERE title LIKE 'atrium: %' ORDER BY id"); err == nil {
+				for rows.Next() {
+					var title, body string
+					_ = rows.Scan(&title, &body)
+					t.Logf("notification: %s | %s", title, body)
+				}
+				_ = rows.Close()
+			}
+			if rows, err := d.Read.Query("SELECT operation, actor, source, outcome, target FROM operation_audit WHERE target LIKE '%service/tmdb%' ORDER BY rowid"); err == nil {
+				for rows.Next() {
+					var op, actor, source, outcome, target string
+					_ = rows.Scan(&op, &actor, &source, &outcome, &target)
+					t.Logf("audit: %s %s %s %s %s", op, actor, source, outcome, target)
+				}
+				_ = rows.Close()
+			}
 		}
 	})
 	label, _, _ := runtimeRow(t, dir, "service/tmdb")
