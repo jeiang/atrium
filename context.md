@@ -808,7 +808,10 @@ claims about the running application. Operator contracts are in
   update trigger skips updates that change only the bookkeeping columns
   `checked_at`, `last_ok_at` and `updated_at`; they move without a
   revision, so using or checking a connection with an unchanged result
-  publishes no `connections` change. The append-only
+  publishes no `connections` change. A use that observes the same state,
+  reason and results as a check recorded within the last minute writes
+  nothing, so `checked_at` lags by at most a minute, below the 1 and 5
+  minute recheck windows. The append-only
   `operation_audit` table records application commands. Both are owned by
   `internal/application/state`. Notification inbox, channel and device controls,
   and delivery commands use `notifications.*` operations. The
