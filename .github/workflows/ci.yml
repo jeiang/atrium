@@ -248,6 +248,8 @@ jobs:
     if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      engines: ${{ steps.engines.outputs.engines }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -262,6 +264,10 @@ jobs:
         run: |
           npm run build
           npm run build:mock
+
+      - name: Browser engines
+        id: engines
+        run: echo "engines=$(jq -c . web/e2e/engines.json)" >> "$GITHUB_OUTPUT"
 
       - name: Size budgets
         working-directory: web
@@ -308,15 +314,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { engine: chromium, shard: 1, total: 2 }
-          - { engine: chromium, shard: 2, total: 2 }
-          - { engine: firefox, shard: 1, total: 3 }
-          - { engine: firefox, shard: 2, total: 3 }
-          - { engine: firefox, shard: 3, total: 3 }
-          - { engine: webkit, shard: 1, total: 3 }
-          - { engine: webkit, shard: 2, total: 3 }
-          - { engine: webkit, shard: 3, total: 3 }
+        engine: ${{ fromJSON(needs.web-build.outputs.engines) }}
+        shard: [1, 2, 3]
+        total: [3]
     name: web-e2e (${{ matrix.engine }} ${{ matrix.shard }} of ${{ matrix.total }})
     runs-on: ubuntu-latest
     timeout-minutes: 20

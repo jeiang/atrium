@@ -73,7 +73,8 @@ settings the operator edits in the UI or pins from the host.
 - Direct helper, parser, query, repository, or component tests do not qualify.
   Checking source text or internal call wiring does not qualify.
 - The client in `web/` is tested only by real-browser e2e: Playwright in
-  Chromium, Firefox and WebKit against the mock build (`atrium-web-mock`,
+  the engines in `web/e2e/engines.json` (Chromium and WebKit; Firefox is
+  paused) against the mock build (`atrium-web-mock`,
   MSW for the API), in `web/e2e`. No Vitest, Jest, component or story tests.
   `just web-test` runs it; the `web-e2e` check runs it in the Nix sandbox and
   CI runs it in plain jobs with browsers from `npx playwright install`.
