@@ -104,8 +104,8 @@ func TestConnectionTraceShowsEachDAVExchangeWithoutSecretsOrSaving(t *testing.T)
 		" repeat 2 of 2 of the home set step\n",
 		"\nrepeat: the home set request failed 2 of 2 times\n",
 	)
-	if n := strings.Count(refused.stdout, "home set step\n> PROPFIND https://"+partitionHost); n != 5 {
-		t.Errorf("the refused trace sent %d partition home set requests, want the first, 2 retries and 2 repeats:\n%s", n, refused.stdout)
+	if n := strings.Count(refused.stdout, "home set step\n> PROPFIND https://"+partitionHost); n != 4 {
+		t.Errorf("the refused trace sent %d partition home set requests, want the first, 1 retry and 2 repeats:\n%s", n, refused.stdout)
 	}
 	if got := runApp(t, "connections", "test", "icloud/icloud", "--trace", "carddav", "--repeat", "6"); got.code == cli.ExitOK {
 		t.Errorf("--repeat 6 was accepted: %q", got.stdout)

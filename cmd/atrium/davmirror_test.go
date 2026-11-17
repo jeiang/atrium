@@ -417,7 +417,7 @@ func TestOneICloudConnectionServesContactsAndCalendarWhileEitherUnitIsOff(t *tes
 		t.Fatalf("a wrong password gave %+v, want one needs_reauth row with both capabilities", view)
 	}
 	for _, r := range view.Results {
-		if r.State != "needs_reauth" || r.Reason != "iCloud refused the app password" {
+		if r.State != "needs_reauth" || !strings.HasPrefix(r.Reason, "iCloud refused the app password; atrium sends iCloud no request for this until ") {
 			t.Errorf("capability %s after a wrong password = %s %q", r.Capability, r.State, r.Reason)
 		}
 	}
@@ -425,7 +425,7 @@ func TestOneICloudConnectionServesContactsAndCalendarWhileEitherUnitIsOff(t *tes
 		t.Errorf("%d repair notices after a wrong password, want 1", n)
 	}
 	for _, args := range [][]string{{"contacts", "sync"}, {"calendar", "sync"}} {
-		if got := runApp(t, args...); got.code == cli.ExitOK || !strings.Contains(got.stderr, "401") {
+		if got := runApp(t, args...); got.code == cli.ExitOK || !strings.Contains(got.stderr, "skipped, backing off until ") {
 			t.Errorf("%v with a wrong password: %d %q", args, got.code, got.stderr)
 		}
 	}
