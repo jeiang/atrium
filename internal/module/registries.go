@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/communications"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/ops"
@@ -68,17 +69,18 @@ type Attachment struct {
 }
 
 type registries struct {
-	origins     map[string]string
-	day         daySources
-	direct      []string
-	channels    []string
-	titles      map[string]string
-	refs        map[string]RefKind
-	attachments []Attachment
-	categories  []review.Category
-	corpora     []embed.Corpus
-	queues      []ops.Queue
-	scans       []proposalsapp.Scan
+	origins        map[string]string
+	day            daySources
+	communications communications.Feed
+	direct         []string
+	channels       []string
+	titles         map[string]string
+	refs           map[string]RefKind
+	attachments    []Attachment
+	categories     []review.Category
+	corpora        []embed.Corpus
+	queues         []ops.Queue
+	scans          []proposalsapp.Scan
 }
 
 type claims map[string]string
@@ -95,6 +97,9 @@ func compileRegistries(decls []Declaration) (registries, error) {
 	r := registries{origins: map[string]string{}, refs: map[string]RefKind{}, titles: map[string]string{}}
 	var err error
 	if r.day, err = compileDay(decls); err != nil {
+		return registries{}, err
+	}
+	if r.communications, err = compileCommunications(decls); err != nil {
 		return registries{}, err
 	}
 	channels := claims{SystemChannel: platformOwner}

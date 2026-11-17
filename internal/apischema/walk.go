@@ -38,6 +38,7 @@ func newWalker() *walker {
 const atrium = "github.com/jeiang/atrium/internal/"
 
 var pinnedNames = map[string]string{
+	atrium + "apps/calendar.Event":                     "CalendarEvent",
 	atrium + "assistant/assistantmodule.apiAttachment": "ThreadAttachment",
 	atrium + "mail/message.Attachment":                 "MailAttachment",
 	atrium + "mail/live.Action":                        "LiveAction",

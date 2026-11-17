@@ -12,6 +12,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	gcal "google.golang.org/api/calendar/v3"
 	"google.golang.org/api/googleapi"
 )
 
@@ -158,10 +159,8 @@ func DeleteEvent(ctx context.Context, env config.Env, set Settings, target Targe
 		if err != nil {
 			return err
 		}
-		if err := svc.Events.Delete("primary", uid).SendUpdates("none").Context(ctx).Do(); err != nil {
-			if status := httpStatus(err); status != 404 && status != 410 {
-				return remote(err)
-			}
+		if err := googleDelete(ctx, svc, uid); err != nil {
+			return err
 		}
 	case ICloud:
 		cal, err := openICloud(ctx, env, set)
@@ -173,6 +172,15 @@ func DeleteEvent(ctx context.Context, env config.Env, set Settings, target Targe
 		}
 	default:
 		return targetError()
+	}
+	return nil
+}
+
+func googleDelete(ctx context.Context, svc *gcal.Service, uid string) error {
+	if err := svc.Events.Delete("primary", uid).SendUpdates("none").Context(ctx).Do(); err != nil {
+		if status := httpStatus(err); status != 404 && status != 410 {
+			return remote(err)
+		}
 	}
 	return nil
 }
