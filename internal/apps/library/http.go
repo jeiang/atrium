@@ -1,0 +1,79 @@
+package library
+
+import (
+	"context"
+	"crypto/x509"
+	"errors"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
+	"strings"
+)
+
+type httpFailure struct{ class string }
+
+func (e *httpFailure) Error() string { return e.class }
+
+type reply struct {
+	status int
+	body   []byte
+}
+
+func send(ctx context.Context, client *http.Client, req *http.Request) (reply, error) {
+	resp, err := client.Do(req.WithContext(ctx))
+	if err != nil {
+		if ctx.Err() != nil {
+			return reply{}, ctx.Err()
+		}
+		return reply{}, &httpFailure{errorClass(err)}
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		if ctx.Err() != nil {
+			return reply{}, ctx.Err()
+		}
+		return reply{}, &httpFailure{errorClass(err)}
+	}
+	return reply{status: resp.StatusCode, body: body}, nil
+}
+
+func errorClass(err error) string {
+	var op *net.OpError
+	var cert x509.UnknownAuthorityError
+	var host x509.HostnameError
+	var invalid x509.CertificateInvalidError
+	var dns *net.DNSError
+	switch {
+	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
+		return "protocol error"
+	case errors.As(err, &op) && op.Op == "dial":
+		if op.Timeout() {
+			return "connect timeout"
+		}
+		return "connect failed"
+	case errors.As(err, &cert), errors.As(err, &host), errors.As(err, &invalid), errors.As(err, &dns):
+		return "connect failed"
+	}
+	var timeouter interface{ Timeout() bool }
+	if errors.As(err, &timeouter) && timeouter.Timeout() {
+		return "read timeout"
+	}
+	return "read failed"
+}
+
+type param struct{ key, value string }
+
+func encodeParams(params []param) string {
+	var b strings.Builder
+	for i, p := range params {
+		if i > 0 {
+			b.WriteByte('&')
+		}
+		b.WriteString(url.QueryEscape(p.key))
+		b.WriteByte('=')
+		b.WriteString(url.QueryEscape(p.value))
+	}
+	return b.String()
+}

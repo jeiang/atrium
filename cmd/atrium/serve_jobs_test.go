@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/apps/library"
 	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/unit"
 )
@@ -57,13 +57,13 @@ func newHeldQBittorrent(t *testing.T, held bool) *heldQBittorrent {
 
 func sweepRuns(t *testing.T, d *db.DB) int {
 	t.Helper()
-	return schedulerRuns(t, d, media.JobSweep)
+	return schedulerRuns(t, d, library.JobSweep)
 }
 
 func sweepNextDue(t *testing.T, d *db.DB) *float64 {
 	t.Helper()
 	var due *float64
-	if err := d.Read.QueryRow("SELECT next_due FROM jobs WHERE declaration_key = ?", unit.Media+"/"+media.JobSweep).Scan(&due); err != nil {
+	if err := d.Read.QueryRow("SELECT next_due FROM jobs WHERE declaration_key = ?", unit.Media+"/"+library.JobSweep).Scan(&due); err != nil {
 		t.Fatal(err)
 	}
 	return due
@@ -88,11 +88,11 @@ func TestServeRunsModelFreeJobsWithAssistantDisabled(t *testing.T) {
 	declareJobsAndParkThem(t, d)
 	asstSet(t, module.FlagKey(unit.Assistant), "false")
 	before := len(api.Requests())
-	asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE name = ?", float64(time.Now().Unix())-1, media.JobSweep)
+	asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE name = ?", float64(time.Now().Unix())-1, library.JobSweep)
 
 	startServeIn(t, f.dir)
-	waitUntil(t, 30*time.Second, "the media sweep run in serve", schedulerTerminal(d, media.JobSweep))
-	if status, text := schedulerStatus(t, d, media.JobSweep); status != "ok" {
+	waitUntil(t, 30*time.Second, "the media sweep run in serve", schedulerTerminal(d, library.JobSweep))
+	if status, text := schedulerStatus(t, d, library.JobSweep); status != "ok" {
 		t.Fatalf("media sweep status %s: %s", status, text)
 	}
 	if qbit.listed.Load() == 0 {
@@ -113,7 +113,7 @@ func TestManualInvocationAndTickNeverOverlap(t *testing.T) {
 	d := asstDB(t, dir)
 	declareJobsAndParkThem(t, d)
 	due := float64(time.Now().Unix()) - 1
-	asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE name = ?", due, media.JobSweep)
+	asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE name = ?", due, library.JobSweep)
 
 	manual := cliExitProcessArgs(t, []string{"media", "sweep"})
 	var manualOut, manualErr bytes.Buffer
@@ -143,7 +143,7 @@ func TestManualInvocationAndTickNeverOverlap(t *testing.T) {
 	if n := sweepRuns(t, d); n != 1 {
 		t.Fatalf("%d media sweep runs after the manual sweep, want 1", n)
 	}
-	if status, text := schedulerStatus(t, d, media.JobSweep); status != "ok" {
+	if status, text := schedulerStatus(t, d, library.JobSweep); status != "ok" {
 		t.Fatalf("manual media sweep status %s: %s", status, text)
 	}
 	if got := sweepNextDue(t, d); got == nil || *got != due {
@@ -157,7 +157,7 @@ func TestManualInvocationAndTickNeverOverlap(t *testing.T) {
 	if n := sweepRuns(t, d); n != 2 {
 		t.Fatalf("%d media sweep runs after the scheduled tick, want 2", n)
 	}
-	if status, text := schedulerStatus(t, d, media.JobSweep); status != "ok" {
+	if status, text := schedulerStatus(t, d, library.JobSweep); status != "ok" {
 		t.Fatalf("scheduled media sweep status %s: %s", status, text)
 	}
 	if got := sweepNextDue(t, d); got == nil || *got <= due {
@@ -184,7 +184,7 @@ func TestInterruptedManualRunReleasesItsClaim(t *testing.T) {
 	if code := exitWithin(t, manual, 30*time.Second); code != cli.ExitInterrupt {
 		t.Fatalf("interrupted manual sweep exit %d: %s", code, stderr.String())
 	}
-	if status, text := schedulerStatus(t, d, media.JobSweep); status != "error" || text != "interrupted" {
+	if status, text := schedulerStatus(t, d, library.JobSweep); status != "error" || text != "interrupted" {
 		t.Fatalf("manual sweep = %s (%s), want error interrupted", status, text)
 	}
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM job_resource_leases"); n != 0 {
@@ -215,8 +215,8 @@ func TestManualRunReportsALostClaim(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitUntil(t, 30*time.Second, "the manual sweep request", func() bool { return qbit.listed.Load() == 1 })
-	asstExec(t, d, "UPDATE job_runs SET owner = 'successor' WHERE job_id = (SELECT id FROM jobs WHERE name = ?)", media.JobSweep)
-	asstExec(t, d, "UPDATE jobs SET lease_owner = 'successor' WHERE name = ?", media.JobSweep)
+	asstExec(t, d, "UPDATE job_runs SET owner = 'successor' WHERE job_id = (SELECT id FROM jobs WHERE name = ?)", library.JobSweep)
+	asstExec(t, d, "UPDATE jobs SET lease_owner = 'successor' WHERE name = ?", library.JobSweep)
 	close(qbit.release)
 	if code := exitWithin(t, manual, 30*time.Second); code == cli.ExitOK || !strings.Contains(stderr.String(), "claim") {
 		t.Fatalf("manual sweep after losing its claim exit %d: %s", code, stderr.String())

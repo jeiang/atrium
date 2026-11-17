@@ -11,11 +11,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/apps/library"
 	"github.com/jeiang/atrium/internal/apps/torrents"
 	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/media"
 )
 
 func mediaEffectID(t *testing.T, d *db.DB, operation, target, state string) int64 {
@@ -110,7 +110,7 @@ func TestMediaSelectionFailureKeepsTheAddAndBlocksTheRepeat(t *testing.T) {
 	mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
-	qb.put(mnpTorrent{hash: busy, name: "Dune.2021", tags: []string{media.TagMedia}, state: "stoppedDL", content: "Dune.2021",
+	qb.put(mnpTorrent{hash: busy, name: "Dune.2021", tags: []string{library.TagMedia}, state: "stoppedDL", content: "Dune.2021",
 		files: []mnpFile{{0, "Dune.2021.mkv", 0}, {1, "Dune.2021.nfo", 1}}})
 	qb.dropOnce("torrents/filePrio")
 
@@ -141,7 +141,7 @@ func TestMediaSelectionFailureKeepsTheAddAndBlocksTheRepeat(t *testing.T) {
 	if writes := qb.count("torrents/filePrio"); writes < 2 {
 		t.Fatalf("the selection did not resume after resolution: %d writes", writes)
 	}
-	if tags, _ := qb.state(busy); !slices.Contains(tags, media.TagSelected) {
+	if tags, _ := qb.state(busy); !slices.Contains(tags, library.TagSelected) {
 		t.Fatalf("the selected torrent tags %v", tags)
 	}
 }
@@ -153,7 +153,7 @@ func TestMediaSweepDeleteDropDoesNotRepeat(t *testing.T) {
 	mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
-	qb.put(mnpTorrent{hash: hash, name: "Filed.Show", tags: []string{media.TagMedia, media.TagFiled}, state: contract.StoppedUP, progress: 1})
+	qb.put(mnpTorrent{hash: hash, name: "Filed.Show", tags: []string{library.TagMedia, library.TagFiled}, state: contract.StoppedUP, progress: 1})
 	qb.dropOnce("torrents/delete")
 
 	ran := runApp(t, "media", "sweep")
@@ -279,7 +279,7 @@ func TestApprovedMediaChannelAddAndRemoveUndo(t *testing.T) {
 		}
 	}
 	add := func() string {
-		return proposalID(t, toolResult(t, "media_channel_add", map[string]any{
+		return proposalID(t, toolResult(t, "library_follow", map[string]any{
 			"imdb_id": "tt1234567", "name": "Lanterns", "regex": "1080p",
 		}))
 	}
@@ -297,7 +297,7 @@ func TestApprovedMediaChannelAddAndRemoveUndo(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT id, json_array(name, imdb, tmdb_id, pattern, case_sensitive, primed, created) FROM media_channels").Scan(&channel, &before); err != nil {
 		t.Fatal(err)
 	}
-	remove := proposalID(t, toolResult(t, "media_channel_remove", map[string]any{"id": channel}))
+	remove := proposalID(t, toolResult(t, "library_unfollow", map[string]any{"id": channel}))
 	count(1)
 	run("approve", remove)
 	count(0)
@@ -326,7 +326,7 @@ func TestApprovedMediaChannelFailureAuditsNewTarget(t *testing.T) {
 	mnpMediaRoot(t, dir)
 	_, qbURL := mnpNewQbit(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
-	id := proposalID(t, toolResult(t, "media_channel_add", map[string]any{
+	id := proposalID(t, toolResult(t, "library_follow", map[string]any{
 		"imdb_id": "tt1234567", "name": "Lanterns", "regex": "[",
 	}))
 	runApp(t, "proposals", "approve", id)
