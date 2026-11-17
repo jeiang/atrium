@@ -11,12 +11,14 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
-	"github.com/jeiang/atrium/internal/connections/connweb"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings/audit"
+	"github.com/jeiang/atrium/internal/urlx"
 	"github.com/jeiang/atrium/internal/web"
 )
+
+func googleRedirect(origin string) string { return origin + urlx.GoogleCallback }
 
 func connectionsOperations() ([]application.Definition, []application.Binding) {
 	defs, bindings := connectionsDeclared()
@@ -30,15 +32,6 @@ func connectionsDeclared() ([]application.Definition, []application.Binding) {
 			{Kind: application.CLI, Target: "connections list", Uses: []application.Name{connectionsapp.ListName}},
 			{Kind: application.CLI, Target: "connections test", Uses: []application.Name{connectionsapp.TestName}},
 			{Kind: application.CLI, Target: "connections check", Uses: []application.Name{connectionsapp.CheckName}},
-			{Kind: application.HTML, Target: "GET /settings/connections", Uses: []application.Name{connectionsapp.ListName}},
-			{Kind: application.HTML, Target: "POST /settings/connections/test", Uses: []application.Name{connectionsapp.TestSaveName, connectionsapp.ListName}},
-			{Kind: application.HTML, Target: "POST /settings/connections/disconnect", Uses: []application.Name{connectionsapp.DisconnectName}},
-			{Kind: application.HTML, Target: "GET /settings/connections/google", Uses: []application.Name{connectionsapp.OAuthSetupName}},
-			{Kind: application.HTML, Target: "POST /settings/connections/google", Uses: []application.Name{connectionsapp.OAuthConfigureName, connectionsapp.OAuthSetupName}},
-			{Kind: application.HTML, Target: "POST /settings/connections/google/start", Uses: []application.Name{connectionsapp.OAuthStartName, connectionsapp.OAuthSetupName}},
-			{Kind: application.HTML, Target: "GET /settings/connections/google/callback", Uses: []application.Name{connectionsapp.OAuthCompleteName, connectionsapp.OAuthSetupName}},
-			{Kind: application.HTML, Target: "POST /settings/connections/google/paste", Uses: []application.Name{connectionsapp.OAuthCompleteName, connectionsapp.OAuthSetupName}},
-			{Kind: application.HTML, Target: "POST /settings/connections/google/test", Uses: []application.Name{connectionsapp.TestName, connectionsapp.OAuthSetupName}},
 			{Kind: application.Service, Target: "connection-health", Uses: []application.Name{connectionsapp.ObserveHealthName}},
 		}
 }
@@ -226,7 +219,7 @@ func connectionRoutes(d *web.Deps) []application.Binding {
 					return application.Read[connectionsapp.OAuthSetup]{}, err
 				}
 				read, err := s.OAuthSetup(ctx, connectionsapp.OAuthSetupInput{})
-				read.Data.RedirectURI = connweb.GoogleRedirect(web.RequestOrigin(ctx))
+				read.Data.RedirectURI = googleRedirect(web.RequestOrigin(ctx))
 				return read, err
 			}),
 		api.Command(d, connectionsapp.DescribeOAuthConfigure(), application.APIShape{Area: area, Errors: refusable},
@@ -243,7 +236,7 @@ func connectionRoutes(d *web.Deps) []application.Binding {
 				if err != nil {
 					return application.Change[GoogleConsent]{}, err
 				}
-				change, err := s.OAuthStart(ctx, connectionsapp.OAuthStartInput{Capability: in.Capability, Redirect: connweb.GoogleRedirect(web.RequestOrigin(ctx)), Handoff: true})
+				change, err := s.OAuthStart(ctx, connectionsapp.OAuthStartInput{Capability: in.Capability, Redirect: googleRedirect(web.RequestOrigin(ctx)), Handoff: true})
 				if err != nil {
 					return application.Change[GoogleConsent]{}, err
 				}

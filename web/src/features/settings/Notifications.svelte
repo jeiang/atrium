@@ -60,9 +60,9 @@
   let choices = $state<Record<string, string>>({});
 
   const mine = $derived(
-    here && devices.find((item) => item.endpoint === here?.endpoint || item.endpoint === here?.classic),
+    here && devices.find((item) => item.endpoint === here?.endpoint || item.endpoint === here?.legacy),
   );
-  const classic = $derived(mine !== undefined && here?.classic !== undefined && mine.endpoint === here.classic);
+  const legacy = $derived(mine !== undefined && here?.legacy !== undefined && mine.endpoint === here.legacy);
   const switchReason = $derived.by(() => {
     if (locked) return locked;
     if (here?.support === 'unsupported') return 'This browser cannot receive push.';
@@ -194,7 +194,7 @@
     busy = 'remove';
     try {
       ok(await notificationsUnsubscribe(item.id, { headers: { 'Idempotency-Key': crypto.randomUUID() } }));
-      if (item.endpoint === here?.endpoint || item.endpoint === here?.classic) await unsubscribe(item.endpoint);
+      if (item.endpoint === here?.endpoint || item.endpoint === here?.legacy) await unsubscribe(item.endpoint);
       confirming = false;
       announce(`${item.label || 'The device'} removed`);
     } catch (error) {
@@ -273,8 +273,8 @@
         onchange={onSwitch}
       />
     {/key}
-    {#if classic}
-      <p class="meta">Turned on from the classic pages. Turning it off here stops push on this device.</p>
+    {#if legacy}
+      <p class="meta">Turned on at the previous address. Turning it off here stops push on this device.</p>
     {/if}
     {#if pushResult}
       <Notice tone={pushResult.tone} variant="inline" title={pushResult.title}>{pushResult.text ?? ''}</Notice>

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -29,7 +28,7 @@ func kbEmbedFixture(t *testing.T) (string, *fakeEmbedder, *modelLog, *db.DB) {
 	return dir, fake, api, mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 }
 
-func createLedger(t *testing.T, dir string, fake *fakeEmbedder, body string) (int64, *asstWeb) {
+func createLedger(t *testing.T, dir string, fake *fakeEmbedder, body string) int64 {
 	t.Helper()
 	fake.setGate(func(ctx context.Context, texts []string) {
 		if len(texts) == 1 && (texts[0] == "atrium probe" || strings.HasPrefix(texts[0], "task: search result")) {
@@ -40,10 +39,7 @@ func createLedger(t *testing.T, dir string, fake *fakeEmbedder, body string) (in
 	defer fake.setGate(nil)
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
-	w := asstBrowse(t, base)
-	return knowledgeCreate(t, w, url.Values{
-		"title": {"Ledger"}, "body": {body}, "scope": {"work"},
-	}), w
+	return knowledgeCreateG3(t, webG3(t, base), "Ledger", body, "work")
 }
 
 func recordHash(t *testing.T, d *db.DB, id int64) (sql.NullString, int) {
@@ -71,7 +67,7 @@ func documentHash(t *testing.T, d *db.DB, id int64) string {
 func TestKnowledgeEditDuringEmbeddingKeepsTheRecordPending(t *testing.T) {
 	t.Parallel()
 	dir, fake, _, d := kbEmbedFixture(t)
-	id, _ := createLedger(t, dir, fake, "old body "+ledgerMarker)
+	id := createLedger(t, dir, fake, "old body "+ledgerMarker)
 
 	var mu sync.Mutex
 	calls := 0
@@ -100,7 +96,7 @@ func TestKnowledgeEditDuringEmbeddingKeepsTheRecordPending(t *testing.T) {
 
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
-	w := asstBrowse(t, base)
+	w := webG3(t, base)
 	select {
 	case text := <-first:
 		if !strings.Contains(text, ledgerMarker) {
@@ -110,11 +106,7 @@ func TestKnowledgeEditDuringEmbeddingKeepsTheRecordPending(t *testing.T) {
 		t.Fatal("the first embedding request never arrived")
 	}
 	newBody := "new body " + ledgerMarker + " with a different detail"
-	if code, body, _ := w.post(fmt.Sprintf("/library/knowledge/%d", id), url.Values{
-		"title": {"Ledger"}, "body": {newBody}, "scope": {"work"},
-	}, false); code != http.StatusSeeOther {
-		t.Fatalf("edit during the request = %d: %s", code, body)
-	}
+	knowledgeEditG3(t, w, id, "Ledger", newBody, "work")
 	release <- struct{}{}
 	select {
 	case text := <-second:
@@ -144,7 +136,7 @@ func TestKnowledgeRetractDuringEmbeddingLeavesNoVector(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	id, _ := createLedger(t, dir, fake, "old body "+ledgerMarker)
+	id := createLedger(t, dir, fake, "old body "+ledgerMarker)
 
 	first := make(chan string, 1)
 	second := make(chan string, 1)
@@ -173,18 +165,14 @@ func TestKnowledgeRetractDuringEmbeddingLeavesNoVector(t *testing.T) {
 
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
-	w := asstBrowse(t, base)
+	w := webG3(t, base)
 	select {
 	case <-first:
 	case <-time.After(30 * time.Second):
 		t.Fatal("the embedding request never arrived")
 	}
-	if code, body, _ := w.post(fmt.Sprintf("/library/knowledge/%d/retract", id), url.Values{}, false); code != http.StatusSeeOther {
-		t.Fatalf("retract during the request = %d: %s", code, body)
-	}
-	knowledgeCreate(t, w, url.Values{
-		"title": {"Sentinel"}, "body": {"sentinel " + ledgerMarker}, "scope": {"work"},
-	})
+	okG3(t, "retract during the request", w.do(http.MethodPost, fmt.Sprintf("/web/v1/knowledge/%d/retract", id), nil))
+	knowledgeCreateG3(t, w, "Sentinel", "sentinel "+ledgerMarker, "work")
 	release <- struct{}{}
 	select {
 	case text := <-second:
@@ -219,10 +207,10 @@ func TestKnowledgeRetractDuringEmbeddingLeavesNoVector(t *testing.T) {
 func TestKnowledgeEditAfterEmbeddingRequeuesTheRecord(t *testing.T) {
 	t.Parallel()
 	dir, fake, _, d := kbEmbedFixture(t)
-	id, _ := createLedger(t, dir, fake, "old body "+ledgerMarker)
+	id := createLedger(t, dir, fake, "old body "+ledgerMarker)
 
 	base, _, stop := startServeStoppable(t, dir)
-	w := asstBrowse(t, base)
+	w := webG3(t, base)
 	waitFor(t, func() bool {
 		hash, vectors := recordHash(t, d, id)
 		return hash.Valid && vectors == 1
@@ -230,11 +218,7 @@ func TestKnowledgeEditAfterEmbeddingRequeuesTheRecord(t *testing.T) {
 	before, _ := recordHash(t, d, id)
 
 	newBody := "edited body " + ledgerMarker
-	if code, body, _ := w.post(fmt.Sprintf("/library/knowledge/%d", id), url.Values{
-		"title": {"Ledger"}, "body": {newBody}, "scope": {"work"},
-	}, false); code != http.StatusSeeOther {
-		t.Fatalf("edit = %d: %s", code, body)
-	}
+	knowledgeEditG3(t, w, id, "Ledger", newBody, "work")
 	after, vectors := recordHash(t, d, id)
 	if after.String != before.String || vectors != 1 {
 		t.Fatalf("after the edit the record has hash %q and %d vectors, want the old hash and vector until the next pass", after.String, vectors)

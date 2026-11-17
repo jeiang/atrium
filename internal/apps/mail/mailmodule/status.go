@@ -62,11 +62,6 @@ func replayRun(ctx context.Context, svc *mailapp.Service, runID int64) (mailapp.
 func mailStatusOperations() ([]application.Definition, []application.Binding) {
 	return []application.Definition{mailapp.DescribeStatus(), mailapp.DescribeStatusConfirm(), mailapp.DescribeGoLive(), mailapp.DescribeStatusRebaseline(), mailapp.DescribeReplayRun()}, []application.Binding{
 		{Kind: application.Job, Target: ReplayJobKey, Uses: []application.Name{mailapp.ReplayRunName}},
-		{Kind: application.HTML, Target: "GET /live", Uses: []application.Name{mailapp.StatusName}},
-		{Kind: application.HTML, Target: "POST /live/confirm", Uses: []application.Name{mailapp.StatusConfirmName}},
-		{Kind: application.HTML, Target: "POST /live/go-live", Uses: []application.Name{mailapp.GoLiveName}},
-		{Kind: application.HTML, Target: "POST /live/rebaseline", Uses: []application.Name{mailapp.StatusRebaseName}},
-		{Kind: application.HTML, Target: "POST /live/replay", Uses: []application.Name{mailapp.ReplayRunName}},
 	}
 }
 

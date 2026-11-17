@@ -189,9 +189,7 @@ func TestDevicesCapAndCredentialRevocation(t *testing.T) {
 	dir, model, _ := moduleFixture(t, flagsExcept("", ""))
 	push, browser := pushRig(t, dir)
 	phone := newSignedInSite(t, dir)
-	if code, _ := phone.post("/settings/notifications/push/subscriptions", browser.form()); code != http.StatusOK {
-		t.Fatalf("browser subscribe = %d", code)
-	}
+	subscribeG5(t, phone.base, browser)
 	issued := runApp(t, "auth", "token", "issue", "--name", "devices")
 	if issued.code != cli.ExitOK {
 		t.Fatal(issued.stderr)

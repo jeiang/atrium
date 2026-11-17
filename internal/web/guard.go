@@ -18,7 +18,6 @@ import (
 	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings/audit"
-	"github.com/jeiang/atrium/internal/urlx"
 )
 
 const (
@@ -31,14 +30,13 @@ const (
 	CSRFHeader = "X-CSRF-Token"
 	csrfField  = "csrf_token"
 
-	staticPrefix = "/static/"
 	healthPath   = "/healthz"
-	nextPrefix   = urlx.ClientBase
-	nextAssets   = "assets/"
+	clientAssets = "/assets/"
+	clientWorker = "/sw.js"
 
 	csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; form-action 'self'; worker-src 'self'"
 
-	nextCSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'; require-trusted-types-for 'script'; trusted-types atrium-md atrium-sw svelte-trusted-html"
+	clientCSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'; require-trusted-types-for 'script'; trusted-types atrium-md atrium-sw svelte-trusted-html"
 
 	formType = "application/x-www-form-urlencoded"
 )
@@ -188,11 +186,11 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 		if g.auth.OIDC() && signInRequest(r) && !g.limitSignIn(w, r) {
 			return
 		}
-		static := strings.HasPrefix(r.URL.Path, staticPrefix) || strings.HasPrefix(r.URL.Path+"/", nextPrefix)
 		class := accessDefault
 		if g.classify != nil {
 			class = g.classify(r)
 		}
+		static := class == accessClient
 		who, err := g.identify(r)
 		switch {
 		case errors.Is(err, errUnavailable):
@@ -254,9 +252,6 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 			}
 		}
 		setSecurityHeaders(w.Header())
-		if strings.HasPrefix(r.URL.Path, nextPrefix) {
-			w.Header().Set("Content-Security-Policy", nextCSP)
-		}
 		g.issueCSRF(w, r, token, fresh)
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), csrfKey{}, token)))
 	})

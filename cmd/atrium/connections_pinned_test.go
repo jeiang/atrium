@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,22 +84,27 @@ func TestAPinnedCredentialIsRefusedOnEverySurfaceAndTheSharedSlotNamesItsOwner(t
 	browser := newWebClient(t, base, nil)
 	browser.session("local")
 	expectAPI(t, browser.do(http.MethodPatch, "/web/v1/connections/mail/icloud", body), http.StatusConflict, "refused")
-	expectAPI(t, browser.do(http.MethodPut, "/web/v1/connections/mail/icloud", body), http.StatusConflict, "refused")
-
-	page := newWebClient(t, base, nil)
-	page.session("local")
-	status, html, _ := fetch(t, page.http, http.MethodGet, base+"/settings/connections", nil)
-	if status != http.StatusOK || !strings.Contains(html, "Set in host configuration") || !strings.Contains(html, `data-owner="mail/icloud"`) ||
-		strings.Contains(html, `name="credential.mail/icloud/password"`) {
-		t.Fatalf("old connections page: %d, pinned shown %t, owner shown %t, entry box %t", status,
-			strings.Contains(html, "Set in host configuration"), strings.Contains(html, `data-owner="mail/icloud"`), strings.Contains(html, `name="credential.mail/icloud/password"`))
+	refused := browser.do(http.MethodPut, "/web/v1/connections/mail/icloud", body)
+	expectAPI(t, refused, http.StatusConflict, "refused")
+	if !strings.Contains(refused.body, "pinned by host configuration") || strings.Contains(refused.body, "ui-value") {
+		t.Fatalf("web save over a pinned slot: %s", refused.body)
 	}
-	if !strings.Contains(html, "it uses the credential of mail/icloud; the credential is changed in host configuration") {
-		t.Fatal("the old connections page does not point the needs_reauth iCloud connection at its owner")
+	listed := browser.do(http.MethodGet, "/web/v1/connections", nil)
+	if strings.Contains(listed.body, "ui-value") {
+		t.Fatalf("web connections list: %s", listed.body)
 	}
-	status, html, _ = fetch(t, page.http, http.MethodPost, base+"/settings/connections/test", url.Values{"id": {"mail/icloud"}, "credential.mail/icloud/password": {"ui-value"}})
-	if status == http.StatusOK || !strings.Contains(html, "pinned by host configuration") || strings.Contains(html, "ui-value") {
-		t.Fatalf("old connections form over a pinned slot: %d %.300s", status, html)
+	for _, c := range apiData(t, listed, http.StatusOK)["connections"].([]any) {
+		c := c.(map[string]any)
+		if c["id"] != "icloud/icloud" {
+			continue
+		}
+		creds, _ := c["credentials"].([]any)
+		if len(creds) == 0 || creds[0].(map[string]any)["owner"] != "mail/icloud" || creds[0].(map[string]any)["pinned"] != true {
+			t.Fatalf("web icloud/icloud credential view = %v, want the owner and pinned", c["credentials"])
+		}
+	}
+	if deps := browser.do(http.MethodGet, "/web/v1/connections/dependencies", nil); deps.status != http.StatusOK || !strings.Contains(deps.body, "it uses the credential of mail/icloud; the credential is changed in host configuration") {
+		t.Fatalf("the needs_reauth iCloud repair does not point at its owner: %d %s", deps.status, deps.body)
 	}
 
 	if after := row(); after != before {

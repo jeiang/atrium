@@ -3,15 +3,11 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/net/html"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
@@ -71,72 +67,17 @@ func runExport(t *testing.T, f *fixture, d *db.DB) {
 	schedulerRun(t, f, d, func() bool { return exportRuns(t, d, jobID) > before })
 }
 
-func exportForm(t *testing.T, body, action string) ([][2]string, map[string]bool) {
-	t.Helper()
-	z := html.NewTokenizer(strings.NewReader(body))
-	var fields [][2]string
-	checked := map[string]bool{}
-	inForm := false
-	for {
-		switch z.Next() {
-		case html.ErrorToken:
-			t.Fatalf("form %s not found or not closed", action)
-		case html.StartTagToken, html.SelfClosingTagToken:
-			token := z.Token()
-			attrs := map[string]string{}
-			for _, a := range token.Attr {
-				attrs[a.Key] = a.Val
-			}
-			if token.Data == "form" && attrs["action"] == action {
-				inForm = true
-			}
-			if !inForm || token.Data != "input" || attrs["name"] == "" {
-				continue
-			}
-			_, disabled := attrs["disabled"]
-			_, selected := attrs["checked"]
-			if attrs["type"] == "checkbox" {
-				checked[attrs["name"]+"="+attrs["value"]] = selected
-			}
-			if !disabled && (attrs["type"] != "checkbox" || selected) {
-				fields = append(fields, [2]string{attrs["name"], attrs["value"]})
-			}
-		case html.EndTagToken:
-			if inForm && z.Token().Data == "form" {
-				return fields, checked
-			}
-		}
-	}
-}
-
-func exportPost(t *testing.T, w *asstWeb, action string, fields [][2]string, hx bool) (int, string, http.Header) {
-	t.Helper()
-	var encoded []string
-	for _, field := range fields {
-		encoded = append(encoded, url.QueryEscape(field[0])+"="+url.QueryEscape(field[1]))
-	}
-	return w.send(http.MethodPost, action, strings.NewReader(strings.Join(encoded, "&")), "application/x-www-form-urlencoded", hx)
-}
-
 func TestObsidianFolderIsHostConfiguration(t *testing.T) {
 	t.Parallel()
-	dir, _, _ := obsidianFixture(t)
-	w := asstBrowse(t, startServeIn(t, dir))
-	const action = "/settings/sections/export_obsidian"
-	status, body, _ := w.get("/settings/export", false)
-	if status != http.StatusOK {
-		t.Fatalf("GET integrations = %d", status)
+	dir, _, d := obsidianFixture(t)
+	w := webLocalG2(t, startServeIn(t, dir))
+	if got := w.do(http.MethodPut, "/web/v1/settings/"+kbexport.ObsidianDirKey, map[string]any{"value": "/srv/vault"}); got.status < http.StatusBadRequest {
+		t.Fatalf("the host folder was accepted as a setting: %d %s", got.status, got.body)
 	}
-	if strings.Contains(body, `name="export_obsidian_dir"`) {
-		t.Errorf("the folder is still an editable control")
-	}
-	if !strings.Contains(body, "Not configured") {
-		t.Errorf("the export settings do not say the folder is not configured")
-	}
-	fields, _ := exportForm(t, body, action)
-	submitted := append(fields, [2]string{"export_obsidian_dir", "/srv/vault"})
-	if status, body, _ := exportPost(t, w, action, submitted, false); status != http.StatusOK {
-		t.Fatalf("folder save = %d: %.300s", status, body)
+	apiData(t, w.do(http.MethodPut, "/web/v1/settings/"+kbexport.ObsidianKindsKey, map[string]any{"value": "pii"}), http.StatusOK)
+	var stored int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM settings WHERE key = ?", kbexport.ObsidianDirKey).Scan(&stored); err != nil || stored != 0 {
+		t.Fatalf("the folder was stored as a setting: %d, %v", stored, err)
 	}
 }
 
@@ -406,31 +347,14 @@ func TestKnowledgeExportsToAnObsidianFolder(t *testing.T) {
 	}
 
 	base, _, stop := startServeStoppable(t, dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/export", nil); status != http.StatusOK {
-		t.Fatalf("GET integrations = %d", status)
-	}
-	form := url.Values{
-		"export_obsidian_kinds":      {"messages", "personal"},
-		"export_obsidian_private_to": {vault},
-	}
-	if status, body, _ := fetch(t, client, http.MethodPost, base+"/settings/sections/export_obsidian", form); status != http.StatusOK {
-		t.Fatalf("POST export section = %d: %.300s", status, body)
-	}
-	status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/export", nil)
-	if status != http.StatusOK {
-		t.Fatalf("GET integrations = %d", status)
-	}
+	w := webLocalG2(t, base)
+	apiData(t, w.do(http.MethodPatch, "/web/v1/settings", map[string]any{"set": map[string]any{kbexport.ObsidianKindsKey: "messages,personal", kbexport.ObsidianPrivateKey: vault}}), http.StatusOK)
 	var actor, source string
 	if err := d.Read.QueryRow("SELECT actor, source FROM settings_audit WHERE key = ? ORDER BY id DESC LIMIT 1", kbexport.ObsidianPrivateKey).Scan(&actor, &source); err != nil {
 		t.Fatalf("settings audit: %v", err)
 	}
-	if actor != "operator" || source != "ui" {
-		t.Errorf("settings audit actor/source = %s/%s, want operator/ui", actor, source)
+	if actor != "operator" || source != "api" {
+		t.Errorf("settings audit actor/source = %s/%s, want operator/api", actor, source)
 	}
 	stop()
 	runExport(t, f, d)

@@ -8,10 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/netip"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -190,17 +188,9 @@ func TestNotificationInboxEffectIsDurableAndDeduped(t *testing.T) {
 
 	push.answer(http.StatusCreated, false, false)
 	base, _, stop := startServeStoppable(t, dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar}
-	if code, body, _ := fetch(t, client, http.MethodGet, base+"/inbox", nil); code != http.StatusOK {
-		t.Fatalf("inbox: %d %.300s", code, body)
-	}
-	if code, body, _ := fetch(t, client, http.MethodPost, fmt.Sprintf("%s/inbox/%d/resend", base, id), url.Values{}); code != http.StatusOK {
-		t.Fatalf("resend: %d %s", code, body)
-	}
+	inbox := webG3(t, base)
+	okG3(t, "inbox", inbox.do(http.MethodGet, "/web/v1/inbox", nil))
+	okG3(t, "resend", inbox.do(http.MethodPost, fmt.Sprintf("/web/v1/inbox/%d/resend", id), nil))
 	stop()
 	if err := d.Read.QueryRow("SELECT delivered FROM notifications WHERE id = ?", id).Scan(&delivered); err != nil || !delivered {
 		t.Fatalf("resent row delivered = %v, %v", delivered, err)

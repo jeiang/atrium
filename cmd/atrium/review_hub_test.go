@@ -48,17 +48,17 @@ func TestReviewHubServesOtherUnitsWhenMailIsOff(t *testing.T) {
 		}
 	}
 
-	expect("/review", http.StatusOK, []string{"Allow web_fetch", "Re: lease"}, nil)
-	expect("/activity?category=mail", http.StatusOK, nil, nil)
+	expect("/web/v1/review/items", http.StatusOK, []string{"Allow web_fetch", "Re: lease"}, nil)
+	expect("/web/v1/activity?category=mail", http.StatusOK, nil, nil)
 	expect("/api/v1/pending", http.StatusOK, []string{"Re: lease"}, nil)
 
 	seedSettings(t, map[string]string{module.FlagKey(unit.Mail): "false"})
 	s.restart()
 
-	expect("/review", http.StatusOK, []string{"Allow web_fetch"}, []string{"Re: lease"})
-	expect("/proposals/900/card", http.StatusOK, []string{"Allow web_fetch"}, nil)
-	expect("/activity", http.StatusOK, nil, nil)
-	expect("/activity?category=mail", http.StatusOK, nil, nil)
-	expect("/activity/recent", http.StatusOK, nil, nil)
+	expect("/web/v1/review/items", http.StatusOK, []string{"Allow web_fetch"}, []string{"Re: lease"})
+	expect("/web/v1/proposals/900", http.StatusOK, []string{"Allow web_fetch"}, nil)
+	expect("/web/v1/activity", http.StatusOK, nil, nil)
+	expect("/web/v1/activity?category=mail", http.StatusOK, nil, nil)
+	expect("/web/v1/activity?limit=5", http.StatusOK, nil, nil)
 	expect("/api/v1/pending", http.StatusOK, []string{`"drafts":[]`}, []string{"Re: lease"})
 }

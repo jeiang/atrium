@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/about"
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/commands"
-	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
@@ -29,7 +28,6 @@ import (
 	"github.com/jeiang/atrium/internal/connections"
 	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
 	"github.com/jeiang/atrium/internal/connections/connectionscmd"
-	"github.com/jeiang/atrium/internal/connections/connweb"
 	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbcmd"
@@ -86,7 +84,6 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, readModelOps...), append(bindings, readModelBindings...)
 	commitmentOps, commitmentBindings := commitmentOperations()
 	operations, bindings = append(operations, commitmentOps...), append(bindings, commitmentBindings...)
-	bindings = append(bindings, application.Binding{Kind: application.HTML, Target: "GET /settings/usage", Uses: []application.Name{asstapp.UsageName}, Composite: true})
 	operations = append(operations, webusage.DescribeRoutes())
 	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "usage routes", Uses: []application.Name{webusage.RoutesName}})
 	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: proposalsapp.ScanCommand, Composite: true})
@@ -147,27 +144,32 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Connections:       slices.Concat(connections.Connections(), davmirror.Connections(), oidcconn.Connections(), endpoint.Connections()),
 		AccountCredential: connections.AccountCredential(),
 		Pages: []web.Page{
-			{Module: about.Module(m.Version), Templates: about.Templates(), Nav: []web.NavItem{
+			{Module: about.Module, Nav: []web.NavItem{
 				{Label: "About", URL: "/about", Icon: "file-text", Page: "about", Footer: true, Order: 10},
-			}},
-			{Module: usagepages.Module(), Templates: usagepages.Templates(), Nav: []web.NavItem{
 				{Group: "Instance", Label: "Usage", URL: usagepages.URL, Page: "usage", Settings: true, Order: 60},
+				{Label: "Connections", URL: connections.Screen, Page: "connections", Settings: true, Order: 30},
 			}},
-			{Module: hub.Module(hub.Options{Compose: func(d *web.Deps) *reviewapp.Service {
-				return hub.Compose(hub.ComposeOptions{Tools: mc.Tools, Enabled: enabled})(d).Review
-			}, Routes: func(d *web.Deps, svc *reviewapp.Service) {
+			{Module: func(_ chi.Router, d *web.Deps) {
+				svc := hub.Compose(hub.ComposeOptions{Tools: mc.Tools, Enabled: enabled})(d).Review
 				reviewRoutes(d, func() *reviewapp.Service { return svc })
-			}}), Templates: hub.Templates(), Nav: []web.NavItem{
+				d.OnShell(func(ctx context.Context, s *web.ShellState) error {
+					if module.SetFrom(ctx) == nil {
+						ctx = module.WithSet(ctx, module.SetFrom(d.Ctx))
+					}
+					n, err := svc.NeedsCount(ctx)
+					s.NeedsYou = n
+					return err
+				})
+			}, Nav: []web.NavItem{
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
 				{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
 			}},
-			{Module: web.CoreModule, Nav: []web.NavItem{
+			{Nav: []web.NavItem{
 				{Hub: true, Label: "Review", Icon: "inbox", Page: "review", Badge: true, Order: 10},
 				{Hub: true, Label: "Library", Icon: "library", Page: "library", Order: 20},
 				{Hub: true, Label: "Apps", Icon: "layout-grid", Page: "apps", Order: 30},
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
 			}, OIDC: oidcconn.Source()},
-			connweb.Page(connectionService),
 			{Module: func(_ chi.Router, d *web.Deps) {
 				authRoutes(d)
 				commandRoutes(d)

@@ -15,11 +15,11 @@ func TestAsstEditWithPendingMemoryJobSucceeds(t *testing.T) {
 	asstWarm(t)
 	d := asstDB(t, dir)
 	base, logs := startServeLogged(t, dir)
-	w := asstBrowse(t, base)
+	w := localWebG5(t, base)
 
 	long := strings.Repeat("evidence ", 120)
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("ack")))
-	thread := w.start(map[string]string{"text": long})
+	thread, _ := startG5(w, long)
 	if state, errText := asstSettle(t, d, asstLastRun(t, d, thread)); state != "done" {
 		t.Fatalf("first run %s %q", state, errText)
 	}
@@ -27,9 +27,9 @@ func TestAsstEditWithPendingMemoryJobSucceeds(t *testing.T) {
 
 	before := asstLastRun(t, d, thread)
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("edited")))
-	code, body, _ := w.upload(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": "short follow-up", "edit": "1"}, nil, true)
-	if code != http.StatusOK {
-		t.Fatalf("edit with a pending memory job = %d: %s; server log: %s", code, body, logs.String())
+	edited := w.do(http.MethodPatch, fmt.Sprintf("/web/v1/threads/%d/messages/latest", thread), map[string]any{"text": "short follow-up"})
+	if edited.status != http.StatusAccepted {
+		t.Fatalf("edit with a pending memory job = %d: %s; server log: %s", edited.status, edited.body, logs.String())
 	}
 	if asstLastRun(t, d, thread) <= before {
 		t.Fatal("edit started no run")

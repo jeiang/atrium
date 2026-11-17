@@ -147,7 +147,7 @@ func TestOperatorSchedulesRunOnTimeRunNowAndPushOncePerFailure(t *testing.T) {
 	if number(t, row["id"]) != first || number(t, row["job_id"]) != job || row["status"] != "error" || row["thread_id"] == nil {
 		t.Fatalf("run read: %s", runRow.body)
 	}
-	if got, link := failures()[0], fmt.Sprintf("url:/next/chat/%d]", number(t, row["thread_id"])); !strings.Contains(got, "plants refused") || !strings.Contains(got, link) {
+	if got, link := failures()[0], fmt.Sprintf("url:/chat/%d]", number(t, row["thread_id"])); !strings.Contains(got, "plants refused") || !strings.Contains(got, link) {
 		t.Fatalf("failure push lacks the error or the run link %s: %s", link, got)
 	}
 	expectAPI(t, s.do(http.MethodGet, fmt.Sprintf("%s/runs/%d", jobURL, first+1000), token, nil), http.StatusNotFound, "not_found")

@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/apps/mail"
-	"github.com/jeiang/atrium/internal/apps/mail/accountpages"
 	"github.com/jeiang/atrium/internal/apps/mail/accounts"
 	mailapp "github.com/jeiang/atrium/internal/apps/mail/application"
 	"github.com/jeiang/atrium/internal/apps/mail/attentionsources"
@@ -19,8 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/apps/mail/live"
 	"github.com/jeiang/atrium/internal/apps/mail/mailconn"
 	mailtools "github.com/jeiang/atrium/internal/apps/mail/mailtools"
-	"github.com/jeiang/atrium/internal/apps/mail/pages"
-	"github.com/jeiang/atrium/internal/apps/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/apps/mail/run"
 	mailsync "github.com/jeiang/atrium/internal/apps/mail/sync"
 	"github.com/jeiang/atrium/internal/assistant/classifier"
@@ -179,19 +176,22 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				mailPassRoutes(d, m)
 				mailStatusRoutes(d, m)
 				mailDraftRoutes(d, m)
-			}},
-			{Module: pages.Module(m.pageEffects), Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
+				reads := mailPageService(d)
+				d.OnShell(func(ctx context.Context, s *web.ShellState) error {
+					mode, err := reads.Mode(ctx)
+					if err != nil {
+						return err
+					}
+					s.Mode, s.Paused = mode, reads.Paused()
+					return nil
+				})
+			}, Nav: []web.NavItem{
 				{Hub: true, Label: "Mail", Icon: "mail", Page: "mail_app", Order: 25},
 				{Section: "mail_app", Label: "Decisions", URL: "/triage", Icon: "route", Page: "triage", Order: 10},
 				{Section: "mail_app", Label: "Rules", URL: "/rules", Icon: "scroll-text", Page: "rules", Order: 20},
 				{Label: "Mail", URL: "/settings/mail", Page: "mail", Settings: true, Primary: true, Order: 15},
-			}},
-			{Module: pages.PauseModule(mailPageService)},
-			{Module: pages.StatusModule(func(d *web.Deps) pages.StatusOps { return newStatusOps(d, m) }), Nav: []web.NavItem{
 				{Section: "mail_app", Label: "Status", URL: "/live", Icon: "lock", Page: "mail_status", Order: 30},
 			}},
-			{Module: reviewpages.MailModule(reviewpages.Options{Compose: m.reviewServices(mc.Tools)}), Templates: reviewpages.Templates()},
-			{Module: accountpages.Module(mailPageService, mailSettingsService), Templates: accountpages.Templates()},
 		},
 		Groups:   SettingGroups(),
 		Commands: cmds,

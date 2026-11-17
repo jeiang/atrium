@@ -18,8 +18,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
-
-	"github.com/jeiang/atrium/internal/web"
 )
 
 func spacePath(id int64, rest string) string {
@@ -105,37 +103,8 @@ func TestDeclaredMultipartAndBinaryAPI(t *testing.T) {
 	if _, err := os.Stat(crash); !os.IsNotExist(err) {
 		t.Fatalf("crash spool remains: %v", err)
 	}
-	seed, err := http.Get(base + "/projects/new")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = seed.Body.Close()
-	var csrf *http.Cookie
-	for _, cookie := range seed.Cookies() {
-		if cookie.Name == web.CSRFCookie {
-			csrf = cookie
-		}
-	}
-	if csrf == nil {
-		t.Fatal("no CSRF cookie")
-	}
-	form := url.Values{"name": {"Transport"}, "private": {"1"}, "effort": {"high"}, "context_limit": {"200000"}}
-	req, err := http.NewRequest(http.MethodPost, base+"/projects", strings.NewReader(form.Encode()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Origin", base)
-	req.AddCookie(csrf)
-	req.Header.Set(web.CSRFHeader, csrf.Value)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	createdBody, _ := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if resp.StatusCode != 200 {
-		t.Fatalf("create HTML project: %d %s", resp.StatusCode, createdBody)
+	if created := localWebG1(t, base).do(http.MethodPost, "/web/v1/knowledge/spaces", map[string]any{"name": "Transport", "private": true, "effort": "high", "context_limit": 200000}); created.status != http.StatusCreated {
+		t.Fatalf("create web project: %d %s", created.status, created.body)
 	}
 	var project int64
 	if err := d.Read.QueryRow("SELECT id FROM projects WHERE name = 'Transport'").Scan(&project); err != nil {
@@ -448,7 +417,9 @@ func TestFilesAndSpacesAPI(t *testing.T) {
 	body, media = uploadBody(t, nil, "refused.txt", "no")
 	expectAPI(t, s.do(http.MethodPost, spacePath(project, "/files"), token, body, "Content-Type", media), 409, "project_archived")
 	for i := range 105 {
-		createHTMLProject(t, base, fmt.Sprintf("Page %03d", i))
+		if _, err := d.Write.Exec("INSERT INTO projects (name, instructions, effort, context_limit, created_at, updated_at) VALUES (?, '', 'high', 200000, ?, ?)", fmt.Sprintf("Page %03d", i), i+1, i+1); err != nil {
+			t.Fatalf("bulk project fixture: %v", err)
+		}
 	}
 	token = localAPIToken(t, "project-pages")
 	first = s.do(http.MethodGet, "/api/v1/knowledge/spaces?limit=100", token, nil)
@@ -469,43 +440,6 @@ func TestFilesAndSpacesAPI(t *testing.T) {
 	archivedList := s.do(http.MethodGet, "/api/v1/knowledge/spaces?archived=true", token, nil)
 	if len(apiReplyItems(t, archivedList)) != 1 || number(t, apiReplyItems(t, archivedList)[0].(map[string]any)["id"]) != project {
 		t.Fatalf("archived list: %s", archivedList.body)
-	}
-}
-
-func createHTMLProject(t *testing.T, base, name string) {
-	t.Helper()
-	seed, err := http.Get(base + "/projects/new")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = seed.Body.Close()
-	var csrf *http.Cookie
-	for _, cookie := range seed.Cookies() {
-		if cookie.Name == web.CSRFCookie {
-			csrf = cookie
-		}
-	}
-	if csrf == nil {
-		t.Fatal("no CSRF cookie")
-	}
-	form := url.Values{"name": {name}, "effort": {"high"}, "context_limit": {"200000"}}
-	req, err := http.NewRequest(http.MethodPost, base+"/projects", strings.NewReader(form.Encode()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.AddCookie(csrf)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Origin", base)
-	req.Header.Set(web.CSRFHeader, csrf.Value)
-	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, _ := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusSeeOther {
-		t.Fatalf("bulk project fixture: %d %s", resp.StatusCode, data)
 	}
 }
 

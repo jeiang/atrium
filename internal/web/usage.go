@@ -48,7 +48,7 @@ func (s *Server) startUsage(o Options) {
 }
 
 func (s *Server) recordUsage(r *http.Request, route string) {
-	if s.usage == nil || r.URL.Path == healthPath || strings.HasPrefix(r.URL.Path, staticPrefix) {
+	if s.usage == nil || r.URL.Path == healthPath || clientFile(r.URL.Path) {
 		return
 	}
 	who, _ := IdentityOf(r.Context())

@@ -163,9 +163,7 @@ func TestOperatorSwitchesAppsFromTheManifest(t *testing.T) {
 	if audits() != before+1 {
 		t.Fatalf("settings audit rows for media_enabled = %d, want %d", audits(), before+1)
 	}
-	if code, _, _ := fetch(t, http.DefaultClient, http.MethodGet, site.base+"/apps/media/channels", nil); code != http.StatusNotFound {
-		t.Fatalf("GET /apps/media/channels with media off = %d", code)
-	}
+	expectAPI(t, browser.do(http.MethodGet, "/web/v1/media/channels", nil), http.StatusNotFound, "not_found")
 	if shell := browser.do(http.MethodGet, "/web/v1/shell", nil); shell.status != http.StatusOK || strings.Contains(shell.body, "/apps/media/") {
 		t.Fatalf("the shell still links media: %d %.400s", shell.status, shell.body)
 	}
@@ -201,9 +199,7 @@ func TestOperatorSwitchesAppsFromTheManifest(t *testing.T) {
 	if data := apiData(t, on, http.StatusOK); data["enabled"] != true || data["state"] != "enabled" {
 		t.Fatalf("media back on: %v", data)
 	}
-	if code, _, _ := fetch(t, http.DefaultClient, http.MethodGet, site.base+"/apps/media/channels", nil); code != http.StatusOK {
-		t.Fatalf("GET /apps/media/channels with media on = %d", code)
-	}
+	apiData(t, browser.do(http.MethodGet, "/web/v1/media/channels", nil), http.StatusOK)
 	waitFor(t, func() bool {
 		enabled, _, reason := lifecycleRow(t, dir, "service/eztv")
 		return enabled && reason != "its app is off"

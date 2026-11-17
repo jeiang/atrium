@@ -2,8 +2,6 @@ package main
 
 import (
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"testing"
 
@@ -19,17 +17,12 @@ func TestMailAccountAddLeavesNothingWhenTheTestFails(t *testing.T) {
 	strictSMTPRig(t, map[string]string{"me@work.test": "work-pass"})
 
 	base := startServeIn(t, dir)
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	if code, _, _ := fetch(t, client, http.MethodGet, base+"/settings/mail", nil); code != http.StatusOK {
-		t.Fatalf("mail settings: %d", code)
-	}
+	browser := webG3(t, base)
 	add := func(id, password string) (int, string) {
-		form := url.Values{"id": {id}, "label": {id}, "preset": {"icloud"}, "login": {"me@work.test"}, "password": {password}, "auth_method": {"password"}}
-		code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/mail/accounts", form)
-		return code, body
+		got := browser.do(http.MethodPost, "/web/v1/mail/accounts", map[string]any{"id": id, "label": id, "preset": "icloud", "login": "me@work.test", "password": password, "auth_method": "password"})
+		return got.status, got.body
 	}
-	if code, body := add("work", "wrong-pass"); code != http.StatusUnprocessableEntity {
+	if code, body := add("work", "wrong-pass"); code != http.StatusConflict {
 		t.Fatalf("add with a rejected password = %d: %.300s", code, body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
@@ -47,14 +40,14 @@ func TestMailAccountAddLeavesNothingWhenTheTestFails(t *testing.T) {
 		"VALUES ('mail/stale', 'mail', 'stale', 'operator', '{}', '{}', 1, 1, 'untested', 0, 0)"); err != nil {
 		t.Fatal(err)
 	}
-	if code, body := add("stale", "wrong-pass"); code != http.StatusUnprocessableEntity {
+	if code, body := add("stale", "wrong-pass"); code != http.StatusConflict {
 		t.Fatalf("add over a leftover connection with a rejected password = %d: %.300s", code, body)
 	}
 	if n := mailCount(t, d, "SELECT COUNT(*) FROM connections WHERE id = 'mail/stale'"); n != 0 {
 		t.Fatalf("a failed add left %d rows for a connection from an earlier attempt", n)
 	}
 
-	if code, body := add("work", "work-pass"); code != http.StatusOK {
+	if code, body := add("work", "work-pass"); code != http.StatusCreated {
 		t.Fatalf("add with the accepted password = %d: %.300s", code, body)
 	}
 	for _, query := range []string{
@@ -67,7 +60,7 @@ func TestMailAccountAddLeavesNothingWhenTheTestFails(t *testing.T) {
 		}
 	}
 
-	if code, body := add("home", "work-pass"); code != http.StatusUnprocessableEntity {
+	if code, body := add("home", "work-pass"); code != http.StatusConflict {
 		t.Fatalf("add of an existing account id = %d: %.300s", code, body)
 	}
 	for _, query := range []string{

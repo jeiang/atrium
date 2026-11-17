@@ -4,10 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -284,19 +282,13 @@ func TestMrvDraftSendUnknownSentAppendLeavesTheMailSentAndUnsendable(t *testing.
 	toolResult(t, "draft_email_create", map[string]any{"account": "icloud", "to": []any{"friend@x.test"}, "subject": "Lunch plans", "body": "Noon works."})
 	dbPath := filepath.Join(m.dir, "atrium.db")
 	id := mrvScalar(t, dbPath, "SELECT CAST(id AS TEXT) FROM drafts WHERE subject = 'Lunch plans'")
-	draft := "/drafts/" + id
+	draft := "/web/v1/drafts/" + id
 	status := func() string { return mrvScalar(t, dbPath, "SELECT status FROM drafts WHERE id = ?", id) }
-	hx := []string{"HX-Request", "true"}
 	base, _, _ := startServeApp(t, m.app, &lockedBuffer{})
-	client := mrvClient(t)
-	revision := func() string {
-		t.Helper()
-		code, page, _ := mrvDo(t, client, http.MethodGet, base+draft, nil)
-		found := regexp.MustCompile(`name="revision" value="([0-9]+)"`).FindStringSubmatch(page)
-		if code != http.StatusOK || found == nil {
-			t.Fatalf("draft page = %d without a revision: %.400s", code, page)
-		}
-		return found[1]
+	client := webLocalG2(t, base)
+	read := client.do(http.MethodGet, draft, nil)
+	if read.status != http.StatusOK || read.json["revision"] == nil {
+		t.Fatalf("draft read = %d without a revision: %.400s", read.status, read.body)
 	}
 
 	m.fake.FailWrite = func(w mailtest.FakeWrite) error {
@@ -305,9 +297,14 @@ func TestMrvDraftSendUnknownSentAppendLeavesTheMailSentAndUnsendable(t *testing.
 		}
 		return nil
 	}
-	code, body, _ := mrvDo(t, client, http.MethodPost, base+draft+"/send", url.Values{"revision": {revision()}}, hx...)
-	if code != http.StatusOK || !strings.Contains(body, "Sent copy failed") {
-		t.Fatalf("send with an interrupted Sent copy = %d: %.400s", code, body)
+	if sent := client.do(http.MethodPost, draft+"/send", map[string]any{"revision": number(t, read.json["revision"])}); sent.status != http.StatusOK {
+		t.Fatalf("send with an interrupted Sent copy = %d: %.400s", sent.status, sent.body)
+	}
+	if result := mrvScalar(t, dbPath, "SELECT smtp_result FROM drafts WHERE id = ?", id); !strings.Contains(result, "Sent copy failed") {
+		t.Fatalf("the sent draft does not record the failed copy: %s", result)
+	}
+	if outcome := mrvScalar(t, dbPath, "SELECT outcome FROM operation_audit WHERE operation = 'mail.draft-send' ORDER BY id DESC LIMIT 1"); outcome != "partial" {
+		t.Fatalf("the send with a failed copy is audited %s, want partial", outcome)
 	}
 	if got := status(); got != "sent" {
 		t.Fatalf("the draft after a sent mail with an unknown copy is %q, want sent", got)
@@ -321,9 +318,9 @@ func TestMrvDraftSendUnknownSentAppendLeavesTheMailSentAndUnsendable(t *testing.
 	}
 	smtpID := mrvScalar(t, dbPath, "SELECT CAST(id AS TEXT) FROM effects WHERE operation = 'smtp_send' AND direction = 'forward'")
 	rev := mrvScalar(t, dbPath, "SELECT CAST(revision AS TEXT) FROM drafts WHERE id = ?", id)
-	for _, r := range []string{rev, strconv.Itoa(mrvAtoi(t, rev) + 1)} {
-		if code, _, _ := mrvDo(t, client, http.MethodPost, base+draft+"/send", url.Values{"revision": {r}}, hx...); code != http.StatusConflict {
-			t.Fatalf("resend at revision %s = %d, want 409", r, code)
+	for _, r := range []int{mrvAtoi(t, rev), mrvAtoi(t, rev) + 1} {
+		if got := client.do(http.MethodPost, draft+"/send", map[string]any{"revision": r}); got.status != http.StatusConflict {
+			t.Fatalf("resend at revision %d = %d, want 409: %s", r, got.status, got.body)
 		}
 	}
 	if n := len(smtp.sent()); n != 1 {
@@ -341,9 +338,9 @@ func TestMrvDraftSendUnknownSentAppendLeavesTheMailSentAndUnsendable(t *testing.
 	if got := status(); got != "sent" {
 		t.Fatalf("the draft after resolving the copy is %q, want sent", got)
 	}
-	for _, r := range []string{rev, strconv.Itoa(mrvAtoi(t, rev) + 1)} {
-		if code, _, _ := mrvDo(t, client, http.MethodPost, base+draft+"/send", url.Values{"revision": {r}}, hx...); code != http.StatusConflict {
-			t.Fatalf("resend after resolving the copy at revision %s = %d, want 409", r, code)
+	for _, r := range []int{mrvAtoi(t, rev), mrvAtoi(t, rev) + 1} {
+		if got := client.do(http.MethodPost, draft+"/send", map[string]any{"revision": r}); got.status != http.StatusConflict {
+			t.Fatalf("resend after resolving the copy at revision %d = %d, want 409: %s", r, got.status, got.body)
 		}
 	}
 }

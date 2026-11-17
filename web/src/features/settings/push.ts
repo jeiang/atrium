@@ -1,4 +1,5 @@
-import { appWorker } from '../../shared/worker';
+import { notificationsConfiguration, notificationsSubscribe, notificationsUnsubscribe, ok } from '../../contract';
+import { appWorker, legacyWorker } from '../../shared/worker';
 
 export type Permission = NotificationPermission | 'unknown';
 
@@ -6,7 +7,7 @@ export interface DeviceState {
   support: 'ready' | 'install' | 'unsupported';
   permission: Permission;
   endpoint?: string;
-  classic?: string;
+  legacy?: string;
 }
 
 export interface Subscribed {
@@ -19,14 +20,6 @@ async function pushWorker(): Promise<ServiceWorkerRegistration | undefined> {
   const registration = await appWorker;
   if (!registration || !('PushManager' in globalThis) || !('pushManager' in registration)) return undefined;
   return registration;
-}
-
-async function classicWorker(own: ServiceWorkerRegistration): Promise<ServiceWorkerRegistration | undefined> {
-  const root = await navigator.serviceWorker.getRegistration('/').catch(() => undefined);
-  if (!root || root.scope === own.scope || new URL(root.scope).pathname !== '/' || !('pushManager' in root)) {
-    return undefined;
-  }
-  return root;
 }
 
 async function activated(registration: ServiceWorkerRegistration): Promise<void> {
@@ -61,13 +54,13 @@ export async function readDevice(): Promise<DeviceState> {
     return { support: homeScreen ? 'install' : 'unsupported', permission };
   }
   const own = await registration.pushManager.getSubscription();
-  const classic = await classicWorker(registration);
-  const old = classic ? await classic.pushManager.getSubscription() : null;
+  const legacy = await legacyWorker();
+  const old = legacy && 'pushManager' in legacy ? await legacy.pushManager.getSubscription() : null;
   return {
     support: 'ready',
     permission,
     ...(own ? { endpoint: own.endpoint } : {}),
-    ...(old ? { classic: old.endpoint } : {}),
+    ...(old ? { legacy: old.endpoint } : {}),
   };
 }
 
@@ -93,9 +86,42 @@ export async function subscribe(key: string): Promise<Subscribed> {
 export async function unsubscribe(endpoint: string): Promise<void> {
   const registration = await pushWorker();
   if (!registration) return;
-  const classic = await classicWorker(registration);
-  for (const worker of classic ? [registration, classic] : [registration]) {
+  const legacy = await legacyWorker();
+  for (const worker of legacy && 'pushManager' in legacy ? [registration, legacy] : [registration]) {
     const subscription = await worker.pushManager.getSubscription();
     if (subscription?.endpoint === endpoint) await subscription.unsubscribe();
   }
+}
+
+export async function handleLegacyWorker(
+  root: ServiceWorkerRegistration,
+  legacy: ServiceWorkerRegistration,
+): Promise<void> {
+  const old = 'pushManager' in legacy ? await legacy.pushManager.getSubscription() : null;
+  if (old) {
+    const key = old.options.applicationServerKey;
+    if (!key || !('pushManager' in root) || !('Notification' in globalThis) || Notification.permission !== 'granted') {
+      throw new Error('the legacy subscription cannot move without a prompt');
+    }
+    await activated(root);
+    let current = await root.pushManager.getSubscription();
+    const held = current?.options.applicationServerKey;
+    if (current && (!held || text(held) !== text(key))) throw new Error('this device holds a different push key');
+    current ??= await root.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+    const made: Subscribed = {
+      endpoint: current.endpoint,
+      p256dh: text(current.getKey('p256dh')),
+      auth: text(current.getKey('auth')),
+    };
+    ok(await notificationsSubscribe(made, { headers: { 'Idempotency-Key': crypto.randomUUID() } }));
+    if (old.endpoint !== made.endpoint) {
+      const devices = ok(await notificationsConfiguration()).push.devices;
+      const stale = devices.find((item) => item.endpoint === old.endpoint);
+      if (stale) {
+        ok(await notificationsUnsubscribe(stale.id, { headers: { 'Idempotency-Key': crypto.randomUUID() } }));
+      }
+      if (!(await old.unsubscribe())) throw new Error('the browser kept the legacy subscription');
+    }
+  }
+  if (!(await legacy.unregister())) throw new Error('the browser kept the legacy registration');
 }

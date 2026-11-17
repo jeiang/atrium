@@ -29,7 +29,7 @@ const budgetFile = 'web/budgets.json';
 const runs = 5;
 const budgets: Budgets = JSON.parse(readFileSync(new URL('../budgets.json', import.meta.url), 'utf8')).lighthouse;
 const dist = process.argv[2] ?? 'dist';
-const base = '/next/';
+const base = '/';
 
 const score = (category: string) => (lhr: Result) => lhr.categories[category]?.score ?? 0;
 const metric = (audit: string) => (lhr: Result) => lhr.audits[audit]?.numericValue ?? Number.POSITIVE_INFINITY;

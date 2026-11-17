@@ -264,17 +264,15 @@ func TestWebSurfaceAdmitsOnlyTheWebSession(t *testing.T) {
 	if old == "" {
 		t.Fatal("the OIDC browser holds no session cookie")
 	}
-	if code, _, _ := fetch(t, c.http, http.MethodGet, s.base+"/settings/auth", nil); code != http.StatusOK {
-		t.Fatalf("the HTML session does not work before logout: %d", code)
+	if me := c.do(http.MethodGet, "/web/v1/me", nil); me.status != http.StatusOK {
+		t.Fatalf("the session does not work before logout: %d %s", me.status, me.body)
 	}
 	expectAPI(t, c.do(http.MethodPost, "/web/v1/session/logout", nil, "X-CSRF-Token", ""), http.StatusForbidden, "csrf_failed")
 	if out := c.do(http.MethodPost, "/web/v1/session/logout", nil); out.status != http.StatusNoContent || c.cookie("atrium_session") != "" {
 		t.Fatalf("logout: %d %s, cookie %q", out.status, out.body, c.cookie("atrium_session"))
 	}
 	expectAPI(t, c.do(http.MethodGet, "/web/v1/session", nil), http.StatusUnauthorized, "unauthenticated")
-	if code, _, header := fetch(t, c.http, http.MethodGet, s.base+"/settings/auth", nil); code != http.StatusSeeOther || !strings.HasPrefix(header.Get("Location"), "/login") {
-		t.Fatalf("the HTML UI still admits the browser after logout: %d %s", code, header.Get("Location"))
-	}
+	expectAPI(t, c.do(http.MethodGet, "/web/v1/me", nil), http.StatusUnauthorized, "unauthenticated")
 	replayed := newWebClient(t, s.base, nil)
 	u, _ := url.Parse(s.base)
 	replayed.http.Jar.SetCookies(u, []*http.Cookie{{Name: "atrium_session", Value: old}})
@@ -283,7 +281,5 @@ func TestWebSurfaceAdmitsOnlyTheWebSession(t *testing.T) {
 	if signIn, _ := ended.json["sign_in"].(map[string]any); !strings.HasPrefix(signIn["login_url"].(string), "/login?reason=") {
 		t.Fatalf("the ended session cookie: %s", ended.body)
 	}
-	if code, _, _ := fetch(t, replayed.http, http.MethodGet, s.base+"/settings/auth", nil); code != http.StatusSeeOther {
-		t.Fatalf("the ended session cookie still opens the HTML UI: %d", code)
-	}
+	expectAPI(t, replayed.do(http.MethodGet, "/web/v1/me", nil), http.StatusUnauthorized, "unauthenticated")
 }

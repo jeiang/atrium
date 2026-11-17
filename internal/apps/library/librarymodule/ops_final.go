@@ -4,7 +4,6 @@ import "github.com/jeiang/atrium/internal/application"
 
 func finalBindings() []application.Binding {
 	return []application.Binding{
-		{Kind: application.ProtocolOnly, Target: "GET /apps/media", Reason: "redirect"},
 		{Kind: application.ProtocolOnly, Target: "* /media", Reason: "redirect"},
 		{Kind: application.ProtocolOnly, Target: "* /media/*", Reason: "redirect"},
 		{Kind: application.ProtocolOnly, Target: "* /media/file/*", Reason: "redirect"},

@@ -1,9 +1,8 @@
 package main
 
 import (
-	"context"
+	"fmt"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"path/filepath"
 	"slices"
@@ -62,17 +61,12 @@ func TestServeDrainSettlesAHeldExternalWriteThenStopsCleanly(t *testing.T) {
 	s := serveCLIProcess(t, dir)
 	notify.Wait("READY=1")
 	base := "http://" + s.addr
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, client, http.MethodGet, base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat = %d", status)
-	}
+	web := webG4(t, base)
+	web.http.Timeout = 0
+	approval := web.request(http.MethodPost, fmt.Sprintf("/web/v1/approvals/%d/approve", held), nil)
 	answered := make(chan int, 1)
 	go func() {
-		resp, err := approveRequest(context.Background(), client, base, held)
+		resp, err := web.http.Do(approval)
 		if err != nil {
 			answered <- 0
 			return

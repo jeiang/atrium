@@ -3,7 +3,6 @@ package settingspage
 import (
 	"context"
 	"embed"
-	"io/fs"
 	"net/http"
 	"net/url"
 	"strings"
@@ -68,66 +67,12 @@ func title(module string) string {
 }
 
 func Page(groups []Group, generic []Generic, control Control, sections Sections) web.Page {
-	files, err := fs.Sub(assets, "templates")
-	if err != nil {
-		panic(err)
-	}
 	generic = withSections(groups, generic, sections)
 	nav := make([]tpl.NavItem, len(generic))
 	for i, g := range generic {
 		nav[i] = tpl.NavItem{Label: title(g.Module), URL: g.URL, Page: g.Tab, Settings: true, Order: 45}
 	}
-	return web.Page{Templates: files, Nav: nav, Module: func(r chi.Router, d *web.Deps) {
-		h := handlers{d: d, svc: settingsapp.Web(d.DB), groups: groups, generic: generic, control: control, sections: sections}
-		d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
-			if f.Page != "settings" {
-				return nil
-			}
-			for _, m := range control.Modules {
-				for i := range f.Settings {
-					if f.Settings[i].URL == m.URL {
-						f.Settings[i].Mark = control.Mark(m.Name)
-					}
-				}
-				if m.URL != f.Path {
-					continue
-				}
-				view, err := control.State(ctx, d.DB.Read, m.Name)
-				if err != nil {
-					return err
-				}
-				view.Name, view.Title = m.Name, title(m.Name)
-				f.SettingModule = &view
-			}
-			views, err := h.views(ctx, f.Path)
-			for i := range views {
-				views[i].Saved = views[i].Module+"."+views[i].Name == f.Saved
-			}
-			f.SettingGroups = views
-			if err != nil {
-				return err
-			}
-			view, err := h.sectionViews(ctx, f.Path, f.Saved)
-			if err != nil {
-				return err
-			}
-			if len(view.Sections) > 0 {
-				f.Connections = view
-			}
-			return nil
-		})
-		for _, g := range generic {
-			data := pageData{Title: title(g.Module), Tab: g.Tab}
-			d.Authenticated(http.MethodGet, g.URL, func(w http.ResponseWriter, r *http.Request) {
-				h.render(w, r, http.StatusOK, data, nil)
-			})
-			d.SettingsAt(g.URL, func(w http.ResponseWriter, r *http.Request, status int, mutate func(*tpl.Frame)) {
-				h.render(w, r, status, data, mutate)
-			})
-		}
-		d.Authenticated(http.MethodPost, "/settings/groups/{module}/{name}", h.save)
-		d.Authenticated(http.MethodPost, "/settings/sections/{name}", h.saveSection)
-	}}
+	return web.Page{Nav: nav}
 }
 
 func withSections(groups []Group, generic []Generic, sections Sections) []Generic {

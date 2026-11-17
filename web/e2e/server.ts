@@ -93,7 +93,13 @@ export async function serve(
       streamG3(req, res);
       return;
     }
-    const path = pathname.startsWith(base) ? await file(root, `/${pathname.slice(base.length)}`) : undefined;
+    if (base === '/' && (pathname === '/next' || pathname.startsWith('/next/')) && pathname !== '/next/sw.js') {
+      const search = new URL(req.url ?? '/', 'http://localhost').search;
+      res.writeHead(301, { Location: `${pathname.slice('/next'.length) || '/'}${search}` }).end();
+      return;
+    }
+    const served = base === '/' && pathname === '/next/sw.js' ? '/sw.js' : pathname;
+    const path = served.startsWith(base) ? await file(root, `/${served.slice(base.length)}`) : undefined;
     if (!path) {
       res.writeHead(404, { 'Content-Type': 'text/plain' }).end('not found');
       return;

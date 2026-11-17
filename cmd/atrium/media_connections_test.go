@@ -116,8 +116,8 @@ func TestQbitConnectionNeedsItsAPIKey(t *testing.T) {
 		t.Fatalf("keyed connection test = %d %s %s", ran.code, ran.stdout, ran.stderr)
 	}
 	base, logs := startServeLogged(t, dir)
-	if code, body, _ := fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/downloads", nil); code != http.StatusOK || !strings.Contains(body, "Lanterns S01E01") {
-		t.Fatalf("downloads with the host key: %d %.300s", code, body)
+	if got := localWebG1(t, base).do(http.MethodGet, "/web/v1/media/torrents", nil); got.status != http.StatusOK || !strings.Contains(got.body, "Lanterns S01E01") {
+		t.Fatalf("downloads with the host key: %d %.300s", got.status, got.body)
 	}
 	if strings.Contains(logs.String(), "qbt_good") {
 		t.Error("the serve log carried the qBittorrent key")
@@ -133,8 +133,8 @@ func TestQbitRefusalMarksTheConnection(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHostConfig(t, dir, qb.URL, "http://tmdb.invalid/3", "http://images.invalid", "http://eztv.invalid/api/get-torrents"))
 	base, logs := startServeLogged(t, dir)
-	if code, body, _ := fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/downloads", nil); code == http.StatusInternalServerError {
-		t.Fatalf("downloads with a refused key: %d %.300s", code, body)
+	if got := localWebG1(t, base).do(http.MethodGet, "/web/v1/media/torrents", nil); got.status == http.StatusInternalServerError {
+		t.Fatalf("downloads with a refused key: %d %.300s", got.status, got.body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	waitFor(t, func() bool {
@@ -257,15 +257,15 @@ func TestMediaPagesReuseTheConnectionClient(t *testing.T) {
 		var state string
 		return d.Read.QueryRow("SELECT state FROM connections WHERE id = 'service/tmdb' AND checked_at IS NOT NULL").Scan(&state) == nil && state == "ok"
 	})
+	web := localWebG1(t, base)
 	for i := range 2 {
-		code, body, _ := fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns", nil)
-		if code != http.StatusOK || !strings.Contains(body, "Lanterns") {
-			t.Fatalf("channels search %d: %d %.300s", i, code, body)
+		if got := web.do(http.MethodGet, "/web/v1/media/shows?q=Lanterns", nil); got.status != http.StatusOK || !strings.Contains(got.body, "Lanterns") {
+			t.Fatalf("channels search %d: %d %.300s", i, got.status, got.body)
 		}
 	}
 	mu.Lock()
 	defer mu.Unlock()
 	if connections != 1 {
-		t.Errorf("two page loads opened %d TMDB connections, want 1", connections)
+		t.Errorf("two searches opened %d TMDB connections, want 1", connections)
 	}
 }

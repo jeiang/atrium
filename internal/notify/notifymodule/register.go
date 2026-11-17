@@ -11,7 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
 	notifyapp "github.com/jeiang/atrium/internal/notify/application"
-	"github.com/jeiang/atrium/internal/notify/notifypages"
 	"github.com/jeiang/atrium/internal/notify/notifytools"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/runtime"
@@ -43,10 +42,18 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Needs:         []module.Need{{Kind: notify.KindWebPush, Soft: true, Capability: "delivery", Features: []string{"push notifications"}}},
 		EffectOrigins: []module.EffectOrigin{{Name: "notify", Direct: true}},
 		Requires:      []module.Requirement{module.ConnectionHealth(string(notify.KindWebPush))},
-		Pages: []web.Page{{Module: notifypages.Module(factory), Templates: notifypages.Templates(), Nav: []web.NavItem{
+		Pages: []web.Page{{Module: func(_ chi.Router, d *web.Deps) {
+			svc := factory(d)
+			notificationRoutes(d, svc)
+			d.OnShell(func(ctx context.Context, s *web.ShellState) error {
+				labels, err := svc.Failing(ctx)
+				s.NotifyFailing = labels
+				return err
+			})
+		}, Nav: []web.NavItem{
 			{Section: "review", Label: "Inbox", URL: "/inbox", Icon: "inbox", Page: "inbox", Order: 50},
 			{Label: "Notifications", URL: "/settings/notifications", Page: "notifications", Settings: true, Primary: true, Order: 40},
-		}}, {Module: func(_ chi.Router, d *web.Deps) { notificationRoutes(d, factory(d)) }}},
+		}}},
 		Tools:       ToolDefinitions(),
 		Connections: notify.Connections(),
 		ConnectionNotice: func(ctx context.Context, d *db.DB, title, body, occurrence string) error {

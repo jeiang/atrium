@@ -8,6 +8,7 @@ interface TrustedTypePolicyFactory {
 
 const BASE = import.meta.env.BASE_URL;
 const SCRIPT = `${BASE}sw.js`;
+const LEGACY_SCOPE = '/next/';
 const ACTIVATION_WAIT_MS = 3_000;
 
 let stale = false;
@@ -76,7 +77,23 @@ function watchNavigation(registration: ServiceWorkerRegistration): void {
   });
 }
 
-export async function startWorker(): Promise<void> {
+export async function legacyWorker(): Promise<ServiceWorkerRegistration | undefined> {
+  const all = await navigator.serviceWorker.getRegistrations().catch(() => []);
+  return all.find((item) => new URL(item.scope).pathname === LEGACY_SCOPE);
+}
+
+async function retireLegacy(registration: ServiceWorkerRegistration, signedIn: Promise<boolean>): Promise<void> {
+  const legacy = await legacyWorker();
+  if (!legacy || !(await signedIn)) return;
+  try {
+    const { handleLegacyWorker } = await import('../features/settings/push');
+    await handleLegacyWorker(registration, legacy);
+  } catch {
+    await legacy.update().catch(() => undefined);
+  }
+}
+
+export async function startWorker(signedIn: Promise<boolean>): Promise<void> {
   if (!('serviceWorker' in navigator)) {
     useWorker(undefined);
     return;
@@ -105,4 +122,5 @@ export async function startWorker(): Promise<void> {
   watchNavigation(registration);
   if (registration.waiting && container.controller) offerActivation(registration.waiting);
   addEventListener('online', () => void registration.update().catch(() => undefined));
+  await retireLegacy(registration, signedIn);
 }

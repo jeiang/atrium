@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
 	"os"
 	"path/filepath"
 	"strings"
@@ -79,20 +78,16 @@ func TestStoredNotionDataSurvivesTheRemoval(t *testing.T) {
 		}
 	}
 
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	for _, path := range []string{"/library/wiki", "/notion/0123456789abcdef0123456789abcdef", "/settings/notion"} {
 		if status, body, _ := fetch(t, client, http.MethodGet, base+path, nil); status != http.StatusNotFound {
 			t.Errorf("GET %s = %d, want 404: %.300s", path, status, body)
 		}
 	}
-	for _, path := range []string{"/settings/connections", "/settings/export", "/activity", fmt.Sprintf("/library/knowledge/%d", recordID)} {
-		status, body, _ := fetch(t, client, http.MethodGet, base+path, nil)
-		if status != http.StatusOK || strings.Contains(body, `href="/notion/`) {
-			t.Errorf("GET %s = %d: %.300s", path, status, body)
+	web := localWebG1(t, base)
+	for _, path := range []string{"/web/v1/connections", "/web/v1/settings", "/web/v1/activity", fmt.Sprintf("/web/v1/knowledge/%d", recordID)} {
+		if got := web.do(http.MethodGet, path, nil); got.status != http.StatusOK || strings.Contains(got.body, `"/notion/`) {
+			t.Errorf("GET %s = %d: %.300s", path, got.status, got.body)
 		}
 	}
 

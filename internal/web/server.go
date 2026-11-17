@@ -44,6 +44,7 @@ type access uint8
 const (
 	accessDefault access = iota
 	accessPublic
+	accessClient
 )
 
 type routeRule struct {
@@ -72,6 +73,7 @@ type Deps struct {
 	Error    func(w http.ResponseWriter, r *http.Request, status int, detail string)
 	NotFound http.HandlerFunc
 	OnFrame  func(FrameFunc)
+	OnShell  func(ShellFunc)
 	Stopping <-chan struct{}
 	Provided
 
@@ -83,7 +85,6 @@ type Deps struct {
 	operations    *[]operation
 	owner         string
 	registrations *registrations
-	coreRoutes    func(*Deps)
 	drain         func(func(context.Context) error)
 }
 
@@ -136,7 +137,6 @@ type Options struct {
 	Public       func(*http.Request) bool
 	Render       *Renderer
 	Modules      []Module
-	Home         string
 	OIDC         *authapp.Sessions
 	Account      *authapp.Service
 	Policy       *Policy
@@ -155,6 +155,7 @@ type Server struct {
 	handler       http.Handler
 	mux           *chi.Mux
 	errPage       ErrorPage
+	client        *staticHandler
 	stop          chan struct{}
 	stopOnce      sync.Once
 	starting      atomic.Bool
@@ -201,13 +202,8 @@ func New(o Options) (*Server, error) {
 	s.registrations = &registrations{seen: map[routeKey]string{}, bindings: bindings}
 	core := &Registrar{Router: s.mux, owner: "core", state: s.registrations}
 	s.mux.Use(s.instrument)
-	if s.errPage == nil && o.Render != nil {
-		s.errPage = o.Render.ErrorPage
-	}
-	if s.errPage == nil {
-		s.errPage = plainErrorPage
-	}
-	static := newStaticHandler(Static, Assets)
+	s.errPage = plainErrorPage
+	s.client = newAppHandler(app.FS)
 	s.mux.NotFound(s.notFound)
 	s.mux.MethodNotAllowed(s.methodNotAllowed)
 	core.Get(healthPath, func(w http.ResponseWriter, _ *http.Request) {
@@ -217,37 +213,16 @@ func New(o Options) (*Server, error) {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	core.Handle(staticPrefix+"*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		static.serve(w, r, func(status int, detail string) { s.Error(w, r, status, detail) })
-	}))
-	shell := newAppHandler(app.FS)
-	core.Get(strings.TrimSuffix(nextPrefix, "/"), func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, nextPrefix, http.StatusMovedPermanently)
-	})
-	core.Handle(nextPrefix+"*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		shell.serve(w, r, func(status int, detail string) { deny(w, status, detail) })
-	}))
-	home := o.Home
-	if home == "" {
-		home = "/about"
-	}
-	core.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, home, http.StatusSeeOther)
-	})
 	s.stop = make(chan struct{})
 	deps := &Deps{
 		Ctx: o.Ctx, Cfg: o.Cfg, Env: o.Env, DB: o.DB, Settings: o.Settings, State: o.State, Account: s.account, Render: o.Render, Error: s.Error, NotFound: s.missing, Stopping: s.stop,
-		OnFrame: func(FrameFunc) {}, settingsPages: map[string]SettingsRender{},
+		OnFrame: func(FrameFunc) {}, OnShell: func(ShellFunc) {}, settingsPages: map[string]SettingsRender{},
 		drain:    o.Drain,
 		commands: o.Commands, router: core, routes: &s.routes, operations: new([]operation), owner: "core", registrations: s.registrations,
 	}
 	if o.Render != nil {
 		deps.OnFrame = o.Render.OnFrame
-	}
-	deps.coreRoutes = func(d *Deps) {
-		d.Authenticated(http.MethodGet, authSettingsPath, s.signInPage)
-		d.Authenticated(http.MethodPost, authSettingsPath+"/tokens", s.tokenIssue)
-		d.Authenticated(http.MethodPost, authSettingsPath+"/tokens/{id}/revoke", s.tokenRevoke)
+		deps.OnShell = o.Render.OnShell
 	}
 	s.secure = func(r *http.Request) bool {
 		return hasSecureTransport(r, strings.HasPrefix(o.State.PublicURL(o.Env), "https://"))
@@ -284,7 +259,7 @@ func New(o Options) (*Server, error) {
 	}
 	s.handler = otelhttp.NewHandler(guard.Middleware(Gzip(recoverer(s.mux))), "http.server",
 		otelhttp.WithFilter(func(r *http.Request) bool {
-			return !strings.HasPrefix(r.URL.Path, staticPrefix) && !strings.HasPrefix(r.URL.Path, nextPrefix) && r.URL.Path != healthPath
+			return !clientFile(r.URL.Path) && r.URL.Path != healthPath
 		}),
 	)
 	s.startUsage(o)
@@ -368,6 +343,9 @@ func (s *Server) apiShape(r *http.Request) *application.APIShape {
 func (s *Server) access(r *http.Request) access {
 	ctx := chi.NewRouteContext()
 	if !s.mux.Match(ctx, r.Method, r.URL.Path) {
+		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && !IsAPI(r) {
+			return accessClient
+		}
 		return accessDefault
 	}
 	pattern := ctx.RoutePattern()
@@ -425,6 +403,10 @@ func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
 		alt = strings.TrimRight(path, "/")
 	}
 	if IsAPI(r) || alt == "" || alt == path || len(s.allowed(alt)) == 0 {
+		if !IsAPI(r) && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+			s.serveClient(w, r)
+			return
+		}
 		s.missing(w, r)
 		return
 	}

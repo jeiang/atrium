@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -111,21 +110,22 @@ func TestMediaCredentialsTestThroughConnectionsAndAuthenticateEveryRequest(t *te
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbSrv.URL, eztv.URL, tmdbSrv.URL+"/3", images.URL))
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
+	c := webG4(t, s.base)
 
-	if code, body := s.conn("/test", url.Values{"id": {"service/qbittorrent"}, "url": {qbSrv.URL}, "api_key": {"qbt_good"}}); code != http.StatusOK || connectionState(t, dir, "service/qbittorrent") != "ok" {
-		t.Fatalf("qBittorrent 5.2 with its key: %d %s, state %s", code, body, connectionState(t, dir, "service/qbittorrent"))
+	if got := connPutG4(c, "service/qbittorrent", qbSrv.URL, map[string]string{"api_key": "qbt_good"}); got.status != http.StatusOK || connectionState(t, dir, "service/qbittorrent") != "ok" {
+		t.Fatalf("qBittorrent 5.2 with its key: %d %s, state %s", got.status, got.body, connectionState(t, dir, "service/qbittorrent"))
 	}
-	if code, body := s.conn("/test", url.Values{"id": {"service/tmdb"}, "credential.read_token": {"tmdb_good"}}); code != http.StatusOK || connectionState(t, dir, "service/tmdb") != "ok" {
-		t.Fatalf("TMDB with its read token: %d %s, state %s", code, body, connectionState(t, dir, "service/tmdb"))
+	if got := connPutG4(c, "service/tmdb", "", map[string]string{"read_token": "tmdb_good"}); got.status != http.StatusOK || connectionState(t, dir, "service/tmdb") != "ok" {
+		t.Fatalf("TMDB with its read token: %d %s, state %s", got.status, got.body, connectionState(t, dir, "service/tmdb"))
 	}
-	if code, body := s.conn("/test", url.Values{"id": {"service/eztv"}}); code != http.StatusOK || connectionState(t, dir, "service/eztv") != "ok" {
-		t.Fatalf("EZTV with its indexer URL: %d %s, state %s", code, body, connectionState(t, dir, "service/eztv"))
+	if got := connTestG4(c, "service/eztv"); got.status != http.StatusOK || connectionState(t, dir, "service/eztv") != "ok" {
+		t.Fatalf("EZTV with its indexer URL: %d %s, state %s", got.status, got.body, connectionState(t, dir, "service/eztv"))
 	}
-	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+"/apps/media/downloads", nil); code != http.StatusOK || !qb.saw("/api/v2/torrents/info") {
-		t.Errorf("downloads page did not list torrents with the key: %d", code)
+	if got := c.do(http.MethodGet, "/web/v1/media/torrents", nil); got.status != http.StatusOK || !qb.saw("/api/v2/torrents/info") {
+		t.Errorf("torrents read did not list torrents with the key: %d", got.status)
 	}
-	if code, body, _ := fetch(t, s.client, http.MethodGet, s.base+"/apps/media/channels?q=Lanterns", nil); code != http.StatusOK || !strings.Contains(body, "Lanterns") {
-		t.Errorf("channels search did not use the stored TMDB token: %d %.300s", code, body)
+	if got := c.do(http.MethodGet, "/web/v1/media/shows?q=Lanterns", nil); got.status != http.StatusOK || !strings.Contains(got.body, "Lanterns") {
+		t.Errorf("show search did not use the stored TMDB token: %d %.300s", got.status, got.body)
 	}
 	queries, tokens := tmdb.snapshot()
 	if len(tokens) == 0 {
@@ -150,20 +150,20 @@ func TestMediaCredentialsTestThroughConnectionsAndAuthenticateEveryRequest(t *te
 	imageMu.Unlock()
 
 	qb.set("v5.1.2")
-	if code, body := s.conn("/test", url.Values{"id": {"service/qbittorrent"}, "url": {qbSrv.URL}, "api_key": {"qbt_good"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "has no API keys; upgrade to 5.2") {
-		t.Errorf("an API key on qBittorrent 5.1 passed Test: %d", code)
+	if got := connPutG4(c, "service/qbittorrent", qbSrv.URL, map[string]string{"api_key": "qbt_good"}); got.status != http.StatusUnprocessableEntity || !strings.Contains(got.body, "has no API keys; upgrade to 5.2") {
+		t.Errorf("an API key on qBittorrent 5.1 passed Test: %d %s", got.status, got.body)
 	}
 	if connectionState(t, dir, "service/qbittorrent") != "ok" {
 		t.Errorf("a failed candidate replaced the working connection: state %s", connectionState(t, dir, "service/qbittorrent"))
 	}
 
-	if code, _ := s.conn("/test", url.Values{"id": {"service/tmdb"}, "credential.read_token": {"tmdb_wrong"}}); code != http.StatusUnprocessableEntity {
-		t.Errorf("a refused TMDB token passed Test: %d", code)
+	if got := connPutG4(c, "service/tmdb", "", map[string]string{"read_token": "tmdb_wrong"}); got.status != http.StatusUnprocessableEntity {
+		t.Errorf("a refused TMDB token passed Test: %d %s", got.status, got.body)
 	}
 	if state := connectionState(t, dir, "service/tmdb"); state != "ok" {
 		t.Errorf("a refused TMDB token replaced the working connection: state %s", state)
 	}
-	if code, body, _ := fetch(t, s.client, http.MethodGet, s.base+"/apps/media/channels?q=Lanterns", nil); code != http.StatusOK || !strings.Contains(body, "Lanterns") {
-		t.Errorf("the stored TMDB token stopped working after a refused candidate: %d %.300s", code, body)
+	if got := c.do(http.MethodGet, "/web/v1/media/shows?q=Lanterns", nil); got.status != http.StatusOK || !strings.Contains(got.body, "Lanterns") {
+		t.Errorf("the stored TMDB token stopped working after a refused candidate: %d %.300s", got.status, got.body)
 	}
 }

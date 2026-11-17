@@ -3,10 +3,8 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/netip"
-	"net/url"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -124,23 +122,14 @@ func TestMarkedChatAsksBeforeFetchingAndFetchesOnApproval(t *testing.T) {
 	warm(t, api)
 	thread := latestThread(t, dir)
 	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat = %d", status)
-	}
+	client := webLocalG2(t, base)
 	long := srv.URL + "/b?" + strings.Repeat("x", 220)
 	start := len(api.Requests())
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})))
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f2", "web_fetch", map[string]any{"url": long})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("read both")))
 	text := "read " + srv.URL + "/a then " + long
-	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {text}}); status >= http.StatusBadRequest {
-		t.Fatalf("POST message = %d: %s", status, body)
-	}
+	webOKG2(t, client.do(http.MethodPost, fmt.Sprintf("/web/v1/threads/%d/messages", thread), map[string]any{"text": text}))
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var proposal int64
@@ -162,13 +151,10 @@ func TestMarkedChatAsksBeforeFetchingAndFetchesOnApproval(t *testing.T) {
 	if hits := pages.seen(); !slices.Equal(hits, []string{"/a"}) {
 		t.Fatalf("page fetches before approval = %v, want /a only", hits)
 	}
-	code, body := hxFetch(t, client, http.MethodGet, base+fmt.Sprintf("/proposals/%d/card", proposal), nil)
-	if code != http.StatusOK || !strings.Contains(body, long) {
-		t.Fatalf("the card does not show the full URL: %d\n%s", code, body)
+	if card := client.do(http.MethodGet, fmt.Sprintf("/web/v1/proposals/%d", proposal), nil); card.status != http.StatusOK || !strings.Contains(card.body, long) {
+		t.Fatalf("the proposal does not show the full URL: %d\n%s", card.status, card.body)
 	}
-	if code, body = hxFetch(t, client, http.MethodPost, base+fmt.Sprintf("/proposals/%d/approve", proposal), url.Values{"all": {"1"}}); code != http.StatusOK {
-		t.Fatalf("approve = %d\n%s", code, body)
-	}
+	webOKG2(t, client.do(http.MethodPost, fmt.Sprintf("/web/v1/approvals/%d/approve", proposal), nil))
 	for deadline := time.Now().Add(20 * time.Second); ; {
 		if err := d.Read.QueryRow("SELECT state FROM runs WHERE thread_id = ? ORDER BY id DESC LIMIT 1", thread).Scan(&state); err != nil {
 			t.Fatal(err)

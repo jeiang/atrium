@@ -4,7 +4,6 @@ import (
 	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -35,8 +34,8 @@ func TestIntegrationClientsUseTheConnectionTransportAndAFailedRequestChecksAtOnc
 	if state := connectionState(t, dir, "service/qbittorrent"); state == "" {
 		t.Fatal("no qBittorrent connection was materialized from the host")
 	}
-	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+"/apps/media/downloads", nil); code == http.StatusOK && qb.saw("/api/v2/torrents/info") {
-		t.Fatal("the downloads page reached a server with an untrusted certificate")
+	if got := webG4(t, s.base).do(http.MethodGet, "/web/v1/media/torrents", nil); got.status == http.StatusOK && qb.saw("/api/v2/torrents/info") {
+		t.Fatal("the downloads list reached a server with an untrusted certificate")
 	}
 	waitFor(t, func() bool { return connectionState(t, dir, "service/qbittorrent") == "failing" })
 
@@ -46,18 +45,19 @@ func TestIntegrationClientsUseTheConnectionTransportAndAFailedRequestChecksAtOnc
 	}
 	setEnv(t, "ATRIUM_HOST_CONFIG", qbitHostWithCA(t, dir, srv.URL, ca))
 	s.start()
-	if code, body := s.conn("/test", url.Values{"id": {"service/qbittorrent"}, "api_key": {"qbt_good"}}); code != http.StatusOK {
-		t.Fatalf("qBittorrent Test with its CA: %d %s", code, body)
+	c := webG4(t, s.base)
+	if got := connPutG4(c, "service/qbittorrent", "", map[string]string{"api_key": "qbt_good"}); got.status != http.StatusOK {
+		t.Fatalf("qBittorrent Test with its CA: %d %s", got.status, got.body)
 	}
-	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+"/apps/media/downloads", nil); code != http.StatusOK || !qb.saw("/api/v2/torrents/info") {
-		t.Fatalf("downloads page with the qBittorrent CA: %d", code)
+	if got := c.do(http.MethodGet, "/web/v1/media/torrents", nil); got.status != http.StatusOK || !qb.saw("/api/v2/torrents/info") {
+		t.Fatalf("downloads list with the qBittorrent CA: %d %s", got.status, got.body)
 	}
 	if got := runApp(t, "connections", "test", "service/qbittorrent"); got.code != 0 || !strings.Contains(got.stdout, "ok") {
 		t.Fatalf("connections test: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 
 	broken.Store(true)
-	_, _, _ = fetch(t, s.client, http.MethodGet, s.base+"/apps/media/downloads", nil)
+	c.do(http.MethodGet, "/web/v1/media/torrents", nil)
 	waitFor(t, func() bool { return connectionState(t, dir, "service/qbittorrent") == "failing" })
 }
 
@@ -81,9 +81,9 @@ func TestTMDBRequestFailureReachesConnectionHealth(t *testing.T) {
 	t.Cleanup(eztv.Close)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHostConfig(t, dir, "http://qbittorrent.invalid", tmdb.URL+"/3", images.URL, eztv.URL+"/api/get-torrents"))
-	base := startServeIn(t, dir)
-	if code, body, _ := fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns", nil); code != http.StatusOK || !strings.Contains(body, "Lanterns") {
-		t.Fatalf("channels search: %d %.300s", code, body)
+	c := webG4(t, startServeIn(t, dir))
+	if got := c.do(http.MethodGet, "/web/v1/media/shows?q=Lanterns", nil); got.status != http.StatusOK || !strings.Contains(got.body, "Lanterns") {
+		t.Fatalf("show search: %d %.300s", got.status, got.body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	t.Cleanup(func() {
@@ -115,7 +115,7 @@ func TestTMDBRequestFailureReachesConnectionHealth(t *testing.T) {
 	searches := 0
 	search := func() {
 		searches++
-		_, _, _ = fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns+again+"+strconv.Itoa(searches), nil)
+		c.do(http.MethodGet, "/web/v1/media/shows?q=Lanterns+again+"+strconv.Itoa(searches), nil)
 	}
 	backdate()
 	status.Store(http.StatusInternalServerError)
@@ -137,14 +137,14 @@ func TestTMDBRequestFailureReachesConnectionHealth(t *testing.T) {
 	})
 
 	for i := range 5 {
-		_, _, _ = fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns+"+strconv.Itoa(i), nil)
+		c.do(http.MethodGet, "/web/v1/media/shows?q=Lanterns+"+strconv.Itoa(i), nil)
 	}
 	baseRows, baseNoop, _ := observed()
 	if _, err := d.Write.Exec("UPDATE connections SET state = 'ok', checked_at = ? WHERE id = 'service/tmdb'", float64(time.Now().Add(-time.Hour).Unix())); err != nil {
 		t.Fatal(err)
 	}
 	status.Store(http.StatusForbidden)
-	_, _, _ = fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns+forbidden", nil)
+	c.do(http.MethodGet, "/web/v1/media/shows?q=Lanterns+forbidden", nil)
 	waitUntil(t, 60*time.Second, "the refused TMDB request to check the connection", func() bool { rows, _, _ := observed(); return rows > baseRows })
 	rows, noop, foreign := observed()
 	if rows-baseRows != 1 || noop != baseNoop || foreign != 0 {
@@ -198,7 +198,8 @@ func TestAFailingConnectionIsNotRecheckedByBootOrRuntimeFailuresInsideItsBackoff
 	}
 	status.Store(http.StatusForbidden)
 	s.start()
-	_, _, _ = fetch(t, s.client, http.MethodGet, s.base+"/apps/media/channels?q=Lanterns+refused", nil)
+	c := webG4(t, s.base)
+	c.do(http.MethodGet, "/web/v1/media/shows?q=Lanterns+refused", nil)
 	if calls.Load() == 0 {
 		t.Fatal("the channels search sent nothing to TMDB")
 	}
@@ -206,7 +207,7 @@ func TestAFailingConnectionIsNotRecheckedByBootOrRuntimeFailuresInsideItsBackoff
 	if _, err := d.Write.Exec("UPDATE connections SET checked_at = ? WHERE id = 'service/tmdb'", float64(now.Add(-2*time.Hour).Unix())); err != nil {
 		t.Fatal(err)
 	}
-	_, _, _ = fetch(t, s.client, http.MethodGet, s.base+"/apps/media/channels?q=Lanterns+after", nil)
+	c.do(http.MethodGet, "/web/v1/media/shows?q=Lanterns+after", nil)
 	waitFor(t, func() bool { return observed() > before })
 	if rows := observed() - before; rows != 1 {
 		t.Fatalf("observe-health rows after a boot and a refused request inside the backoff and one request after it: %d, want 1", rows)
@@ -221,11 +222,11 @@ func TestAFailingConnectionIsNotRecheckedByBootOrRuntimeFailuresInsideItsBackoff
 		float64(now.Add(-2*time.Hour).Unix()), float64(now.Add(-4*time.Hour).Unix()), float64(now.Add(-4*time.Hour).Unix())); err != nil {
 		t.Fatal(err)
 	}
-	_, _, _ = fetch(t, s.client, http.MethodGet, s.base+"/apps/media/channels?q=Lanterns+still", nil)
+	c.do(http.MethodGet, "/web/v1/media/shows?q=Lanterns+still", nil)
 	if _, err := d.Write.Exec("UPDATE connections SET checked_at = ? WHERE id = 'service/tmdb'", float64(now.Add(-3*time.Hour-time.Minute).Unix())); err != nil {
 		t.Fatal(err)
 	}
-	_, _, _ = fetch(t, s.client, http.MethodGet, s.base+"/apps/media/channels?q=Lanterns+later", nil)
+	c.do(http.MethodGet, "/web/v1/media/shows?q=Lanterns+later", nil)
 	waitFor(t, func() bool { return observed() > before })
 	if rows := observed() - before; rows != 1 {
 		t.Fatalf("observe-health rows after a refused request inside a 3 hour backoff and one after it: %d, want 1", rows)
@@ -233,8 +234,8 @@ func TestAFailingConnectionIsNotRecheckedByBootOrRuntimeFailuresInsideItsBackoff
 
 	before = observed()
 	status.Store(0)
-	if code, body, _ := fetch(t, s.client, http.MethodGet, s.base+"/apps/media/channels?q=Lanterns+back", nil); code != http.StatusOK || !strings.Contains(body, "Lanterns") {
-		t.Fatalf("channels search after TMDB came back: %d %.300s", code, body)
+	if got := c.do(http.MethodGet, "/web/v1/media/shows?q=Lanterns+back", nil); got.status != http.StatusOK || !strings.Contains(got.body, "Lanterns") {
+		t.Fatalf("show search after TMDB came back: %d %.300s", got.status, got.body)
 	}
 	sent := calls.Load()
 	waitFor(t, func() bool { return connectionState(t, dir, "service/tmdb") == "ok" })

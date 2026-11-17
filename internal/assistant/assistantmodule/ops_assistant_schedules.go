@@ -36,10 +36,6 @@ func scheduleOperations() ([]application.Definition, []application.Binding) {
 			asstapp.DescribeScheduleCancel(), asstapp.DescribeScheduleList(), asstapp.DescribeScheduleHistory(), asstapp.DescribeScheduleRuns(), asstapp.DescribeSchedulePreview(), asstapp.DescribeScheduleRunRead(),
 			asstapp.DescribeScheduleAdd(), asstapp.DescribeScheduleRunNow(),
 		}, append(scheduleAPIBindings(nil), []application.Binding{
-			{Kind: application.HTML, Target: "GET /scheduled", Uses: uses(asstapp.ScheduleListName, asstapp.ScheduleHistoryName)},
-			{Kind: application.HTML, Target: "POST /scheduled/{job_id}/toggle", Uses: uses(asstapp.ScheduleEnabledName, asstapp.ScheduleListName, asstapp.ScheduleHistoryName)},
-			{Kind: application.HTML, Target: "POST /scheduled/{job_id}/cancel", Uses: uses(asstapp.ScheduleCancelName, asstapp.ScheduleListName, asstapp.ScheduleHistoryName)},
-			{Kind: application.HTML, Target: "POST /scheduled/{job_id}/schedule", Uses: uses(asstapp.ScheduleUpdateName, asstapp.ScheduleListName, asstapp.ScheduleHistoryName)},
 			{Kind: application.Tool, Target: "schedule_create", Uses: uses(asstapp.ScheduleCreateName)},
 			{Kind: application.CLI, Target: "schedule list", Uses: uses(asstapp.ScheduleListName)},
 			{Kind: application.CLI, Target: "schedule create", Uses: uses(asstapp.ScheduleAddName)},

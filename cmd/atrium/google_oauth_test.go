@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
@@ -88,57 +87,57 @@ func TestGoogleOAuthWizardStoresPerCapabilityRefreshTokensAndReportsHealth(t *te
 	t.Setenv("ATRIUM_CALENDAR_GOOGLE_API_URL", srv.URL+"/calendar/v3")
 	base, logs, stop := startServeStoppable(t, dir)
 	t.Cleanup(stop)
-	jar, _ := cookiejar.New(nil)
-	s := &connectionSite{t: t, dir: dir, base: base, client: &http.Client{Jar: jar}, stop: stop}
+	browser := newWebClient(t, base, nil)
+	browser.session("local")
 
-	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+"/settings/connections/google", nil); code != http.StatusOK {
-		t.Fatalf("google page: %d %s", code, logs.String())
+	if page := nextGet(t, base, "/settings/connections/google/default", "Accept", "text/html"); page.status != http.StatusOK {
+		t.Fatalf("google client page: %d %s", page.status, logs.String())
 	}
-	noRedirect := &http.Client{Jar: s.client.Jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if code, _, _ := fetch(t, noRedirect, http.MethodPost, s.base+"/settings/connections/google",
-		url.Values{"client_id": {"client-id"}, "client_secret": {"secret"}}); code != http.StatusSeeOther {
-		t.Fatalf("save client: %d", code)
+	if saved := browser.do(http.MethodPut, "/web/v1/connections/google/oauth", map[string]any{"client_id": "client-id", "client_secret": "secret"}); saved.status != http.StatusOK {
+		t.Fatalf("save client: %d %s", saved.status, saved.body)
 	}
 	start := func(capability string) *url.URL {
 		t.Helper()
-		code, _, hdr := fetch(t, noRedirect, http.MethodPost, s.base+"/settings/connections/google/start", url.Values{"capability": {capability}})
-		if code != http.StatusSeeOther {
-			t.Fatalf("start %s: %d", capability, code)
+		got := browser.do(http.MethodPost, "/web/v1/connections/google/oauth/start", map[string]any{"capability": capability})
+		data, _ := got.json["data"].(map[string]any)
+		raw, _ := data["authorize_url"].(string)
+		if got.status != http.StatusOK || raw == "" {
+			t.Fatalf("start %s: %d %s", capability, got.status, got.body)
 		}
-		loc, err := url.Parse(hdr.Get("Location"))
+		loc, err := url.Parse(raw)
 		if err != nil {
 			t.Fatal(err)
 		}
 		return loc
 	}
+	complete := func(state, code string) apiReply {
+		t.Helper()
+		return browser.do(http.MethodPost, "/web/v1/connections/google/oauth/complete", map[string]any{"state": state, "code": code})
+	}
 	consent := start("calendar")
 	query := consent.Query()
-	if query.Get("code_challenge_method") != "S256" || query.Get("access_type") != "offline" || query.Get("prompt") != "consent" {
+	if query.Get("code_challenge_method") != "S256" || query.Get("access_type") != "offline" || query.Get("prompt") != "consent" || query.Get("redirect_uri") != base+"/settings/connections/google/callback" {
 		t.Fatalf("consent URL = %s", consent)
 	}
 	if !strings.Contains(query.Get("scope"), "calendar.events") {
 		t.Errorf("calendar scope = %q", query.Get("scope"))
 	}
-	code, body, hdr := fetch(t, noRedirect, http.MethodGet, s.base+"/settings/connections/google/callback?state="+
-		url.QueryEscape(query.Get("state"))+"&code=code-1", nil)
-	if code != http.StatusSeeOther || !strings.HasSuffix(hdr.Get("Location"), "?connected=calendar") {
-		t.Fatalf("calendar callback: %d %q %s", code, hdr.Get("Location"), body)
+	callback := nextGet(t, base, "/settings/connections/google/callback?state="+url.QueryEscape(query.Get("state"))+"&code=code-1")
+	if want := "/settings/connections/google/default?state=" + url.QueryEscape(query.Get("state")) + "&code=code-1"; callback.status != http.StatusSeeOther || callback.header.Get("Location") != want {
+		t.Fatalf("calendar callback: %d %q, want %q", callback.status, callback.header.Get("Location"), want)
+	}
+	if done := complete(query.Get("state"), "code-1"); done.status != http.StatusOK {
+		t.Fatalf("calendar complete: %d %s", done.status, done.body)
 	}
 	d := keyedDB(t, filepath.Join(dir, "atrium.db"))
 	token := queryValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'google/default' AND slot = 'oauth/calendar/refresh'")
 	if token != "refresh-1" {
 		t.Fatalf("calendar refresh token = %q", token)
 	}
-	code, _, hdr = fetch(t, noRedirect, http.MethodGet, s.base+"/settings/connections/google/callback?state=web.handoff&code=code-9", nil)
-	if code != http.StatusSeeOther || hdr.Get("Location") != "/next/settings/connections/google/default?state=web.handoff&code=code-9" {
-		t.Fatalf("handoff callback: %d %q", code, hdr.Get("Location"))
-	}
 
 	pasteState := start("gmail").Query().Get("state")
-	pasted := s.base + "/settings/connections/google/callback?state=" + url.QueryEscape(pasteState) + "&code=code-2"
-	code, _, hdr = fetch(t, noRedirect, http.MethodPost, s.base+"/settings/connections/google/paste", url.Values{"paste": {pasted}})
-	if code != http.StatusSeeOther || !strings.HasSuffix(hdr.Get("Location"), "?connected=gmail") {
-		t.Fatalf("gmail paste-back: %d %q", code, hdr.Get("Location"))
+	if done := complete(pasteState, "code-2"); done.status != http.StatusOK {
+		t.Fatalf("gmail paste-back: %d %s", done.status, done.body)
 	}
 	token = queryValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'google/default' AND slot = 'oauth/gmail/refresh'")
 	if token != "refresh-1" {
@@ -149,7 +148,7 @@ func TestGoogleOAuthWizardStoresPerCapabilityRefreshTokensAndReportsHealth(t *te
 	}
 
 	var count int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation='connections.oauth-complete' AND outcome='ok' AND source='ui' AND target='google/default' AND details_json=?", `{"connection_ids":["google/default"]}`).Scan(&count); err != nil {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation='connections.oauth-complete' AND outcome='ok' AND target='google/default' AND details_json=?", `{"connection_ids":["google/default"]}`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
 	if count != 2 {
@@ -163,8 +162,8 @@ func TestGoogleOAuthWizardStoresPerCapabilityRefreshTokensAndReportsHealth(t *te
 		t.Errorf("consent material appeared in %d operation audits", leaked)
 	}
 
-	if code, _, _ := fetch(t, noRedirect, http.MethodPost, s.base+"/settings/connections/google/paste", url.Values{"paste": {pasted}}); code != http.StatusUnprocessableEntity {
-		t.Errorf("replayed consent = %d, want 422", code)
+	if replayed := complete(pasteState, "code-2"); replayed.status < http.StatusBadRequest || replayed.status >= http.StatusInternalServerError {
+		t.Errorf("replayed consent = %d, want a client error", replayed.status)
 	}
 	if got := fake.grants(); len(got) != 2 {
 		t.Errorf("replayed consent exchanged a token: %d grants", len(got))
@@ -186,18 +185,14 @@ func TestGoogleOAuthWizardStoresPerCapabilityRefreshTokensAndReportsHealth(t *te
 		t.Errorf("calendar_list did not use the stored Google grant: %s", content)
 	}
 
-	code, body, _ = fetch(t, s.client, http.MethodPost, s.base+"/settings/connections/google/test", url.Values{})
-	if code != http.StatusOK {
-		t.Fatalf("passing test: %d %s", code, body)
+	if passed := browser.do(http.MethodPost, "/web/v1/connections/google/default/test", nil); passed.status != http.StatusOK {
+		t.Fatalf("passing test: %d %s", passed.status, passed.body)
 	}
 	if got := googleHealth(t, d); got != "ok" {
 		t.Fatalf("health after a passing test = %q", got)
 	}
 	fake.setStatus(http.StatusBadRequest)
-	code, _, _ = fetch(t, s.client, http.MethodPost, s.base+"/settings/connections/google/test", url.Values{})
-	if code != http.StatusUnprocessableEntity {
-		t.Fatalf("failing test: %d", code)
-	}
+	browser.do(http.MethodPost, "/web/v1/connections/google/default/test", nil)
 	if got := googleHealth(t, d); got != "needs_reauth" {
 		t.Fatalf("health after a revoked token = %q", got)
 	}

@@ -35,7 +35,6 @@ var exceptions = []exception{
 	{"internal/commitments/application", "internal/signals", unplanned},
 	{"internal/contacts/contactsmodule", "internal/assistant/jobworker", unplanned},
 	{"internal/core/coremodule", "internal/assistant", unplanned},
-	{"internal/core/coremodule", "internal/assistant/application", unplanned},
 	{"internal/core/coremodule", "internal/assistant/jobworker", unplanned},
 	{"internal/core/coremodule", "internal/assistant/permission", unplanned},
 	{"internal/core/coremodule", "internal/assistant/registry", unplanned},

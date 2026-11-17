@@ -197,14 +197,15 @@ func TestServeRuntimeEmbedderFaultRestartsOnlyItsService(t *testing.T) {
 	if status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase()+"/livez", nil); status != http.StatusOK {
 		t.Errorf("livez during the embedder fault = %d %s, want 200", status, body)
 	}
-	for _, page := range []struct{ path, want string }{
-		{"/healthz", ""},
-		{"/scheduled", "Every day at 02:30"},
-		{"/settings/notifications", "Channels"},
-	} {
-		if status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, base+page.path, nil); status != http.StatusOK || !strings.Contains(body, page.want) {
-			t.Errorf("GET %s during the embedder fault = %d: %.300s", page.path, status, body)
-		}
+	if status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, base+"/healthz", nil); status != http.StatusOK {
+		t.Errorf("GET /healthz during the embedder fault = %d: %.300s", status, body)
+	}
+	w := webG3(t, base)
+	if got := w.do(http.MethodGet, "/web/v1/schedules", nil); got.status != http.StatusOK || !strings.Contains(got.body, "Every day at 02:30") {
+		t.Errorf("GET /web/v1/schedules during the embedder fault = %d: %.300s", got.status, got.body)
+	}
+	if notifications := dataG3(t, "notifications during the embedder fault", w.do(http.MethodGet, "/web/v1/notifications", nil)); notifications["channels"] == nil {
+		t.Errorf("notifications during the embedder fault without channels: %v", notifications)
 	}
 	for _, name := range []string{"recovery", "connection-health", "notifications-monitor", "assistant", "scheduler"} {
 		if n := serviceStarts(logs, name); n != 1 {
@@ -222,9 +223,7 @@ func TestServeRuntimeEmbedderFaultRestartsOnlyItsService(t *testing.T) {
 	if n := serviceFailures(logs, "embedding-index"); n != failures {
 		t.Errorf("service embedding-index failed %d times after healing, was %d", n, failures)
 	}
-	if status, _, _ := fetch(t, http.DefaultClient, http.MethodGet, base+"/scheduled", nil); status != http.StatusOK {
-		t.Errorf("GET /scheduled after healing = %d", status)
-	}
+	okG3(t, "schedules after healing", w.do(http.MethodGet, "/web/v1/schedules", nil))
 }
 
 func TestServeRuntimeDisablingAModuleStopsItsJobAndRestartsOneInstance(t *testing.T) {
@@ -306,21 +305,18 @@ func TestServeRuntimeRecoversBeforeTheFirstRequest(t *testing.T) {
 		return true
 	})
 
-	card := base + "/proposals/" + strconv.FormatInt(stuck, 10) + "/card"
-	var status int
-	var body string
+	w := newWebClient(t, base, nil)
 	waitUntil(t, 60*time.Second, "the first response", func() bool {
-		resp, err := http.Get(card)
+		resp, err := w.http.Do(w.request(http.MethodGet, "/web/v1/session", nil))
 		if err != nil {
 			return false
 		}
-		defer func() { _ = resp.Body.Close() }()
-		raw, _ := io.ReadAll(resp.Body)
-		status, body = resp.StatusCode, string(raw)
+		_ = resp.Body.Close()
 		return true
 	})
-	if status != http.StatusOK || !strings.Contains(body, `data-status="failed"`) {
-		t.Fatalf("first response for the stuck proposal = %d: %.500s\n%s", status, body, logs.String())
+	w.session("local")
+	if got := dataG3(t, "stuck proposal", w.do(http.MethodGet, "/web/v1/proposals/"+strconv.FormatInt(stuck, 10), nil)); got["status"] != "failed" {
+		t.Fatalf("first read of the stuck proposal = %v\n%s", got, logs.String())
 	}
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM proposals WHERE id = ? AND status = 'failed' AND recovered = 1", stuck); n != 1 {
 		t.Errorf("stuck proposal not recovered: %d rows", n)

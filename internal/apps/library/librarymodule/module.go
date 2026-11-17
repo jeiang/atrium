@@ -3,11 +3,12 @@ package librarymodule
 import (
 	"context"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/apps/library"
 	mediaapp "github.com/jeiang/atrium/internal/apps/library/application"
 	"github.com/jeiang/atrium/internal/apps/library/librarytools"
-	"github.com/jeiang/atrium/internal/apps/library/pages"
 	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/cli"
@@ -84,9 +85,12 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Settings: library.SettingsDefs(),
 		Host:     library.HostSettings(),
 		Pages: []web.Page{{
-			Module:    pages.Module(pages.Options{Service: pageService(m.Now, m.Torrents), Routes: func(d *web.Deps, s *mediaapp.Service) { mediaRoutes(d, s) }}),
-			Templates: pages.Templates(),
-			Public:    publicCheck,
+			Module: func(r chi.Router, d *web.Deps) {
+				s := pageService(m.Now, m.Torrents)(d)
+				mediaRoutes(d, s)
+				fileRoutes(r, d, s)
+			},
+			Public: publicCheck,
 			Nav: []web.NavItem{
 				{Section: "apps", Label: "Downloads", URL: "/apps/media/downloads", Icon: "download", Page: "media_downloads", Order: 10},
 				{Section: "apps", Label: "Channels", URL: "/apps/media/channels", Icon: "tv", Page: "media_channels", Order: 20},

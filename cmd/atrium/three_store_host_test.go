@@ -3,7 +3,6 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -104,9 +103,7 @@ func TestHostDeclaredModuleFlagWinsAndIsReadOnly(t *testing.T) {
 	if value, ok := storedSetting(t, path, module.FlagKey(unit.Mail)); !ok || value != "false" {
 		t.Errorf("a refused flag write changed the row: %q %v", value, ok)
 	}
-	if status, _, _ := fetch(t, http.DefaultClient, http.MethodGet, startServeIn(t, dir)+"/triage", nil); status != http.StatusOK {
-		t.Errorf("GET /triage = %d, want the host-declared flag to enable mail", status)
-	}
+	okG3(t, "mail triage with the host-declared flag", webG3(t, startServeIn(t, dir)).do(http.MethodGet, "/web/v1/mail/triage", nil))
 }
 
 func TestUnpinnedHostWritesAreRefused(t *testing.T) {
@@ -131,17 +128,12 @@ func TestUnpinnedHostWritesAreRefused(t *testing.T) {
 	}
 
 	seedAllFlags(t)
-	w := asstBrowse(t, startServeIn(t, dir))
-	status, page, _ := w.get("/settings/export", false)
-	if status != http.StatusOK {
-		t.Fatalf("GET integrations = %d", status)
+	w := webG3(t, startServeIn(t, dir))
+	if got := w.do(http.MethodPut, "/web/v1/settings/export_obsidian_dir", map[string]any{"value": "/srv/vault"}); got.status < 400 {
+		t.Fatalf("a host folder write through the web surface = %d: %.300s", got.status, got.body)
 	}
-	if strings.Contains(page, `name="export_obsidian_dir"`) {
-		t.Errorf("the host folder is still an editable control")
-	}
-	form := url.Values{"export_obsidian_dir": {"/srv/vault"}}
-	if status, body, _ := fetch(t, w.client, http.MethodPost, w.base+"/settings/sections/export_obsidian", form); status != http.StatusOK {
-		t.Fatalf("folder save = %d: %.300s", status, body)
+	if got := w.do(http.MethodPatch, "/web/v1/settings", map[string]any{"set": map[string]string{"public_url": "https://other.example", "media_download_path_prefix": "/srv/downloads"}}); got.status < 400 {
+		t.Fatalf("host writes through the web surface = %d: %.300s", got.status, got.body)
 	}
 
 	for _, key := range []string{"public_url", "media_download_path_prefix", "export_obsidian_dir"} {

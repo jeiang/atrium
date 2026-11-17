@@ -227,7 +227,7 @@ test.describe('markdown safety', () => {
     await expect(external).toHaveAttribute('rel', 'noopener noreferrer');
     await expect(external).toHaveAccessibleName(/\(new tab\)$/);
     const internal = sample.getByRole('link', { name: 'same-app link' });
-    await expect(internal).toHaveAttribute('href', '/next/inbox');
+    await expect(internal).toHaveAttribute('href', '/inbox');
     await expect(internal).not.toHaveAttribute('target', /./);
     await expect(sample.getByRole('link', { name: 'sam@example.test' })).toHaveAttribute(
       'href',

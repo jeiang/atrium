@@ -2,8 +2,6 @@ package main
 
 import (
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,21 +19,16 @@ func TestMailAccountUpdateTestsTheSubmittedLogin(t *testing.T) {
 	strictSMTPRig(t, creds)
 
 	base := startServeIn(t, dir)
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	if code, _, _ := fetch(t, client, http.MethodGet, base+"/settings/mail", nil); code != http.StatusOK {
-		t.Fatalf("mail settings: %d", code)
-	}
-	add := url.Values{"id": {"work"}, "label": {"Work"}, "preset": {"icloud"}, "login": {"me@work.test"}, "password": {"work-pass"}, "auth_method": {"password"}}
-	if code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/mail/accounts", add); code != http.StatusOK {
-		t.Fatalf("add: %d %.300s", code, body)
+	client := localWebG5(t, base)
+	add := map[string]any{"id": "work", "label": "Work", "preset": "icloud", "login": "me@work.test", "password": "work-pass", "auth_method": "password"}
+	if got := client.do(http.MethodPost, "/web/v1/mail/accounts", add); got.status != http.StatusCreated {
+		t.Fatalf("add: %d %.300s", got.status, got.body)
 	}
 	update := func(login, password string) (int, string) {
-		form := url.Values{"label": {"Work"}, "login": {login}, "password": {password}, "enabled": {"on"}, "auth_method": {"password"}}
-		code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/mail/accounts/work", form)
-		return code, body
+		got := client.do(http.MethodPatch, "/web/v1/mail/accounts/work", map[string]any{"label": "Work", "login": login, "password": password, "enabled": true, "auth_method": "password"})
+		return got.status, got.body
 	}
-	if code, body := update("me@other.test", "work-pass"); code != http.StatusUnprocessableEntity {
+	if code, body := update("me@other.test", "work-pass"); code != http.StatusConflict || !strings.Contains(body, `"refused"`) {
 		t.Fatalf("update to a login the password cannot authenticate = %d: %.300s", code, body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
@@ -68,9 +61,9 @@ func TestMailAccountUpdateTestsTheSubmittedLogin(t *testing.T) {
 	if !strings.Contains(configJSON, `"login":"me@other.test"`) {
 		t.Fatalf("the connection config after a passing update is %s", configJSON)
 	}
-	empty := url.Values{"label": {""}, "login": {""}, "password": {""}, "enabled": {"on"}, "auth_method": {""}}
-	if code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/mail/accounts/work", empty); code != http.StatusOK {
-		t.Fatalf("empty fields update = %d: %.300s", code, body)
+	empty := map[string]any{"label": "", "login": "", "password": "", "enabled": true}
+	if got := client.do(http.MethodPatch, "/web/v1/mail/accounts/work", empty); got.status != http.StatusOK {
+		t.Fatalf("empty fields update = %d: %.300s", got.status, got.body)
 	}
 	var label, authMethod string
 	if err := d.Read.QueryRow("SELECT label, login, auth_method FROM mail_accounts WHERE id = 'work'").Scan(&label, &login, &authMethod); err != nil {
@@ -80,13 +73,13 @@ func TestMailAccountUpdateTestsTheSubmittedLogin(t *testing.T) {
 		t.Fatalf("empty fields changed account values: label=%q login=%q auth=%q", label, login, authMethod)
 	}
 	var added, saved, refused int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.account-add' AND outcome = 'ok' AND source = 'ui' AND actor != '' AND target = 'work'").Scan(&added); err != nil {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.account-add' AND outcome = 'ok' AND source = 'api' AND actor != '' AND target = 'work'").Scan(&added); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.account-update' AND outcome = 'ok' AND source = 'ui' AND actor != '' AND target = 'work'").Scan(&saved); err != nil {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.account-update' AND outcome = 'ok' AND source = 'api' AND actor != '' AND target = 'work'").Scan(&saved); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.account-update' AND outcome = 'refused' AND source = 'ui' AND actor != '' AND target = 'work'").Scan(&refused); err != nil {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.account-update' AND outcome = 'refused' AND source = 'api' AND actor != '' AND target = 'work'").Scan(&refused); err != nil {
 		t.Fatal(err)
 	}
 	if added != 1 || saved != 2 || refused != 1 {

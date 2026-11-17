@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"io/fs"
 	"mime"
 	"net/http"
@@ -46,25 +45,13 @@ func (s *staticHandler) load(fsys fs.FS, url, name string, immutable bool) {
 	s.assets[url] = asset
 }
 
-func newStaticHandler(fsys fs.FS, manifest map[string]string) *staticHandler {
-	s := &staticHandler{assets: make(map[string]preparedAsset, len(manifest)+1)}
-	for _, url := range manifest {
-		if !strings.HasPrefix(url, staticPrefix) || !fs.ValidPath(strings.TrimPrefix(url, staticPrefix)) {
-			panic(fmt.Errorf("invalid asset path %q", url))
-		}
-		s.load(fsys, url, strings.TrimPrefix(url, staticPrefix), true)
-	}
-	s.load(fsys, staticPrefix+"sw.js", "sw.js", false)
-	return s
-}
-
 func newAppHandler(fsys fs.FS) *staticHandler {
-	s := &staticHandler{assets: map[string]preparedAsset{}, shell: nextPrefix + "index.html"}
+	s := &staticHandler{assets: map[string]preparedAsset{}, shell: "/index.html"}
 	err := fs.WalkDir(fsys, ".", func(name string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() || path.Ext(name) == ".gz" || path.Ext(name) == ".br" {
 			return err
 		}
-		s.load(fsys, nextPrefix+name, name, strings.HasPrefix(name, nextAssets))
+		s.load(fsys, "/"+name, name, strings.HasPrefix("/"+name, clientAssets))
 		return nil
 	})
 	if err != nil {
@@ -111,19 +98,13 @@ func acceptedEncodings(header string) map[string]float64 {
 	return values
 }
 
-func (s *staticHandler) serve(w http.ResponseWriter, r *http.Request, fail func(status int, detail string)) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		fail(http.StatusMethodNotAllowed, "Method Not Allowed")
-		return
-	}
-	asset, ok := s.assets[r.URL.Path]
-	if !ok && s.shell != "" && (r.URL.Path == nextPrefix || !strings.HasPrefix(r.URL.Path, nextPrefix+nextAssets) && acceptsHTML(r)) {
-		asset, ok = s.assets[s.shell]
-	}
+func (s *staticHandler) serve(w http.ResponseWriter, r *http.Request, name string, fail func(status int, detail string)) {
+	asset, ok := s.assets[name]
 	if !ok {
 		fail(http.StatusNotFound, "Not Found")
 		return
 	}
+	w.Header().Set("Content-Security-Policy", clientCSP)
 	qualities := acceptedEncodings(r.Header.Get("Accept-Encoding"))
 	encoding := ""
 	best := 0.0
@@ -164,9 +145,6 @@ func (s *staticHandler) serve(w http.ResponseWriter, r *http.Request, fail func(
 	h.Set("Cache-Control", "no-cache")
 	if asset.immutable {
 		h.Set("Cache-Control", "public, max-age=31536000, immutable")
-	}
-	if r.URL.Path == staticPrefix+"sw.js" {
-		h.Set("Service-Worker-Allowed", "/")
 	}
 	if encoding != "" {
 		h.Set("Content-Encoding", encoding)

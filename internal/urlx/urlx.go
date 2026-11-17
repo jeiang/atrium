@@ -10,10 +10,7 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-const (
-	MaxReturnLen = 2048
-	ClientBase   = "/next/"
-)
+const MaxReturnLen = 2048
 
 func SafeReturn(target string) string {
 	if target == "" || len(target) > MaxReturnLen || target[0] != '/' || strings.HasPrefix(target, "//") || strings.ContainsAny(target, "\\\r\n\t") {

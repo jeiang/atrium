@@ -75,7 +75,7 @@ func TestPushOnceForAParkedQuestionAFailedRunAndANewRepair(t *testing.T) {
 	s := newRunPushSite(t, flagsExcept("", ""))
 
 	repairs := s.waitPushes(repairPush, 1)
-	if repairs[0]["url"] != "/next/settings/connections" {
+	if repairs[0]["url"] != "/settings/connections" {
 		t.Fatalf("repair push link: %v", repairs[0])
 	}
 	if got := runApp(t, "connections", "test", "service/grafana"); got.code != cli.ExitError {
@@ -86,7 +86,7 @@ func TestPushOnceForAParkedQuestionAFailedRunAndANewRepair(t *testing.T) {
 	threadID, runID := s.start("plan the week")
 	s.waitRun(runID, "parked")
 	questions := s.waitPushes(questionPush, 1)
-	link := fmt.Sprintf("/next/chat/%d", threadID)
+	link := fmt.Sprintf("/chat/%d", threadID)
 	if q := questions[0]; q["url"] != link || !strings.Contains(fmt.Sprint(q["body"]), "waiting for your answer") || strings.Contains(fmt.Sprint(q["body"]), "private calendar") {
 		t.Fatalf("question push: %v", q)
 	}
@@ -128,7 +128,7 @@ func TestPushOnceForAParkedQuestionAFailedRunAndANewRepair(t *testing.T) {
 	for _, f := range failures {
 		links = append(links, fmt.Sprint(f["url"]))
 	}
-	if want := []string{link, fmt.Sprintf("/next/chat/%d", lastThread)}; strings.Join(links, " ") != strings.Join(want, " ") {
+	if want := []string{link, fmt.Sprintf("/chat/%d", lastThread)}; strings.Join(links, " ") != strings.Join(want, " ") {
 		t.Fatalf("failure push links %v, want %v (none for the watched run)", links, want)
 	}
 

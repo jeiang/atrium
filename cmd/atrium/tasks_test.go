@@ -2,8 +2,6 @@ package main
 
 import (
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -37,13 +35,8 @@ func TestTaskAddUndoAndRegistryMatrix(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'task_add' AND direction = 'forward' ORDER BY id DESC LIMIT 1").Scan(&effectID); err != nil {
 		t.Fatal(err)
 	}
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	if code, body, _ := fetch(t, client, http.MethodGet, base+"/activity", nil); code != http.StatusOK {
-		t.Fatalf("activity page = %d: %.400s", code, body)
-	}
-	if code, body, _ := fetch(t, client, http.MethodPost, base+"/activity/effect/"+strconv.FormatInt(effectID, 10)+"/undo", url.Values{}); code != http.StatusOK {
-		t.Fatalf("undo = %d %s", code, body)
+	if got := webAsG4(t, base, nil).do(http.MethodPost, "/web/v1/effects/"+strconv.FormatInt(effectID, 10)+"/undo", nil); got.status != http.StatusOK {
+		t.Fatalf("undo = %d %s", got.status, got.body)
 	}
 	var n int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM tasks WHERE id = ?", taskID).Scan(&n); err != nil {

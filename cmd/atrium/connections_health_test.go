@@ -4,13 +4,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"html"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -70,9 +67,7 @@ func TestConnectionHealthDampsAFlapAcrossProcessesAndDisconnectKeepsData(t *test
 		t.Fatalf("%d notices for a host connection without a token after start, want 1", n)
 	}
 
-	if code, body := s.conn("/test", url.Values{"id": {"service/grafana"}, "api_key": {"glsa_good"}}); code != http.StatusOK {
-		t.Fatalf("grafana test: %d %s", code, body)
-	}
+	okG3(t, "grafana test", connTestG3(t, s, "service/grafana", "", map[string]string{"api_key": "glsa_good"}))
 	if state := connectionState(t, dir, "service/grafana"); state != "ok" {
 		t.Fatalf("state after a passing test = %q", state)
 	}
@@ -117,9 +112,7 @@ func TestConnectionHealthDampsAFlapAcrossProcessesAndDisconnectKeepsData(t *test
 	}
 
 	before := connectionNotices(t, dir, "Grafana")
-	if code, body := s.conn("/disconnect", url.Values{"id": {"service/grafana"}}); code != http.StatusSeeOther && code != http.StatusOK {
-		t.Fatalf("disconnect: %d %s", code, body)
-	}
+	connDisconnectG3(t, s, "service/grafana")
 	if state := connectionState(t, dir, "service/grafana"); state != "unconfigured" {
 		t.Fatalf("state after disconnect = %q", state)
 	}
@@ -234,9 +227,7 @@ func TestOpsMetricsReportAConnectionStateBeforeAndAfterAFailingTest(t *testing.T
 	ops := opsAddr(t)
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
-	if code, body := s.conn("/test", url.Values{"id": {"service/grafana"}, "api_key": {"glsa_good"}}); code != http.StatusOK {
-		t.Fatalf("grafana test: %d %s", code, body)
-	}
+	okG3(t, "grafana test", connTestG3(t, s, "service/grafana", "", map[string]string{"api_key": "glsa_good"}))
 	scrape := func() string {
 		code, body, _ := fetch(t, http.DefaultClient, http.MethodGet, ops()+"/metrics", nil)
 		if code != http.StatusOK {
@@ -302,8 +293,8 @@ func TestEmbeddingOutageShowsOnMailWithoutHoldingItAndRecoveryClearsIt(t *testin
 		var next float64
 		return d.Read.QueryRow("SELECT checked_at FROM connections WHERE id = 'service/embedding'").Scan(&next) == nil && next > checked
 	})
-	if degraded := moduleDegraded(t, s, "mail"); degraded != "" {
-		t.Fatalf("mail shows a degraded requirement before the outage: %q", degraded)
+	if state := needStateG3(t, s.base, "mail", "service/embedding"); state != "ok" {
+		t.Fatalf("mail need on embedding before the outage: %q", state)
 	}
 
 	embed.setStatus(http.StatusInternalServerError)
@@ -316,8 +307,11 @@ func TestEmbeddingOutageShowsOnMailWithoutHoldingItAndRecoveryClearsIt(t *testin
 	if n := connectionNotices(t, dir, "Embedding"); n != 0 {
 		t.Fatalf("%d notices after an automatic failure inside the grace window, want 0", n)
 	}
-	if degraded := moduleDegraded(t, s, "mail"); !strings.Contains(degraded, "service/embedding is away until ") {
-		t.Fatalf("mail requirement during the outage: %q", degraded)
+	if state := needStateG3(t, s.base, "mail", "service/embedding"); state != "away" {
+		t.Fatalf("mail need on embedding during the outage: %q", state)
+	}
+	if view := connViewG3(t, s.base, "service/embedding"); view["grace_until"] == nil {
+		t.Fatalf("embedding during the outage has no grace window: %v", view)
 	}
 	if on := runSettings(t, "set", module.FlagKey(unit.Mail), "true"); on.code != cli.ExitOK {
 		t.Fatalf("mail held by an automatic failure: %d %q", on.code, on.stderr)
@@ -337,25 +331,12 @@ func TestEmbeddingOutageShowsOnMailWithoutHoldingItAndRecoveryClearsIt(t *testin
 	}
 	s.start()
 	waitFor(t, func() bool { return connectionState(t, dir, "service/embedding") == "ok" })
-	if degraded := moduleDegraded(t, s, "mail"); degraded != "" {
-		t.Fatalf("mail requirement after recovery: %q", degraded)
+	if state := needStateG3(t, s.base, "mail", "service/embedding"); state != "ok" {
+		t.Fatalf("mail need on embedding after recovery: %q", state)
 	}
 	if n := connectionNotices(t, dir, "Embedding"); n != 0 {
 		t.Fatalf("%d notices after an outage that recovered inside the grace window, want 0", n)
 	}
-}
-
-func moduleDegraded(t *testing.T, s *connectionSite, page string) string {
-	t.Helper()
-	code, body, _ := fetch(t, s.client, http.MethodGet, s.base+"/settings/"+page, nil)
-	if code != http.StatusOK {
-		t.Fatalf("%s settings page: %d", page, code)
-	}
-	m := regexp.MustCompile(`data-degraded>([^<]*)<`).FindStringSubmatch(body)
-	if m == nil {
-		return ""
-	}
-	return html.UnescapeString(m[1])
 }
 
 func TestAFailedEmbeddingTestDoesNotHoldMailAndAnAutomaticPassClearsIt(t *testing.T) {
@@ -382,8 +363,8 @@ func TestAFailedEmbeddingTestDoesNotHoldMailAndAnAutomaticPassClearsIt(t *testin
 	s.start()
 	defer s.stop()
 	waitFor(t, func() bool { return connectionState(t, dir, "service/embedding") == "ok" })
-	if degraded := moduleDegraded(t, s, "mail"); degraded != "" {
-		t.Fatalf("mail requirement after an automatic pass: %q", degraded)
+	if state := needStateG3(t, s.base, "mail", "service/embedding"); state != "ok" {
+		t.Fatalf("mail need on embedding after an automatic pass: %q", state)
 	}
 }
 
@@ -404,18 +385,23 @@ func TestUnconfiguredConnectionsShowAsUnconfiguredOnTheirModules(t *testing.T) {
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
 	defer s.stop()
-	if degraded := moduleDegraded(t, s, "assistant"); !strings.Contains(degraded, "service/anthropic is unconfigured") {
-		t.Fatalf("assistant requirement without a key: %q", degraded)
+	if state := needStateG3(t, s.base, "assistant", "service/anthropic"); state != "unconfigured" {
+		t.Fatalf("assistant need without a key: %q", state)
 	}
-	moduleDegraded(t, s, "notifications")
 	if got := runApp(t, "connections", "test", "service/webpush"); got.code == cli.ExitOK {
 		t.Fatalf("web push test without a subject: exit %d stdout %q", got.code, got.stdout)
 	}
 	if state := connectionState(t, dir, "service/webpush"); state != "unconfigured" {
 		t.Fatalf("web push state without a subject = %q, want unconfigured", state)
 	}
-	if degraded := moduleDegraded(t, s, "notifications"); !strings.Contains(degraded, "service/webpush is unconfigured") {
-		t.Fatalf("notifications requirement without a subject: %q", degraded)
+	var webpush map[string]any
+	for _, v := range dataG3(t, "connections", webG3(t, s.base).do(http.MethodGet, "/web/v1/connections", nil))["connections"].([]any) {
+		if c := v.(map[string]any); c["id"] == "service/webpush" {
+			webpush = c
+		}
+	}
+	if webpush == nil || webpush["state"] != "unconfigured" {
+		t.Fatalf("web push on the connections surface = %v, want unconfigured", webpush)
 	}
 	if on := runSettings(t, "set", module.FlagKey(unit.Notifications), "true"); on.code != cli.ExitOK {
 		t.Fatalf("an unconfigured connection held notifications: %d %q", on.code, on.stderr)
@@ -433,9 +419,7 @@ func TestConcurrentConnectionTestsRecordOneNotification(t *testing.T) {
 	s.start()
 	defer s.stop()
 	waitFor(t, func() bool { return connectionNotices(t, dir, "Grafana") > 0 })
-	if code, body := s.conn("/test", url.Values{"id": {"service/grafana"}, "api_key": {"glsa_good"}}); code != http.StatusOK && code != http.StatusSeeOther {
-		t.Fatalf("grafana test: %d %s", code, body)
-	}
+	okG3(t, "grafana test", connTestG3(t, s, "service/grafana", "", map[string]string{"api_key": "glsa_good"}))
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	for i := 0; i < 5; i++ {
 		status.Store(http.StatusOK)
@@ -527,8 +511,10 @@ func TestGraceWindowKeepsAnEmbeddingOutageQuietUntilTheWindowEnds(t *testing.T) 
 	}
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
-	if body := s.page(); !strings.Contains(body, until) {
-		t.Fatalf("connections page lacks %q", until)
+	if view := connViewG3(t, s.base, "service/embedding"); view["state"] != "failing" || view["grace_until"] == nil {
+		t.Fatalf("connections read lacks the grace window: %v", view)
+	} else if shown, err := time.Parse(time.RFC3339Nano, view["grace_until"].(string)); err != nil || !shown.Equal(*listed.GraceUntil) {
+		t.Fatalf("connections read grace_until %v, want %v: %v", view["grace_until"], listed.GraceUntil, err)
 	}
 	s.stop()
 
@@ -776,9 +762,7 @@ capabilities = ["embeddings"]
 
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
-	if code, body := s.conn("/disconnect", url.Values{"id": {"service/embedding"}}); code != http.StatusSeeOther && code != http.StatusOK {
-		t.Fatalf("disconnect: %d %s", code, body)
-	}
+	connDisconnectG3(t, s, "service/embedding")
 	s.stop()
 	if r := read(); r.enabled != 0 || r.state != "unconfigured" {
 		t.Fatalf("row after the operator disconnected it: %+v", r)

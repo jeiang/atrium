@@ -12,13 +12,6 @@ func mailPageService(d *web.Deps) *mailapp.Service {
 }
 func mailReadOperations() ([]application.Definition, []application.Binding) {
 	return []application.Definition{mailapp.DescribeMessage(), mailapp.DescribeTriage(), mailapp.DescribeSearch(), mailapp.DescribeRules()}, []application.Binding{
-		{Kind: application.HTML, Target: "GET /messages/{message_id}", Uses: []application.Name{mailapp.MessageName}},
-		{Kind: application.HTML, Target: "GET /messages/{message_id}/correct", Uses: []application.Name{mailapp.MessageName}},
-		{Kind: application.HTML, Target: "GET /triage", Uses: []application.Name{mailapp.TriageName}},
-		{Kind: application.HTML, Target: "GET /rules", Uses: []application.Name{mailapp.RulesName}},
-		{Kind: application.HTML, Target: "GET /rules/new", Uses: []application.Name{mailapp.RulesName}},
-		{Kind: application.HTML, Target: "GET /rules/condition", Uses: []application.Name{mailapp.RulesName}},
-		{Kind: application.HTML, Target: "GET /rules/{rule_id}/edit", Uses: []application.Name{mailapp.RulesName}},
 		{Kind: application.Tool, Target: "mail_read", Uses: []application.Name{mailapp.MessageName}},
 		{Kind: application.Tool, Target: "mail_search", Uses: []application.Name{mailapp.SearchName}},
 	}

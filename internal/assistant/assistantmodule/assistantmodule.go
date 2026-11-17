@@ -20,7 +20,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
-	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/report"
@@ -59,12 +58,9 @@ import (
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/review"
-	reviewapp "github.com/jeiang/atrium/internal/review/application"
-	"github.com/jeiang/atrium/internal/review/hub"
 	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
-	settingsapp "github.com/jeiang/atrium/internal/settings/application"
 	"github.com/jeiang/atrium/internal/tasks"
 	tasksapp "github.com/jeiang/atrium/internal/tasks/application"
 	"github.com/jeiang/atrium/internal/tool"
@@ -132,22 +128,10 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			return module.Idle(ctx)
 		}}},
 		Pages: []web.Page{{
-			Module: chatpages.Module(chatpages.Options{Now: assistant.Now, Knowledge: m.knowledgeService, Assistant: pageAssistant(m.Jobs.Service), Settings: func(d *web.Deps) *settingsapp.Service { return settingsapp.Web(d.DB) }, API: threadAPI, Home: func(d *web.Deps) func(context.Context) (any, any, error) {
-				reader := hub.Reads(d)
-				return func(ctx context.Context) (any, any, error) {
-					pending, err := reader.Pending(ctx, reviewapp.PendingInput{Limit: 3})
-					if err != nil {
-						return nil, nil, err
-					}
-					activity, err := reader.Activity(ctx, reviewapp.ActivityInput{})
-					if err != nil {
-						return nil, nil, err
-					}
-					return hub.StripView(pending.Data), hub.ReceiptsView(activity.Data), nil
-				}
-			}}),
-			Templates: chatpages.Templates(),
-			Home:      "/chat",
+			Module: func(_ chi.Router, d *web.Deps) {
+				svc := sync.OnceValue(func() *asstapp.Service { return pageAssistant(m.Jobs.Service)(d) })
+				threadAPI(d, svc, runEvents(d, svc))
+			},
 			Nav: []web.NavItem{
 				{Group: "Assistant", Label: "Chat", URL: "/chat", Icon: "messages-square", Page: "chat", Brand: true, Order: 10},
 				{Section: "library", Label: "Knowledge", URL: "/library/knowledge", Icon: "book-open", Page: "library_knowledge", Order: 5},

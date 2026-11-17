@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -187,15 +186,16 @@ func TestConnectionsHTTPTestAndSavePreservesThePriorConfigOnFailure(t *testing.T
 		return checked != nil
 	})
 
-	if code, body := s.conn("/test", url.Values{"id": {"service/qbittorrent"}, "api_key": {"qbt_good"}}); code != http.StatusOK {
-		t.Fatalf("qBittorrent Test: %d %s", code, body)
+	c := webG4(t, s.base)
+	if got := connPutG4(c, "service/qbittorrent", "", map[string]string{"api_key": "qbt_good"}); got.status != http.StatusOK {
+		t.Fatalf("qBittorrent Test: %d %s", got.status, got.body)
 	}
 	if got := connectionState(t, dir, "service/qbittorrent"); got != "ok" {
 		t.Fatalf("state after a passing test = %q", got)
 	}
 	gate.set(http.StatusInternalServerError)
-	if code, body := s.conn("/test", url.Values{"id": {"service/qbittorrent"}, "api_key": {"qbt_other"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "test failed") {
-		t.Fatalf("failing Test: %d", code)
+	if got := connPutG4(c, "service/qbittorrent", "", map[string]string{"api_key": "qbt_other"}); got.status != http.StatusUnprocessableEntity || !strings.Contains(got.body, "test failed") {
+		t.Fatalf("failing Test: %d %s", got.status, got.body)
 	}
 	if got := connectionState(t, dir, "service/qbittorrent"); got != "ok" {
 		t.Fatalf("a failed candidate replaced the working state: %q", got)
@@ -255,8 +255,8 @@ func TestConnectionsRefuseToStoreACredentialInAPlaintextDatabase(t *testing.T) {
 	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfig(t, dir, srv.URL, ca, ""))
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
-	if code, body := s.conn("/test", url.Values{"id": {"service/qbittorrent"}, "api_key": {"qbt_good"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "encrypted database") {
-		t.Fatalf("a credential save into a plaintext database: %d %.300s", code, body)
+	if got := connPutG4(webG4(t, s.base), "service/qbittorrent", "", map[string]string{"api_key": "qbt_good"}); got.status != http.StatusConflict || !strings.Contains(got.body, "encrypted database") {
+		t.Fatalf("a credential save into a plaintext database: %d %.300s", got.status, got.body)
 	}
 	var n int
 	if err := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t)).Read.QueryRow(

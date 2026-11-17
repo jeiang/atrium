@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -212,23 +210,13 @@ func TestServeWatchFollowsAccountsChangedAtRuntime(t *testing.T) {
 	if health := watchHealth(t, opsBase()); len(health) != 1 || health["mail-watch/home"].Status != "running" {
 		t.Fatalf("healthz mail watches %+v, want only home", health)
 	}
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	if code, _, _ := fetch(t, client, http.MethodGet, base+"/settings/mail", nil); code != http.StatusOK {
-		t.Fatalf("mail settings: %d", code)
-	}
-	add := url.Values{"id": {"work"}, "label": {"Work"}, "preset": {"icloud"}, "login": {"me@work.test"}, "password": {"work-pass"}, "auth_method": {"password"}}
-	if code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/mail/accounts", add); code != http.StatusOK {
-		t.Fatalf("add work = %d: %.300s", code, body)
-	}
+	browser := webG3(t, base)
+	okG3(t, "add work", browser.do(http.MethodPost, "/web/v1/mail/accounts", map[string]any{"id": "work", "label": "Work", "preset": "icloud", "login": "me@work.test", "password": "work-pass", "auth_method": "password"}))
 	waitUntil(t, 60*time.Second, "the added account to get its watch", func() bool {
 		return serviceStarts(logs, mailrun.WatchServiceName("work")) == 1 && work.Idling() == 1
 	})
 
-	update := url.Values{"label": {"Work"}, "login": {"me@work2.test"}, "password": {"work2-pass"}, "enabled": {"on"}, "auth_method": {"password"}}
-	if code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/mail/accounts/work", update); code != http.StatusOK {
-		t.Fatalf("re-credential work = %d: %.300s", code, body)
-	}
+	okG3(t, "re-credential work", browser.do(http.MethodPatch, "/web/v1/mail/accounts/work", map[string]any{"label": "Work", "login": "me@work2.test", "password": "work2-pass", "enabled": true, "auth_method": "password"}))
 	waitUntil(t, 60*time.Second, "the re-credentialed account to restart its watch", func() bool {
 		return serviceStarts(logs, mailrun.WatchServiceName("work")) == 2 && work.Idling() == 1
 	})
@@ -236,9 +224,7 @@ func TestServeWatchFollowsAccountsChangedAtRuntime(t *testing.T) {
 		t.Fatalf("the work watch failed %d times across the credential change, want a clean restart", n)
 	}
 
-	if code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/mail/accounts/work/remove", url.Values{}); code != http.StatusOK && code != http.StatusSeeOther {
-		t.Fatalf("remove work = %d: %.300s", code, body)
-	}
+	okG3(t, "remove work", browser.do(http.MethodDelete, "/web/v1/mail/accounts/work", nil))
 	waitUntil(t, 60*time.Second, "the removed account to lose its watch", func() bool {
 		_, present := watchHealth(t, opsBase())["mail-watch/work"]
 		return !present && work.Idling() == 0

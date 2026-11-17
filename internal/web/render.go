@@ -19,6 +19,7 @@ type Renderer struct {
 	nav           []tpl.NavItem
 	moduleEnabled func(string) bool
 	frame         []FrameFunc
+	shell         []ShellFunc
 	mu            sync.Mutex
 }
 

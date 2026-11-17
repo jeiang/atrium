@@ -4,11 +4,12 @@ import (
 	"context"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/apps/torrents"
 	torrentsapp "github.com/jeiang/atrium/internal/apps/torrents/application"
 	"github.com/jeiang/atrium/internal/apps/torrents/contract"
-	"github.com/jeiang/atrium/internal/apps/torrents/pages"
 	"github.com/jeiang/atrium/internal/apps/torrents/torrenttools"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/review"
@@ -52,12 +53,8 @@ func operations() ([]application.Definition, []application.Binding) {
 			torrentsapp.DescribeControl(),
 		}, []application.Binding{
 			{Kind: application.Tool, Target: torrenttools.NameDownloads, Uses: []application.Name{torrentsapp.DownloadsName}},
-			{Kind: application.HTML, Target: "GET /apps/media/torrents/{hash}/files", Uses: []application.Name{torrentsapp.TorrentFilesName}},
-			{Kind: application.HTML, Target: "POST /apps/media/torrents/{hash}/files", Uses: []application.Name{torrentsapp.SelectFilesName, torrentsapp.TorrentFilesName}},
-			{Kind: application.HTML, Target: "POST /apps/media/add", Uses: []application.Name{torrentsapp.AddName}},
 			{Kind: application.Tool, Target: torrenttools.NameAdd, Uses: []application.Name{torrentsapp.AddName}},
 			{Kind: application.Tool, Target: torrenttools.NameControl, Uses: []application.Name{torrentsapp.ControlName}},
-			{Kind: application.ProtocolOnly, Target: "GET /apps/media/add", Reason: "transport"},
 			{Kind: application.ProtocolOnly, Target: "downloads-watch", Reason: "lifecycle"},
 		}
 }
@@ -93,11 +90,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			return m.App.Watch(runtime.Unattended(ctx), contract.Deps{DB: d, Env: mc.Env})
 		}}},
 		Pages: []web.Page{{
-			Module: pages.Module(pages.Options{
-				Service: m.pageService,
-				Routes:  func(d *web.Deps, s *torrentsapp.Service) { routes(d, s) },
-			}),
-			Templates: pages.Templates(),
+			Module: func(_ chi.Router, d *web.Deps) { routes(d, m.pageService(d)) },
 		}},
 	}
 }
