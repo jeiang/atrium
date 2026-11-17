@@ -126,7 +126,11 @@
     if (refusedOffline(error) && error instanceof Error) {
       return { tone: 'warn', title: 'Cannot reach atrium', text: error.message };
     }
-    if (error instanceof ApiError && error.code === 'refused' && error.message.includes('pinned by host configuration')) {
+    if (
+      error instanceof ApiError &&
+      error.code === 'refused' &&
+      error.message.includes('pinned by host configuration')
+    ) {
       refreshConnections(client);
       return {
         tone: 'error',

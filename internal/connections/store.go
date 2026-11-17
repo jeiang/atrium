@@ -26,6 +26,7 @@ import (
 	"github.com/jeiang/atrium/internal/connections/transport"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
@@ -1517,7 +1518,7 @@ func (s *Store) save(ctx context.Context, id ID, current View, cand Candidate, r
 	}
 	now := s.stamp()
 	var previous State
-	err = s.d.WithTx(ctx, func(tx *sql.Tx) error {
+	err = settings.WithTx(ctx, s.d, func(tx *sql.Tx) error {
 		var revision int64
 		if err := tx.QueryRowContext(ctx, "SELECT revision, state FROM connections WHERE id = ?", id).Scan(&revision, &previous); err != nil {
 			return err
@@ -1591,7 +1592,7 @@ func (s *Store) Disconnect(ctx context.Context, id ID, commits ...Commit) error 
 		return err
 	}
 	now := s.stamp()
-	return s.d.WithTx(ctx, func(tx *sql.Tx) error {
+	return settings.WithTx(ctx, s.d, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM connection_credentials WHERE connection_id = ?", id); err != nil {
 			return err
 		}

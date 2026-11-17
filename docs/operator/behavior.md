@@ -268,6 +268,10 @@ connection's credential (the `icloud/<id>` connection uses the
 a host file rotation of that credential rechecks the sharing connection within
 the usual recheck limits. A detected rotation updates the host file row's
 `set_at` so that recheck sees the change; the value still comes from the file.
+A credential save or disconnect re-evaluates app requirements in the same
+transaction, so an app that waited for that credential (for example Calendar
+on the iCloud password) starts without a restart. The iCloud DAV login strips
+whitespace from the shared password the same way IMAP and SMTP do.
 If a database value is still found on a newly pinned slot at start, the host
 file replaces it and one audit entry records that. A deployment-pinned mail account declared without a
 password file takes its password from the UI, and that value stays.

@@ -132,6 +132,7 @@ func ICloudLogin(ctx context.Context, login Login) (config.CalDAVLogin, error) {
 	if password == "" {
 		password, _ = config.From(ctx).Password(account.Name)
 	}
+	password = config.NormalizePassword(password)
 	if password == "" {
 		return config.CalDAVLogin{}, config.NotConfigured("the iCloud app password is not set")
 	}
@@ -242,6 +243,14 @@ func validateICloud(c connections.Candidate) error {
 }
 
 func icloudPassword(ctx context.Context, lease *connections.Lease, account string) (string, error) {
+	password, err := rawICloudPassword(ctx, lease, account)
+	if password = config.NormalizePassword(password); err == nil && password == "" {
+		err = errors.New("the iCloud app password is not set")
+	}
+	return password, err
+}
+
+func rawICloudPassword(ctx context.Context, lease *connections.Lease, account string) (string, error) {
 	password, err := lease.OwnerCredential(ctx)
 	if err == nil && password != "" {
 		return password, nil

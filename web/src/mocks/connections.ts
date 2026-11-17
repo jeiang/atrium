@@ -389,7 +389,7 @@ function fields(row: ConnectionView): ConnectionField[] {
     });
   }
   for (const slot of declaredSlots[row.kind] ?? []) {
-    if (!row.credentials.some((credential) => credential.slot === slot)) {
+    if (!row.credentials.some((credential) => credential.slot === slot || credential.slot.endsWith(`/${slot}`))) {
       out.push({ name: slot, type: 'secret', secret: true, host_owned: false, present: false });
     }
   }

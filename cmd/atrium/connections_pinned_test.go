@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jeiang/atrium/internal/apps/calendar"
 	"github.com/jeiang/atrium/internal/apps/calendar/caldavtest"
@@ -129,13 +128,8 @@ func TestSavingAnUnpinnedMailPasswordRechecksTheICloudConnectionThatSharesIt(t *
 	if ran := runApp(t, "connections", "list"); ran.code != 0 {
 		t.Fatalf("connections list: %d %s", ran.code, ran.stderr)
 	}
-	d := keyedDB(t, filepath.Join(dir, "atrium.db"))
-	if _, err := d.Write.Exec("INSERT INTO connection_credentials (connection_id, slot, source, value, set_at, set_by) "+
-		"VALUES ('mail/icloud', 'mail/icloud/password', 'database', 'wrong', ?, 'operator')", float64(time.Now().Add(-time.Minute).Unix())); err != nil {
-		t.Fatal(err)
-	}
 	if view := testICloudConnection(t); view.State != "needs_reauth" {
-		t.Fatalf("the iCloud connection with a wrong mail password = %+v, want needs_reauth", view)
+		t.Fatalf("the iCloud connection with no mail password = %+v, want needs_reauth", view)
 	}
 
 	token := localAPIToken(t, "recheck")
@@ -149,6 +143,16 @@ func TestSavingAnUnpinnedMailPasswordRechecksTheICloudConnectionThatSharesIt(t *
 	if state := connectionState(t, dir, "icloud/icloud"); state != "needs_reauth" {
 		t.Fatalf("icloud/icloud after the start checks = %q, want needs_reauth", state)
 	}
-	apiData(t, s.do(http.MethodPatch, "/api/v1/connections/mail/icloud", token, map[string]any{"credentials": map[string]string{"mail/icloud/password": davPassword}}), http.StatusOK)
+	reason := ""
+	if err := keyedDB(t, filepath.Join(dir, "atrium.db")).Read.QueryRow("SELECT reason FROM connections WHERE id = 'icloud/icloud'").Scan(&reason); err != nil || !strings.Contains(reason, "not set") {
+		t.Fatalf("icloud/icloud reason = %q (%v), want the password is not set", reason, err)
+	}
+	if resp := s.do(http.MethodPost, "/api/v1/calendar/sync", token, nil); resp.status == http.StatusOK {
+		t.Fatal("a calendar sync without a password succeeded")
+	}
+	// An app password pasted in groups with spaces behaves the same on the DAV path as on IMAP and SMTP.
+	spaced := davPassword[:6] + " " + davPassword[6:13] + " " + davPassword[13:]
+	apiData(t, s.do(http.MethodPatch, "/api/v1/connections/mail/icloud", token, map[string]any{"credentials": map[string]string{"mail/icloud/password": spaced}}), http.StatusOK)
 	waitFor(t, func() bool { return connectionState(t, dir, "icloud/icloud") == "ok" })
+	apiData(t, s.do(http.MethodPost, "/api/v1/calendar/sync", token, nil), http.StatusOK)
 }

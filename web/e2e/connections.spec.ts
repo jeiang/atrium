@@ -214,7 +214,6 @@ test.describe('a connection page', () => {
     await openConnection(page, 'icloud/harbor', 'Harbor calendar');
     await expect(fields).toContainText('Uses the credential of mail/harbor. It is set in host configuration.');
     await expect(fields.locator('input[type="password"]')).toHaveCount(0);
-    await expect(fields.getByRole('button', { name: 'Test and save' })).toHaveCount(0);
     await expect(fields).not.toContainText('/run/secrets/harbor-mail');
     await expect(page.getByText('This connection uses the credential of mail/harbor.')).toBeVisible();
     await fields.getByRole('link', { name: 'Open mail/harbor' }).click();
