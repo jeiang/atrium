@@ -94,15 +94,20 @@ func TestTMDBRequestFailureReachesConnectionHealth(t *testing.T) {
 		}
 		return rows, noop, foreign
 	}
-	// Let the start check finish and age it past the 5 minute limit, so the
-	// failed request below is the one that triggers the check.
-	waitFor(t, func() bool { rows, _, _ := observed(); return rows > 0 })
+	// Let the start check settle and age it past the 5 minute limit, so the
+	// failed request below is the one that triggers the next check. The health
+	// watch takes request outcomes between its passes, and the start pass also
+	// waits on the unreachable qBittorrent host, so allow it a minute.
+	waitFor(t, func() bool {
+		state := connectionState(t, dir, "service/tmdb")
+		return state != "" && state != "untested"
+	})
 	if _, err := d.Write.Exec("UPDATE connections SET checked_at = ? WHERE id = 'service/tmdb'", float64(time.Now().Add(-10*time.Minute).Unix())); err != nil {
 		t.Fatal(err)
 	}
 	status.Store(http.StatusInternalServerError)
 	_, _, _ = fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns+again", nil)
-	waitFor(t, func() bool { return connectionState(t, dir, "service/tmdb") == "failing" })
+	waitUntil(t, 60*time.Second, "the failed TMDB request to check the connection", func() bool { return connectionState(t, dir, "service/tmdb") == "failing" })
 
 	for i := range 5 {
 		_, _, _ = fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns+"+strconv.Itoa(i), nil)
@@ -113,7 +118,7 @@ func TestTMDBRequestFailureReachesConnectionHealth(t *testing.T) {
 	}
 	status.Store(http.StatusForbidden)
 	_, _, _ = fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns+forbidden", nil)
-	waitFor(t, func() bool { rows, _, _ := observed(); return rows > baseRows })
+	waitUntil(t, 60*time.Second, "the refused TMDB request to check the connection", func() bool { rows, _, _ := observed(); return rows > baseRows })
 	rows, noop, foreign := observed()
 	if rows-baseRows != 1 || noop != baseNoop || foreign != 0 {
 		t.Fatalf("observe-health audit after six failed requests and one recheck: %d rows, %d noop, %d not by the health service", rows-baseRows, noop-baseNoop, foreign)
