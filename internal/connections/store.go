@@ -1375,9 +1375,10 @@ func (s *Store) record(ctx context.Context, id ID, revision int64, grace time.Du
 			return err
 		}
 		res, err := tx.ExecContext(ctx,
-			"UPDATE connections SET state = ?, reason = ?, checked_at = ?, last_ok_at = COALESCE(?, last_ok_at), reauth_at = COALESCE(?, reauth_at), results_json = ?, updated_at = ? "+
+			"UPDATE connections SET state = ?, reason = ?, checked_at = ?, last_ok_at = COALESCE(?, last_ok_at), "+
+				"reauth_at = CASE WHEN ? IS NULL THEN NULL WHEN state = 'needs_reauth' THEN COALESCE(reauth_at, ?) ELSE ? END, results_json = ?, updated_at = ? "+
 				"WHERE id = ? AND revision = ?",
-			state, reason, now, lastOK, reauthAt, string(raw), now, id, revision)
+			state, reason, now, lastOK, reauthAt, reauthAt, reauthAt, string(raw), now, id, revision)
 		if err != nil {
 			return err
 		}
