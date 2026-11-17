@@ -255,10 +255,9 @@ test.describe('calendar on a desktop', () => {
     await expect(card.getByRole('link', { name: 'Candidates' })).toBeVisible();
     await card.getByRole('link', { name: 'Week' }).click();
     await expect(page).toHaveURL(/\/apps\/calendar\/week$/);
-    await expect(page.getByRole('navigation', { name: 'Calendar' }).getByRole('link', { name: 'Week' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
+    await expect(
+      page.getByRole('navigation', { name: 'Calendar' }).getByRole('link', { name: 'Week' }),
+    ).toHaveAttribute('aria-current', 'page');
     await expect(page.locator('.rail').getByRole('link', { name: 'Calendar' })).toHaveAttribute('aria-current', 'page');
   });
 });
