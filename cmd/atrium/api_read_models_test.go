@@ -94,15 +94,22 @@ func TestReadModelsOnBothSurfaces(t *testing.T) {
 	}
 
 	var bodies []string
+	counters := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	both := func(path string) apiReply {
 		t.Helper()
+		before := readRevisions(t, counters)
 		bearer := s.do(http.MethodGet, "/api/v1"+path, token, nil)
 		cookie := browser.do(http.MethodGet, "/web/v1"+path, nil)
 		if bearer.status != http.StatusOK || cookie.status != http.StatusOK || bearer.body != cookie.body {
 			t.Fatalf("%s differs between the surfaces: %d %.300s / %d %.300s", path, bearer.status, bearer.body, cookie.status, cookie.body)
 		}
-		if tag := bearer.header.Get("ETag"); tag == "" || s.do(http.MethodGet, "/api/v1"+path, token, nil, "If-None-Match", tag).status != http.StatusNotModified {
-			t.Fatalf("%s is not conditional: ETag %q", path, tag)
+		tag := bearer.header.Get("ETag")
+		if tag == "" {
+			t.Fatalf("%s has no ETag", path)
+		}
+		if again := s.do(http.MethodGet, "/api/v1"+path, token, nil, "If-None-Match", tag); again.status != http.StatusNotModified {
+			t.Fatalf("%s is not conditional at %s: ETag %q then %d %q, same body %t\nrevisions before %s\nrevisions after  %s",
+				path, time.Now().Format("15:04:05.000"), tag, again.status, again.header.Get("ETag"), again.body == bearer.body, before, readRevisions(t, counters))
 		}
 		bodies = append(bodies, bearer.body)
 		return bearer
@@ -196,4 +203,13 @@ func TestReadModelsOnBothSurfaces(t *testing.T) {
 			}
 		}
 	}
+}
+
+func readRevisions(t *testing.T, d *db.DB) string {
+	t.Helper()
+	var out string
+	if err := d.Read.QueryRow("SELECT COALESCE(group_concat(scope || '=' || value, ' '), '') FROM (SELECT scope, value FROM read_revisions ORDER BY scope)").Scan(&out); err != nil {
+		t.Fatal(err)
+	}
+	return out
 }
