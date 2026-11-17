@@ -552,6 +552,25 @@ With the Mail module off, the entry, its tabs and its pages are gone.
   operator action. The sent-message copy has a narrowly scoped Sent APPEND
   authorization. A send with an unknown SMTP result cannot be sent again until
   resolved. A stale draft edit returns 409 without replacing the stored draft.
+- The message page and API let the operator archive, mark read or unread,
+  flag or unflag, reply and forward. Archive, read and flag are operator
+  writes: each records an `operator_mail` effect before IMAP, shows on
+  Activity, and can be undone. They are refused in shadow mode and run while
+  paused, because pause stops only automatic work. Archive copies to the
+  account's `Archive` folder (or the folder flagged `\Archive`), then STORE
+  Deleted and UID EXPUNGE, never IMAP MOVE; on Gmail it removes the `\Inbox`
+  label. It refuses an account with no archive folder rather than creating
+  one, and refuses a message in a protected folder. A write whose outcome is
+  unknown is not retried, and later writes to that message return
+  `write_blocked` until the effect is resolved on Activity. The assistant has
+  no tool for these actions.
+- Reply and forward create local drafts and send nothing. A reply goes to the
+  Reply-To address, or else the sender, with the original quoted and its
+  threading headers kept. A forward does not carry attachments: drafts have no
+  attachment storage, so the forwarded body lists the attachment names
+  instead. The operator can also start a new draft with `POST /drafts`.
+- The Loops page links each loop to its message instead of starting a paid
+  assistant run to draft a reply.
 
 ### Long passes and busy work
 
