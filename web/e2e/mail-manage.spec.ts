@@ -109,6 +109,29 @@ test.describe('Mail rules and decisions', () => {
     await expect(page.getByRole('list', { name: 'Decisions it made' }).getByRole('article')).toHaveCount(3);
     expect(sent).toEqual(['DELETE /mail/rules/newsletters']);
   });
+
+  test('rules show their order, say the first match wins, and move by keyboard', async ({ page }) => {
+    const sent = writes(page);
+    await gotoShell(page, '/apps/mail/rules');
+    await expect(page.getByText('The first rule that matches a message wins')).toHaveCount(1);
+    const headings = rules(page).getByRole('link');
+    await expect(headings).toHaveCount(4);
+    const [one = '', two = ''] = await headings.allTextContents();
+    const first = rules(page).getByRole('article').first();
+    await expect(first.getByRole('button', { name: /up$/ })).toBeDisabled();
+    await expect(rules(page).getByRole('article').last().getByRole('button', { name: /down$/ })).toBeDisabled();
+    await first.getByRole('button', { name: /down$/ }).focus();
+    await page.keyboard.press('Enter');
+    await expect(toast(page, 'is now rule 2.')).toBeVisible();
+    await expect(headings.nth(0)).toHaveText(two);
+    await expect(headings.nth(1)).toHaveText(one);
+    await expect(rules(page).getByRole('article').nth(1).getByRole('button', { name: /down$/ })).toBeFocused();
+    await rules(page).getByRole('article').nth(1).getByRole('button', { name: /up$/ }).focus();
+    await page.keyboard.press('Enter');
+    await expect(headings.nth(0)).toHaveText(one);
+    await expect(rules(page).getByRole('article').first().getByRole('button', { name: /down$/ })).toBeFocused();
+    expect(sent).toEqual(['PUT /mail/rules/order', 'PUT /mail/rules/order']);
+  });
 });
 
 test.describe('Mail mode', () => {
@@ -225,6 +248,24 @@ test.describe('Mail mode unknown outcome', () => {
     await expect(page.getByText('The outcome is unknown')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Go live' })).not.toHaveAttribute('aria-disabled', 'true');
   });
+
+  test('an unknown move is sent once and blocks moves until the order is checked', async ({ page }) => {
+    const sent = writes(page);
+    await useScenario(page, { mailManage: { command: 'unknown' } });
+    await gotoShell(page, '/apps/mail/rules');
+    const list = rules(page);
+    await expect(list.getByRole('link')).toHaveCount(4);
+    const [, two = ''] = await list.getByRole('link').allTextContents();
+    await list.getByRole('article').first().getByRole('button', { name: /down$/ }).click();
+    await expect(page.getByText('The outcome is unknown')).toBeVisible();
+    for (const button of await list.getByRole('button').all()) await expect(button).toBeDisabled();
+    expect(sent).toEqual(['PUT /mail/rules/order']);
+    await page.getByRole('button', { name: 'Check the order' }).click();
+    await expect(page.getByText('The outcome is unknown')).toHaveCount(0);
+    await expect(list.getByRole('link').nth(0)).toHaveText(two);
+    await expect(list.getByRole('article').nth(1).getByRole('button', { name: /up$/ })).toBeEnabled();
+    expect(sent).toEqual(['PUT /mail/rules/order']);
+  });
 });
 
 test.describe('Mail accounts', () => {
@@ -264,6 +305,16 @@ test.describe('Mail management offline', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await page.goto('/apps/mail/rules/bills');
     await expect(page.getByText('Cannot reach atrium').first()).toBeVisible();
+    expect(sent).toEqual([]);
+  });
+
+  test('offline turns the rule order buttons off and sends nothing', async ({ page }) => {
+    const sent = writes(page);
+    await gotoShell(page, '/apps/mail/rules');
+    await expect(rules(page).getByRole('button', { name: /down$/ }).first()).toBeEnabled();
+    await goUnreachable(page);
+    for (const button of await rules(page).getByRole('button').all()) await expect(button).toBeDisabled();
+    await rules(page).getByRole('button', { name: /down$/ }).first().click({ force: true });
     expect(sent).toEqual([]);
   });
 });
