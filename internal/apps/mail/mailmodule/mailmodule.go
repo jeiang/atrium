@@ -74,6 +74,7 @@ func Requirements() []module.Requirement {
 func SettingGroups() []settings.Group {
 	return []settings.Group{
 		{Name: "safety", Title: "Safety", Keys: []string{mail.KeyWriteCap}},
+		{Name: "filing", Title: "Filing", Keys: []string{mail.KeyUncertainDest}},
 		{Name: "loops", Title: "Open loops", Keys: []string{
 			config.KeyLoopsWaitingAfterDays, config.KeyLoopsRemindAheadDays, config.KeyLoopsRemindHour, config.KeyLoopsSnoozeDefaultDays,
 		}},
