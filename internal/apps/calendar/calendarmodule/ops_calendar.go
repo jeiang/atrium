@@ -9,7 +9,7 @@ func (m Module) calendarOperations() ([]application.Definition, []application.Bi
 	tool := func(target string, name application.Name) application.Binding {
 		return application.Binding{Kind: application.Tool, Target: target, Uses: []application.Name{name}}
 	}
-	defs := append(append(calapp.Describe(), calapp.DescribePasses()...), calapp.DescribeWrites()...)
+	defs := append(append(append(calapp.Describe(), calapp.DescribeCalendars()), calapp.DescribePasses()...), calapp.DescribeWrites()...)
 	return defs, append(m.calendarRoutes(nil), []application.Binding{
 		{Kind: application.CLI, Target: "calendar sync", Uses: []application.Name{calapp.SyncName}},
 		{Kind: application.CLI, Target: "calendar candidates", Uses: []application.Name{calapp.DraftCandidatesName}},

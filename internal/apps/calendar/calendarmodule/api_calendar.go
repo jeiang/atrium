@@ -26,18 +26,26 @@ type EventsRequest struct {
 }
 
 type Event struct {
-	UID      string `json:"uid"`
-	Calendar string `json:"calendar"`
-	Start    string `json:"start"`
-	End      string `json:"end"`
-	Title    string `json:"title"`
-	Location string `json:"location"`
+	UID       string `json:"uid"`
+	Calendar  string `json:"calendar"`
+	Target    string `json:"target,omitempty" api:"enum=icloud|google|birthdays"`
+	ReadOnly  bool   `json:"read_only,omitempty"`
+	Start     string `json:"start"`
+	End       string `json:"end"`
+	AllDay    bool   `json:"all_day,omitempty"`
+	Title     string `json:"title"`
+	Location  string `json:"location"`
+	Notes     string `json:"notes,omitempty"`
+	Recurring bool   `json:"recurring,omitempty"`
+	Revision  string `json:"revision,omitempty"`
 }
 
 type Events struct {
 	Events    []Event  `json:"events"`
 	Truncated bool     `json:"truncated"`
 	Notes     []string `json:"notes"`
+	Today     string   `json:"today,omitempty"`
+	Timezone  string   `json:"timezone,omitempty"`
 }
 
 type FreeSlotsRequest struct {
@@ -77,12 +85,16 @@ func (m Module) calendarRoutes(d *web.Deps) []application.Binding {
 	return append([]application.Binding{
 		api.Query(d, calapp.Describe()[0], application.APIShape{Area: "home", Errors: []application.Code{application.Invalid}},
 			"GET /calendar/events", func(ctx context.Context, in EventsRequest) (application.Read[Events], error) {
-				read, err := reads().List(ctx, calapp.ListInput{Start: in.From, End: in.To, Calendar: in.Calendar})
+				read, err := reads().List(ctx, calapp.ListInput{Start: in.From, End: in.To, Calendar: in.Calendar, Detail: true})
 				if err != nil {
 					return application.Read[Events]{}, err
 				}
 				out, err := retype[Events](read.Data.Value)
 				return application.Read[Events]{Revision: read.Revision, Data: out}, err
+			}),
+		api.Query(d, calapp.DescribeCalendars(), application.APIShape{Area: "home", Description: "The calendars events can be read from and written to. The id is the calendar path segment of the event routes and the calendar of POST /calendar/events; read_only calendars take no writes. today and timezone are the server's date and zone."},
+			"GET /calendar/calendars", func(ctx context.Context, in calapp.CalendarsInput) (application.Read[calapp.CalendarList], error) {
+				return reads().Calendars(ctx, in)
 			}),
 		api.Query(d, calapp.Describe()[1], application.APIShape{Area: "home", Errors: []application.Code{application.Invalid}},
 			"GET /calendar/free-slots", func(ctx context.Context, in FreeSlotsRequest) (application.Read[FreeSlots], error) {

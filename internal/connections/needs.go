@@ -36,19 +36,20 @@ const (
 )
 
 type Binding struct {
-	Module       string   `json:"module"`
-	Active       bool     `json:"active"`
-	Kind         Kind     `json:"kind"`
-	Capability   string   `json:"capability"`
-	Soft         bool     `json:"soft"`
-	Features     []string `json:"features"`
-	Candidates   []ID     `json:"candidates"`
-	Connection   ID       `json:"connection,omitempty"`
-	State        State    `json:"state"`
-	Reason       string   `json:"reason,omitempty"`
-	Met          bool     `json:"met"`
-	Availability string   `json:"availability"`
-	Repair       string   `json:"repair,omitempty"`
+	Module          string   `json:"module"`
+	Active          bool     `json:"active"`
+	Kind            Kind     `json:"kind"`
+	Capability      string   `json:"capability"`
+	Soft            bool     `json:"soft"`
+	Features        []string `json:"features"`
+	Candidates      []ID     `json:"candidates"`
+	Connection      ID       `json:"connection,omitempty"`
+	ConnectionLabel string   `json:"connection_label,omitempty"`
+	State           State    `json:"state"`
+	Reason          string   `json:"reason,omitempty"`
+	Met             bool     `json:"met"`
+	Availability    string   `json:"availability"`
+	Repair          string   `json:"repair,omitempty"`
 }
 
 type Repair struct {
@@ -219,7 +220,7 @@ func (r *Registry) Resolve(views []View) Dependencies {
 		}
 		switch {
 		case bound != nil:
-			b.Connection = bound.ID
+			b.Connection, b.ConnectionLabel = bound.ID, bound.Label
 			b.State, b.Reason = CapabilityState(*bound, n.Capability)
 			if class := RepairClass(b.State); class != "" && bound.Idle == "" {
 				b.Repair = RepairID(bound.ID, class)

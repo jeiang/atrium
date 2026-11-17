@@ -96,7 +96,11 @@ func googleEvents(ctx context.Context, env config.Env, set Settings, ws, we time
 			if err != nil {
 				return nil, err
 			}
-			out = append(out, Row{UID: item.Id, Calendar: Google, Start: start, End: end, Title: item.Summary, Location: item.Location})
+			row := Row{UID: item.Id, Calendar: Google, Target: Google, Start: start, End: end, Title: item.Summary, Location: item.Location,
+				Notes: item.Description, Recurring: len(item.Recurrence) > 0 || item.RecurringEventId != ""}
+			row.Revision = revisionOf(Event{Calendar: Google, UID: row.UID, Title: row.Title, Start: fmtValue(start, tz), End: fmtValue(end, tz),
+				AllDay: start.isDate(), Location: row.Location, Notes: row.Notes})
+			out = append(out, row)
 		}
 		token = reply.NextPageToken
 		if token == "" {
