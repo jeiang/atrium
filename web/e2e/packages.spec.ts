@@ -169,7 +169,10 @@ test.describe('Packages', () => {
     await done.getByRole('button', { name: 'Undo' }).click();
     await expect(toast(page, 'Tracking Juniper Outfitters 1Z999AA10123456784 again.')).toBeVisible();
     await expect(card(page, 1)).toContainText('Tracked with Ship24');
-    expect(paths(sent)).toEqual(['/web/v1/packages/1/untrack', expect.stringMatching(/^\/web\/v1\/effects\/\d+\/undo$/)]);
+    expect(paths(sent)).toEqual([
+      '/web/v1/packages/1/untrack',
+      expect.stringMatching(/^\/web\/v1\/effects\/\d+\/undo$/),
+    ]);
     expect(sent.every((entry) => entry.key)).toBe(true);
   });
 
@@ -237,7 +240,9 @@ test.describe('Packages', () => {
       await useScenario(page, { ...on, packages: { unknown: true } });
       await open(page);
       const sent = writes(page);
-      await card(page, 1).getByRole('button', { name: /^Stop tracking/ }).click();
+      await card(page, 1)
+        .getByRole('button', { name: /^Stop tracking/ })
+        .click();
       await expect(card(page, 1).getByText('The outcome is unknown')).toBeVisible();
       await expect(card(page, 1).getByText(/did not try again/)).toBeVisible();
       expect(paths(sent)).toEqual(['/web/v1/packages/1/untrack']);
@@ -249,10 +254,14 @@ test.describe('Packages', () => {
         packages: { refuse: { code: 'refused', message: 'The Ship24 monthly quota of 10 lookups is used up.' } },
       });
       await open(page);
-      await card(page, 2).getByRole('button', { name: /^Track/ }).click();
+      await card(page, 2)
+        .getByRole('button', { name: /^Track/ })
+        .click();
       await dialog(page).getByRole('button', { name: 'Track', exact: true }).click();
       await expect(dialog(page).getByText('atrium refused this')).toBeVisible();
-      await expect(dialog(page).getByText('The Ship24 monthly quota of 10 lookups is used up. Nothing was changed.')).toBeVisible();
+      await expect(
+        dialog(page).getByText('The Ship24 monthly quota of 10 lookups is used up. Nothing was changed.'),
+      ).toBeVisible();
     });
   });
 });
