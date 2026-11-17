@@ -25187,6 +25187,13 @@
         "parameters": [
           {
             "in": "header",
+            "name": "User-Agent",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
             "name": "Idempotency-Key",
             "schema": {
               "maxLength": 255,
