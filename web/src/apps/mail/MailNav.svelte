@@ -14,7 +14,7 @@
     <a class="mail-nav__link" href={link.href} aria-current={current === link.href ? 'page' : undefined}>
       {link.label}
       {#if link.leaves}
-        <Icon name="external" /><span class="visually-hidden">(older screen)</span>
+        <Icon name="external" /><span class="visually-hidden">, opens the current interface</span>
       {/if}
     </a>
   {/each}

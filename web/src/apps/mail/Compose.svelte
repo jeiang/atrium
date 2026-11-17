@@ -181,7 +181,7 @@
         sent.refused.length > 0
           ? `Sent to ${who}. The server refused ${sent.refused.join(', ')}.`
           : `Sent to ${who}.`,
-        { tone: sent.refused.length > 0 ? 'warn' : undefined },
+        { tone: sent.refused.length > 0 ? 'error' : 'neutral' },
       );
       phase = 'edit';
     } catch (error) {
