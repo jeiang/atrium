@@ -438,6 +438,9 @@ func (s *Store) damp(ctx context.Context, id ID, previous, next State) bool {
 	defer noticesMu.Unlock()
 	send := true
 	err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, "UPDATE connections SET notice_json = notice_json WHERE id = ?", id); err != nil {
+			return err
+		}
 		var raw string
 		if err := tx.QueryRowContext(ctx, "SELECT notice_json FROM connections WHERE id = ?", id).Scan(&raw); err != nil {
 			return err
