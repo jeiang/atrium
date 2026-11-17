@@ -116,18 +116,16 @@ func TestServeMirrorsCalDAVAndCardDAVOnSchedule(t *testing.T) {
 	b := localWebG5(t, base)
 	list := b.do(http.MethodGet, "/web/v1/schedules", nil)
 	var jobs struct {
-		Data struct {
-			Items []struct {
-				ID        int64 `json:"id"`
-				Protected bool  `json:"protected"`
-			} `json:"items"`
-		} `json:"data"`
+		Items []struct {
+			ID        int64 `json:"id"`
+			Protected bool  `json:"protected"`
+		} `json:"items"`
 	}
 	if list.status != http.StatusOK || !strings.Contains(list.body, string(passrun.CalDAV)) || json.Unmarshal([]byte(list.body), &jobs) != nil {
 		t.Fatalf("schedules: %d %.300s", list.status, list.body)
 	}
 	listed := false
-	for _, job := range jobs.Data.Items {
+	for _, job := range jobs.Items {
 		if job.ID == jobID {
 			listed = true
 			if !job.Protected {

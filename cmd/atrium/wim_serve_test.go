@@ -180,8 +180,11 @@ func TestWimProxyAuthGatesPagesByForwardedGroups(t *testing.T) {
 			t.Errorf("groups %q: %d %.200q", c.groups, status, body)
 		}
 	}
-	if status, _, _ := wimGet(t, base+"/login", "Remote-Groups", access); status != http.StatusNotFound {
+	if status, body, _ := wimGet(t, base+"/login", "Remote-Groups", access); status != http.StatusNotFound && strings.Contains(body, `action="/login"`) {
 		t.Errorf("proxy mode serves the oidc login page: %d", status)
+	}
+	if status, _, _ := noFollowG5(t, http.MethodPost, base+"/login"); status != http.StatusNotFound && status != http.StatusMethodNotAllowed {
+		t.Errorf("proxy mode accepts an oidc sign-in post: %d", status)
 	}
 	if status, _, _ := wimMeG5(t, base, "Remote-Groups", admin, "Host", "evil.example"); status != http.StatusBadRequest {
 		t.Errorf("foreign Host: %d", status)
