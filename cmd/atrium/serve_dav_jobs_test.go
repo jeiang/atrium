@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeiang/atrium/internal/calendar"
-	"github.com/jeiang/atrium/internal/calendar/caldavtest"
+	"github.com/jeiang/atrium/internal/apps/calendar/caldavtest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/unit"
@@ -81,7 +81,7 @@ func TestServeMirrorsCalDAVAndCardDAVOnSchedule(t *testing.T) {
 	srv.SetObject(caldavtest.CalendarPath(0)+"dentist.ics", dentistICS)
 	srv.SetObject(caldavtest.BookPath+"alice.vcf", aliceCard)
 	held := newHeldDAV(t, srv.URL)
-	setEnv(t, calendar.CalDAVEnv, held.URL+"/")
+	setEnv(t, davmirror.CalDAVEnv, held.URL+"/")
 	d := asstDB(t, dir)
 	declareJobsAndParkThem(t, d)
 	asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE declaration_key = ?", float64(time.Now().Unix())-3600, davJobKeys[0])

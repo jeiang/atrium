@@ -324,6 +324,7 @@ func (s *Scheduler) execute(ctx context.Context, claim Claim, fn func(context.Co
 		}
 		return nil
 	})
+	work, cause := withCause(work)
 	stop := make(chan struct{})
 	renewing := make(chan struct{})
 	go func() {
@@ -370,7 +371,10 @@ func (s *Scheduler) execute(ctx context.Context, claim Claim, fn func(context.Co
 	}
 	finished := s.Finish(done, claim, result)
 	if finished == nil && result.Status == StatusError {
-		s.failed(done, claim, result)
+		if cause.Load() {
+			causes.Store(causeRun{d: s.db, job: claim.Job.ID}, claim.JobRunID)
+		}
+		s.failed(done, claim, result, cause.Load())
 	}
 	s.settle(done, claim, finished)
 	return finished

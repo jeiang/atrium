@@ -104,14 +104,19 @@ func read[T any](ctx context.Context, s *Service, name application.Name, scopes 
 	if err != nil {
 		return application.Read[T]{}, err
 	}
+	var covered any
+	if shown != nil {
+		covered = shown(data)
+	}
+	return application.Read[T]{Revision: readRevision(name, counters, input, covered), Data: data}, nil
+}
+
+func readRevision(name application.Name, counters []state.Counter, input, shown any) application.Revision {
 	covered := struct {
 		Input any `json:"input"`
 		Shown any `json:"shown,omitempty"`
-	}{Input: input}
-	if shown != nil {
-		covered.Shown = shown(data)
-	}
-	return application.Read[T]{Revision: application.Revision(state.Revision(string(name), counters, covered, "operator")), Data: data}, nil
+	}{Input: input, Shown: shown}
+	return application.Revision(state.Revision(string(name), counters, covered, "operator"))
 }
 
 func invalid(field, message string) error {

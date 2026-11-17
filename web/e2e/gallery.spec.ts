@@ -11,7 +11,7 @@ import {
 } from './checks.ts';
 import { expect, galleryLayouts, layouts, test } from './fixtures.ts';
 
-const edgeSurfaces = ['header.bar', 'dialog.sheet'];
+const edgeSurfaces = ['.rail', '.tabbar', 'dialog.sheet'];
 
 async function gotoGallery(page: Page): Promise<void> {
   test.slow();
@@ -95,7 +95,19 @@ test.describe('reduced motion', () => {
 
 test.describe('keyboard focus', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
-  for (const section of ['buttons', 'links', 'fields', 'choices', 'cards', 'table', 'overlays', 'simulator']) {
+  for (const section of [
+    'buttons',
+    'links',
+    'fields',
+    'choices',
+    'cards',
+    'table',
+    'overlays',
+    'simulator',
+    'settings',
+    'apps',
+    'media',
+  ]) {
     test(`every stop in ${section} shows the focus ring`, async ({ page }) => {
       await gotoGallery(page);
       await expectFocusVisible(page, `[data-gallery="${section}"]`);
@@ -146,6 +158,21 @@ test.describe('behavior', () => {
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
     await expect(opener).toBeFocused();
+  });
+
+  test('a dialog opens again at once after Escape', async ({ page }) => {
+    await gotoGallery(page);
+    const opener = page.getByRole('button', { name: 'Rename thread' });
+    const dialog = page.getByRole('dialog', { name: 'Rename thread' });
+    await opener.focus();
+    await page.keyboard.press('Enter');
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await opener.focus();
+    await page.keyboard.press('Enter');
+    await expect(dialog).toBeVisible();
+    await page.waitForTimeout(300);
+    await expect(dialog).toBeVisible();
   });
 
   test('a pending confirm blocks Escape until it finishes', async ({ page }) => {

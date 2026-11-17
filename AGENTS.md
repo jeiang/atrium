@@ -39,6 +39,13 @@ settings the operator edits in the UI or pins from the host.
   with `nix develop -c` (no `--impure`).
 - Keep the required CI check passing. For an authorized merge, use
   `gh pr merge --auto --merge`.
+- CI on a pull request runs x86_64 only: the Go tests run on the runner in
+  shards (`tools/go-test-shard`, the `ci` dev shell, a Go cache saved from
+  `main`), and the Nix checks build in the groups of `.ci/targets.nix`,
+  the hermetic Go checks except the tests among them (the `go` group).
+  aarch64 and the hermetic Go test shards run on `main`. A new flake check joins
+  the `rest` group unless `.ci/targets.nix` names it; a check that compiles
+  the Go tree belongs in a named group or on the runner.
 - Deployment consumes this repository from a separate host configuration.
   A merge here does not deploy it.
 
@@ -162,7 +169,10 @@ settings the operator edits in the UI or pins from the host.
 - Public request limits are in-process code constants owned by each server
   instance. Do not move them into settings, a shared process, or a dependency,
   and never trust a forwarded client address from an untrusted peer.
-- Media writes touch only torrents tagged media. Preserve library group
+- Torrent writes go through `torrents.Intake` only. The operator may change
+  any torrent; agents and jobs change only torrents tagged `atrium` or
+  `media`, never remove a tag, and jobs remove only consumed, stopped
+  torrents. Preserve library group
   permissions and expiring signed file links; public links still check Host.
 - The `*.sql` files in `internal/db/schema/` are the v3 baseline
   (migration 1) and `testdata/schema/baseline.v3.txt` is its canonical dump;

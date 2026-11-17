@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/accounts"
 )
 
 type AccountSpec struct {
@@ -99,21 +98,6 @@ func (s *State) Account(name string) (AccountSpec, bool) {
 		}
 	}
 	return AccountSpec{}, false
-}
-
-func ExistingAccounts(ctx context.Context, q db.Querier) ([]AccountSpec, error) {
-	var out []AccountSpec
-	for _, spec := range From(ctx).Accounts() {
-		found, err := accounts.Exists(ctx, q, spec.Name)
-		if err != nil {
-			return nil, err
-		}
-		if !found {
-			continue
-		}
-		out = append(out, spec)
-	}
-	return out, nil
 }
 
 func (s *State) Preset(account string) string {

@@ -13,6 +13,7 @@ import (
 func Connections() []connections.Definition {
 	return []connections.Definition{{
 		Kind:            KindWebPush,
+		Offers:          []string{"delivery"},
 		CredentialSlots: []string{"vapid_private"},
 		Validate:        validatePushConnection,
 		Test:            testPushConnection,

@@ -8,26 +8,20 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/jeiang/atrium/tools/internal/units"
 )
 
-var owners = map[string]string{
-	"accounts":                           "mail",
-	"agent_events":                       "calendar",
+var platformOwners = map[string]string{
 	"attention_snoozes":                  "attention",
 	"auth_bearers":                       "auth",
 	"auth_logins":                        "auth",
 	"auth_sessions":                      "auth",
 	"commands":                           "application",
-	"commitments":                        "signals",
 	"connection_capabilities":            "connections",
 	"connection_credentials":             "connections",
 	"connections":                        "connections",
-	"context_ledger":                     "assistant",
-	"context_projections":                "assistant",
-	"corrections":                        "mail",
 	"db_key_history":                     "db",
-	"decisions":                          "mail",
-	"drafts":                             "mail",
 	"effect_claims":                      "ledger",
 	"effect_import_refs":                 "ledger",
 	"effect_resolutions":                 "ledger",
@@ -36,71 +30,34 @@ var owners = map[string]string{
 	"embed_index":                        "embed",
 	"embed_kb_":                          "embed",
 	"embed_message_":                     "embed",
-	"event_candidates":                   "calendar",
-	"events":                             "mail",
-	"export_pages":                       "kb",
-	"flag_decisions":                     "mail",
 	"inference_classification_deferrals": "inference",
 	"job_resource_leases":                "scheduler",
 	"job_run_threads":                    "scheduler",
 	"job_runs":                           "scheduler",
 	"jobs":                               "scheduler",
-	"kb_fts":                             "kb",
-	"kb_records":                         "kb",
-	"live_baseline":                      "mail",
-	"live_state":                         "mail",
-	"loop_overrides":                     "signals",
 	"mail_accounts":                      "config",
-	"mail_scans":                         "mail",
-	"mailboxes":                          "mail",
-	"media_channels":                     "media",
-	"media_seen":                         "media",
-	"media_state":                        "media",
-	"memory_fts":                         "assistant",
-	"memory_jobs":                        "assistant",
-	"memory_nodes":                       "assistant",
-	"memory_state":                       "assistant",
-	"memory_views":                       "assistant",
-	"message_fts":                        "mail",
-	"messages":                           "mail",
+	"notification_devices":               "notify",
 	"notifications":                      "notify",
 	"ntfy_channels":                      "notify",
 	"oauth_states":                       "connections",
-	"open_loops":                         "signals",
 	"operation_audit":                    "application",
-	"ops_findings":                       "serverops",
-	"ops_samples":                        "serverops",
-	"package_events":                     "mail",
-	"packages":                           "mail",
-	"projects":                           "assistant",
 	"proposals":                          "proposals",
-	"notification_devices":               "notify",
-	"webpush_devices":                    "notify",
 	"read_revisions":                     "application",
-	"record_links":                       "kb",
-	"rules":                              "mail",
-	"run_events":                         "assistant",
-	"run_streams":                        "assistant",
-	"runs":                               "assistant",
 	"schema_migrations":                  "db",
 	"secrets":                            "settings",
 	"settings":                           "settings",
 	"settings_audit":                     "settings",
-	"skills":                             "assistant",
-	"subagents":                          "assistant",
-	"tasks":                              "tasks",
-	"thread_files":                       "assistant",
-	"thread_fts":                         "assistant",
-	"thread_messages":                    "assistant",
-	"thread_plans":                       "assistant",
-	"thread_queue":                       "assistant",
-	"threads":                            "assistant",
-	"tool_calls":                         "assistant",
-	"tool_results":                       "assistant",
 	"usage":                              "inference",
 	"usage_counters":                     "webusage",
-	"watch_dismissed":                    "mail",
+	"webpush_devices":                    "notify",
 }
+
+type owner struct{ unit, platform string }
+
+var (
+	owners  = map[string]owner{}
+	unitSet units.Set
+)
 
 var invalidates = map[string]string{
 	"accounts":                           "mail",
@@ -131,6 +88,7 @@ var invalidates = map[string]string{
 	"job_runs":                           "jobs",
 	"jobs":                               "jobs",
 	"kb_records":                         "knowledge",
+	"library_requests":                   "media",
 	"live_baseline":                      "mail",
 	"live_state":                         "mail",
 	"loop_overrides":                     "mail",
@@ -149,7 +107,6 @@ var invalidates = map[string]string{
 	"ntfy_channels":                      "notify",
 	"oauth_states":                       "connections",
 	"open_loops":                         "mail",
-	"ops_findings":                       "ops",
 	"ops_samples":                        "ops",
 	"package_events":                     "mail",
 	"packages":                           "mail",
@@ -235,6 +192,9 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
+	if err := loadOwners(); err != nil {
+		fail(err)
+	}
 	if err := checkSchema(root); err != nil {
 		fail(err)
 	}
@@ -250,6 +210,50 @@ func main() {
 	}
 	fmt.Fprintf(os.Stderr, "tableownership: %d cross-module SQL sites\n", len(found))
 	os.Exit(1)
+}
+
+func loadOwners() error {
+	set, err := units.Load()
+	if err != nil {
+		return err
+	}
+	unitSet = set
+	for table, dir := range platformOwners {
+		owners[table] = owner{platform: dir}
+	}
+	var twice []string
+	for _, u := range set {
+		if len(u.Tables) > 0 && len(u.Packages) == 0 {
+			return fmt.Errorf("%s declares tables but claims no packages", u.Name)
+		}
+		for _, table := range u.Tables {
+			if prev, ok := owners[table]; ok {
+				twice = append(twice, fmt.Sprintf("%s (%s and %s)", table, prev.name(), u.Name))
+				continue
+			}
+			owners[table] = owner{unit: u.Name}
+		}
+	}
+	if len(twice) > 0 {
+		sort.Strings(twice)
+		return fmt.Errorf("tables with two owners: %s", strings.Join(twice, ", "))
+	}
+	return nil
+}
+
+func (o owner) name() string {
+	if o.unit != "" {
+		return o.unit
+	}
+	return "platform " + o.platform
+}
+
+func (o owner) allows(path, module string) bool {
+	if o.unit == "" {
+		return o.platform == module
+	}
+	u, _, ok := unitSet.Of(filepath.ToSlash(filepath.Dir(path)))
+	return ok && u.Name == o.unit
 }
 
 func fail(err error) {
@@ -288,15 +292,24 @@ func checkSchema(root string) error {
 	if err := checkRevisions(names, dropped, schema.String()); err != nil {
 		return err
 	}
-	var missing []string
+	var missing, stale []string
 	for name := range names {
 		if _, ok := owners[name]; !ok {
 			missing = append(missing, name)
 		}
 	}
+	for name, o := range owners {
+		if !names[name] {
+			stale = append(stale, name+" ("+o.name()+")")
+		}
+	}
 	if len(missing) > 0 {
 		sort.Strings(missing)
 		return fmt.Errorf("tables created in the schema without an owner: %s", strings.Join(missing, ", "))
+	}
+	if len(stale) > 0 {
+		sort.Strings(stale)
+		return fmt.Errorf("owned tables the schema does not create: %s", strings.Join(stale, ", "))
 	}
 	return nil
 }
@@ -500,9 +513,6 @@ func scan(root string) ([]violation, error) {
 
 func moduleOf(path string) string {
 	parts := strings.Split(path, "/")
-	if len(parts) > 2 && parts[0] == "internal" && parts[1] == "apps" {
-		return parts[2]
-	}
 	if len(parts) > 1 && parts[0] == "internal" {
 		return parts[1]
 	}
@@ -518,7 +528,7 @@ func inspect(path, module string, line int, text string) []violation {
 	for _, m := range sqlRef.FindAllStringSubmatch(text, -1) {
 		table := normalize(m[1])
 		owner, ok := owners[table]
-		if !ok || owner == module || seen[table] {
+		if !ok || owner.allows(path, module) || seen[table] {
 			continue
 		}
 		seen[table] = true

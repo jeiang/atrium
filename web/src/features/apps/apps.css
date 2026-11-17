@@ -1,0 +1,68 @@
+@import "../../tokens/gen/media.css";
+
+@layer components {
+  .apps-back {
+    justify-self: start;
+    min-inline-size: var(--target);
+  }
+
+  .apps-places {
+    margin-block-end: var(--s-6);
+  }
+
+  @media (--desktop) {
+    .apps-places {
+      display: none;
+    }
+  }
+
+  .app-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+    gap: var(--s-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .app-grid > li {
+    display: grid;
+    min-inline-size: 0;
+    scroll-margin-block: var(--s-6);
+  }
+
+  .app-card__state,
+  .app-need {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-1) var(--s-2);
+    align-items: center;
+    margin: 0;
+  }
+
+  .app-needs,
+  .app-links {
+    display: grid;
+    gap: var(--s-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .app-need__name {
+    font-weight: 600;
+  }
+
+  .app-need__reason {
+    overflow-wrap: anywhere;
+  }
+
+  .app-link {
+    gap: var(--s-1);
+    min-inline-size: var(--target);
+  }
+
+  .app-link > .icon {
+    color: var(--ink-3);
+  }
+}

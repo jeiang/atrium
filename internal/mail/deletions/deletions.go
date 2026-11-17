@@ -8,10 +8,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/apps/mail/rules"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
+	mailaccounts "github.com/jeiang/atrium/internal/mail/accounts"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/scanutil"
 	"github.com/jeiang/atrium/internal/ordmap"
@@ -258,7 +258,7 @@ func Scan(ctx context.Context, d *db.DB, ts float64) (scanutil.Result, error) {
 	if err != nil {
 		return scanutil.Result{}, err
 	}
-	accounts, err := config.ExistingAccounts(ctx, d.Read)
+	accounts, err := mailaccounts.Existing(ctx, d.Read)
 	if err != nil {
 		return scanutil.Result{}, err
 	}

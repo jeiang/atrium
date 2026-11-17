@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/apps/mail/message"
-	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/communications"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
@@ -87,7 +86,7 @@ func FlagAccount(ctx context.Context, d *db.DB, account string, judge *classify.
 			if err != nil {
 				return done, err
 			}
-			verdict, err = judge.JudgeFlag(ctx, classifier.MessageItem(account, row.ID),
+			verdict, err = judge.JudgeFlag(ctx, classify.MessageItem(account, row.ID),
 				classify.Message{Subject: row.Subject, FromName: row.FromName, FromAddr: row.FromAddr}, body)
 			switch {
 			case paid.Note(err):

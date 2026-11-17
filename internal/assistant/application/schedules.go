@@ -30,6 +30,7 @@ const (
 	ScheduleCancelName  application.Name = "assistant.schedule.cancel"
 	ScheduleListName    application.Name = "assistant.schedule.list"
 	ScheduleHistoryName application.Name = "assistant.schedule.history"
+	ScheduleRunsName    application.Name = "assistant.schedule.runs"
 	ScheduleAddName     application.Name = "assistant.schedule.add"
 	ScheduleRunNowName  application.Name = "assistant.schedule.run_now"
 
@@ -136,6 +137,7 @@ type ScheduleJob struct {
 
 type ScheduleRun struct {
 	ID          int64   `json:"id"`
+	JobID       int64   `json:"job_id,omitempty"`
 	JobName     string  `json:"job_name"`
 	Status      string  `json:"status"`
 	StartedText *string `json:"started_text"`
@@ -197,6 +199,10 @@ func DescribeScheduleHistory() application.Definition {
 	return describeRead[ScheduleHistoryInput, []ScheduleRun](ScheduleHistoryName)
 }
 
+func DescribeScheduleRuns() application.Definition {
+	return describeRead[ScheduleHistoryInput, []ScheduleRun](ScheduleRunsName)
+}
+
 func DescribeScheduleAdd() application.Definition {
 	return application.Describe[ScheduleAddInput, ScheduleChanged](ScheduleAddName, application.Command, []application.Authority{application.Operator}, application.NoEffect, true)
 }
@@ -208,19 +214,6 @@ func DescribeScheduleRunNow() application.Definition {
 func ScheduleRevision(j scheduler.Job) string {
 	sum := sha256.Sum256(fmt.Appendf(nil, "%d\x00%s\x00%s\x00%s\x00%s", j.ID, j.Name, j.Prompt, j.Schedule, j.State))
 	return hex.EncodeToString(sum[:8])
-}
-
-func revisionMatches(ifMatch, revision string) bool {
-	if strings.TrimSpace(ifMatch) == "" {
-		return true
-	}
-	for tag := range strings.SplitSeq(ifMatch, ",") {
-		tag = strings.TrimSpace(tag)
-		if tag == "*" || strings.Trim(strings.TrimPrefix(tag, "W/"), `"`) == revision {
-			return true
-		}
-	}
-	return false
 }
 
 func scheduleInstant(epoch *float64, loc *time.Location) *string {
@@ -282,7 +275,7 @@ func scheduleRunOf(run scheduler.ListedRun, zone *time.Location) ScheduleRun {
 	if strings.HasPrefix(hint, "skipped_") && (run.Tokens > 0 || run.Cost > 0) {
 		hint += "_partial"
 	}
-	return ScheduleRun{ID: run.ID, JobName: run.JobName, Status: run.Status, StartedText: scheduleStamp(&at, zone), Cost: run.Cost, Error: run.Error, ThreadID: run.ThreadID, Hint: hint}
+	return ScheduleRun{ID: run.ID, JobID: run.JobID, JobName: run.JobName, Status: run.Status, StartedText: scheduleStamp(&at, zone), Cost: run.Cost, Error: run.Error, ThreadID: run.ThreadID, Hint: hint}
 }
 
 func (s *Service) scheduleZone(ctx context.Context) (string, *time.Location, error) {
@@ -566,7 +559,7 @@ func (s *Service) ScheduleUpdate(ctx context.Context, in ScheduleUpdateInput) (a
 			if err != nil {
 				return ScheduleChanged{}, ledger.Result{}, err
 			}
-			if !revisionMatches(in.IfMatch, ScheduleRevision(*job)) {
+			if !application.Revision(ScheduleRevision(*job)).Matches(in.IfMatch) {
 				return ScheduleChanged{}, ledger.Result{}, &application.Error{Code: application.Precondition, Message: "The schedule changed since it was read; reload it and try again."}
 			}
 			def, known := scheduler.Declared(s.jobs, *job)

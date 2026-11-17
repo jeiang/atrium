@@ -113,8 +113,24 @@ func TestQueueListsEverythingThatNeedsTheOperatorWithOneCount(t *testing.T) {
 	for _, item := range all.Items {
 		byID[item.ID] = item
 	}
-	if p := byID[permission]; p.Kind != reviewapp.QueueAsk || p.WaitingFor != reviewapp.WaitingPermission || p.Module != unit.Assistant {
+	if p := byID[permission]; p.Kind != reviewapp.QueueAsk || p.WaitingFor != reviewapp.WaitingPermission || p.Module != unit.Assistant || p.ProposalKind != "permission" {
 		t.Fatalf("permission item: %+v", p)
+	}
+	backlogItem := byID[proposal]
+	if backlogItem.ProposalKind != "inbox_backlog" || backlogItem.Module == "" || byID["draft:1"].ProposalKind != "" {
+		t.Fatalf("proposal kind on queue items: %+v / %+v", backlogItem, byID["draft:1"])
+	}
+	scoped := queue("?module=" + backlogItem.Module)
+	if scoped.Total != all.Total || !slices.Contains(ids(scoped.Items), proposal) || slices.Contains(ids(scoped.Items), permission) {
+		t.Fatalf("queue?module=%s: total %d of %d, items %v", backlogItem.Module, scoped.Total, all.Total, ids(scoped.Items))
+	}
+	for _, item := range scoped.Items {
+		if item.Module != backlogItem.Module {
+			t.Fatalf("queue?module=%s lists %+v", backlogItem.Module, item)
+		}
+	}
+	if none := queue("?module=nothing"); len(none.Items) != 0 || none.Total != all.Total {
+		t.Fatalf("queue?module=nothing: %+v", none)
 	}
 	if q := byID[question]; q.Kind != reviewapp.QueueAsk || q.WaitingFor != reviewapp.WaitingAnswer || q.Title != "Which calendar should I use?" {
 		t.Fatalf("question item: %+v", q)

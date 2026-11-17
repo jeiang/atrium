@@ -8,7 +8,7 @@ import {
 } from './checks.ts';
 import { expect, layouts, routes, test } from './fixtures.ts';
 
-const edgeSurfaces = ['header.bar'];
+const edgeSurfaces = ['.rail', '.tabbar'];
 
 function token(scheme: 'light' | 'dark', name: string): string {
   const file = new URL(`../../design/tokens/color.${scheme}.tokens.json`, import.meta.url);
@@ -18,15 +18,15 @@ function token(scheme: 'light' | 'dark', name: string): string {
 
 test('the shell renders in the mock build', async ({ page }) => {
   await gotoShell(page, '/');
-  await expect(page).toHaveTitle('Today · atrium');
+  await expect(page).toHaveTitle('Home · atrium');
   await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
-  await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Today' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Home', exact: true })).toHaveAttribute('aria-current', 'page');
 });
 
 test('a route change moves focus to the heading and announces it', async ({ page }) => {
   await gotoShell(page, '/');
-  await page.getByRole('link', { name: 'Apps' }).click();
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Apps', exact: true }).click();
   await expect(page).toHaveURL(/\/apps$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Apps' })).toBeFocused();
   await expect(page.locator('[role="status"][aria-live="polite"]')).toHaveText('Apps');
@@ -36,7 +36,7 @@ test('a route change moves focus to the heading and announces it', async ({ page
 test('the production policy enforces Trusted Types', async ({ page, problems }) => {
   const response = await page.goto('/');
   expect(response?.headers()['content-security-policy']).toContain("require-trusted-types-for 'script'");
-  await expect(page.getByText('Signed in as Operator')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Account: Operator' })).toBeVisible();
   const outcome = await page.evaluate(() => {
     try {
       document.createElement('div').innerHTML = '<b>x</b>';

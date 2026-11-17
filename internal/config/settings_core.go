@@ -3,7 +3,6 @@ package config
 import (
 	"context"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -14,15 +13,12 @@ import (
 const (
 	KeyTZ                     = "tz"
 	KeyPublicURL              = "public_url"
-	KeySnoozeChoices          = "snooze_choices"
+	InitialTZEnv              = "ATRIUM_INITIAL_TZ"
 	KeyLoopsWaitingAfterDays  = "openloops_waiting_after_days"
 	KeyLoopsRemindAheadDays   = "openloops_remind_ahead_days"
 	KeyLoopsRemindHour        = "openloops_remind_hour"
 	KeyLoopsSnoozeDefaultDays = "openloops_snooze_default_days"
-	InitialTZEnv              = "ATRIUM_INITIAL_TZ"
 	coreModule                = "core"
-	webModule                 = "web"
-	defaultSnoozeChoices      = "1,3,7,14"
 )
 
 func HostSettings() []settings.HostDef {
@@ -34,11 +30,11 @@ func HostSettings() []settings.HostDef {
 func Settings() []settings.Def {
 	return []settings.Def{
 		settings.Value(settings.UI, settings.Def{
-			Key: KeyTZ, Module: coreModule, Type: settings.String, Default: Timezone,
-			Check: checkZone}),
-		settings.Value(settings.UI, settings.Def{
-			Key: KeySnoozeChoices, Label: "Snooze choices (days)", Module: webModule, Type: settings.String, Default: defaultSnoozeChoices,
-			Check: checkSnoozeChoices}),
+			Key: KeyTZ, Label: "Time zone", Module: coreModule, Type: settings.String, Default: Timezone,
+			Help: "Sets the day and month boundaries for schedules, calendar days and work hours, open loop reminders, package and mail reports, notifications, " +
+				"the Obsidian export and the attention view. Those read the zone once at start, so restart atrium to apply a change; " +
+				"budget months and classification counts read it live.",
+			Restart: true, Check: checkZone}),
 	}
 }
 
@@ -53,25 +49,6 @@ func checkPublicURL(value string) error {
 	u, err := url.Parse(strings.TrimSpace(value))
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return settings.Invalid("must be an http or https URL")
-	}
-	return nil
-}
-
-func snoozeDays(value string) ([]int, bool) {
-	var days []int
-	for _, part := range strings.Split(value, ",") {
-		n, err := strconv.Atoi(strings.TrimSpace(part))
-		if err != nil || n < 1 || n > 365 {
-			return nil, false
-		}
-		days = append(days, n)
-	}
-	return days, len(days) > 0
-}
-
-func checkSnoozeChoices(value string) error {
-	if _, ok := snoozeDays(value); !ok {
-		return settings.Invalid("must be comma-separated day counts between 1 and 365")
 	}
 	return nil
 }
@@ -115,16 +92,4 @@ func (s *State) PublicURL(env Env) string {
 
 func (s *State) HTTPTimeout(env Env) time.Duration {
 	return TuningHttpTimeoutSeconds * time.Second
-}
-
-func (s *State) SnoozeChoices(ctx context.Context, q db.Querier) ([]int, error) {
-	found, err := s.settings.Resolve(ctx, q, KeySnoozeChoices)
-	if err != nil {
-		return nil, err
-	}
-	days, ok := snoozeDays(found.Value)
-	if !ok {
-		return nil, settings.Invalid(KeySnoozeChoices + " " + checkSnoozeChoices(found.Value).Error())
-	}
-	return days, nil
 }

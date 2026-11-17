@@ -38,6 +38,8 @@ func newWalker() *walker {
 const atrium = "github.com/jeiang/atrium/internal/"
 
 var pinnedNames = map[string]string{
+	atrium + "apps/calendar.Event":                     "CalendarEvent",
+	atrium + "apps/calendar.Source":                    "CalendarSource",
 	atrium + "assistant/assistantmodule.apiAttachment": "ThreadAttachment",
 	atrium + "apps/mail/message.Attachment":            "MailAttachment",
 	atrium + "apps/mail/live.Action":                   "LiveAction",
@@ -45,8 +47,7 @@ var pinnedNames = map[string]string{
 	atrium + "assistant/assistantmodule.apiAbout":      "AboutPage",
 	atrium + "assistant/assistantmodule.apiAgenda":     "AgendaPage",
 	atrium + "assistant/assistantmodule.apiItem":       "TranscriptItem",
-	atrium + "mail/birthdays.Item":                     "BirthdayItem",
-	atrium + "media.Channel":                           "MediaChannel",
+	atrium + "apps/library.Channel":                    "MediaChannel",
 	atrium + "notify.Channel":                          "NotificationChannel",
 	atrium + "notify/application.KindRow":              "NotificationKindRow",
 	atrium + "inference.KindRow":                       "InferenceKindRow",
@@ -63,6 +64,7 @@ var pinnedNames = map[string]string{
 	atrium + "application/commands.Status":             "CommandStatus",
 	atrium + "apps/mail/live.Status":                   "LiveStatus",
 	atrium + "assistant/files.Summary":                 "FileSummary",
+	atrium + "homecard.Weather":                        "HomeWeather",
 }
 
 func componentName(t reflect.Type) string {

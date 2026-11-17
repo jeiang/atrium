@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/unit"
 )
@@ -52,7 +52,7 @@ func TestDeclaredSettingGroupSavesFromItsModulePage(t *testing.T) {
 
 func TestModuleWithASectionGetsAPageAndKeepsRefusalsThere(t *testing.T) {
 	t.Parallel()
-	unsetEnv(t, settingEnv(calendar.AppleIDKey))
+	unsetEnv(t, settingEnv(davmirror.AppleIDKey))
 	base := startSettingsServe(t, nil)
 	jar, err := cookiejar.New(nil)
 	if err != nil {

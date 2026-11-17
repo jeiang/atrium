@@ -35,6 +35,7 @@
   let menu = $state<HTMLDivElement>();
   let open = $state(false);
   let entry: 'first' | 'last' = 'first';
+  let pressing = false;
 
   function elements(): HTMLElement[] {
     return [...(menu?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
@@ -84,8 +85,16 @@
     event.preventDefault();
   }
 
+  function onTriggerPointerdown(): void {
+    pressing = true;
+    const release = () => (pressing = false);
+    addEventListener('pointerup', release, { once: true });
+    addEventListener('pointercancel', release, { once: true });
+  }
+
   function onFocusout(event: FocusEvent): void {
     const next = event.relatedTarget;
+    if (pressing) return;
     if (next instanceof Node && !menu?.contains(next) && next !== trigger) menu?.hidePopover();
   }
 
@@ -105,6 +114,7 @@
     'aria-expanded': open,
     'aria-controls': `${uid}-menu`,
     onkeydown: onTriggerKeydown,
+    onpointerdown: onTriggerPointerdown,
   });
 </script>
 

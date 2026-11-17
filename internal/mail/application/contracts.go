@@ -21,7 +21,6 @@ import (
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail/backlog"
-	"github.com/jeiang/atrium/internal/mail/birthdays"
 	"github.com/jeiang/atrium/internal/mail/corrections"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/ruleedit"
@@ -31,8 +30,8 @@ import (
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/pause"
 	"github.com/jeiang/atrium/internal/review"
-	"github.com/jeiang/atrium/internal/safety"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/unit"
@@ -77,7 +76,6 @@ const (
 	AgentMailMaxResults    = assistant.TuningAgentMailMaxResults
 	AgentMailBodyChars     = assistant.TuningAgentMailBodyChars
 	AgentMailMaxLoopsLimit = assistant.TuningAgentMailMaxLoopsLimit
-	BirthdaysMaxDays       = birthdays.MaxDays
 	PassResource           = mail.PassResource
 	MailTriage             = executors.MailTriage
 	TriageArchive          = executors.TriageArchive
@@ -112,10 +110,6 @@ func SearchText(value string) *string { return search.Text(value) }
 
 func SearchDay(value string, endOfDay bool) (*float64, error) { return search.Day(value, endOfDay) }
 
-func BirthdayDate(year int, month time.Month, day int) time.Time {
-	return birthdays.Date(year, month, day)
-}
-
 func Zone(ctx context.Context, env config.Env) (*time.Location, error) {
 	return scheduler.Zone(config.From(ctx).TZName(env))
 }
@@ -126,7 +120,7 @@ func (s *Service) TriageRow(ctx context.Context, messageID int64) (*triage.Row, 
 	return triage.Get(ctx, s.db.Read, messageID)
 }
 
-func (s *Service) Paused() bool { return safety.IsPaused(s.cfg.PausePath()) }
+func (s *Service) Paused() bool { return pause.Paused(s.cfg.PausePath()) }
 
 func (s *Service) ScansEnabled(ctx context.Context) bool {
 	flag, err := settings.From(ctx).Resolve(ctx, s.db.Read, module.FlagKey(unit.Mail))

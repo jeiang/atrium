@@ -98,7 +98,10 @@ func trackingJob(deps jobworker.Dependencies) scheduler.Definition {
 		Schedule: "0 * * * *", CarriedSetting: tracking.KeySchedulePackageTracking, Persistent: true, Timeout: 15 * time.Minute,
 		Spend: scheduler.ModelFree, Needs: []string{unit.Mail},
 		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
-			_, err := mailapp.New(e.Service.DB, e.Service.Cfg, e.Service.Env, e.Now).PollTrackers(ctx, struct{}{})
+			done, err := mailapp.New(e.Service.DB, e.Service.Cfg, e.Service.Env, e.Now).PollTrackers(ctx, struct{}{})
+			if err == nil && done.Data.Poll.Unmet != nil {
+				return jobworker.Result{}, done.Data.Poll.Unmet
+			}
 			return jobworker.Result{}, err
 		}),
 	}

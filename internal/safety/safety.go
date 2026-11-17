@@ -2,11 +2,6 @@ package safety
 
 import (
 	"context"
-	"errors"
-	"io/fs"
-	"os"
-	"path/filepath"
-	"time"
 
 	"github.com/jeiang/atrium/internal/config"
 )
@@ -57,30 +52,4 @@ func approvedProposal(ctx context.Context) (string, bool) {
 func ApprovalIsConsent(ctx context.Context) bool {
 	_, ok := approvedProposal(ctx)
 	return ok
-}
-
-func IsPaused(pausePath string) bool {
-	_, err := os.Stat(pausePath)
-	return err == nil
-}
-
-func SetPaused(pausePath string, paused bool) error {
-	if !paused {
-		if err := os.Remove(pausePath); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(pausePath), 0o777); err != nil {
-		return err
-	}
-	now := time.Now()
-	if os.Chtimes(pausePath, now, now) == nil {
-		return nil
-	}
-	f, err := os.OpenFile(pausePath, os.O_CREATE|os.O_WRONLY, 0o666)
-	if err != nil {
-		return err
-	}
-	return f.Close()
 }

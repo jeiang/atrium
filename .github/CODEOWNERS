@@ -9,6 +9,7 @@
 /internal/web/**/auth* @jeiang
 /internal/web/**/guard* @jeiang
 /internal/assistant/**/budget* @jeiang
+/internal/apps/torrents/intake.go @jeiang
 /third_party/go-imap/ @jeiang
 /nix/module.nix @jeiang
 /.github/ @jeiang

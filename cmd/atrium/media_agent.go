@@ -8,8 +8,8 @@ import (
 	"os"
 	"syscall"
 
+	"github.com/jeiang/atrium/internal/apps/library/mediaagent"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/mediaagent"
 	"github.com/jeiang/atrium/internal/sdnotify"
 )
 

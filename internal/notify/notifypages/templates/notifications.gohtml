@@ -37,7 +37,7 @@
   {{range $d.Channels}}
   <form method="post" action="/settings/notifications/channels/{{.Name}}/content" class="set-row" data-channel="{{.Name}}">
     <input type="hidden" name="csrf_token" value="{{$csrf}}">
-    <label class="capitalize" for="content-{{.Name}}">{{.Name}}</label>
+    <label class="capitalize" for="content-{{.Name}}">{{.Title}}</label>
     <select id="content-{{.Name}}" name="content" class="select">
       {{$c := .Content}}{{range (list "auto" "full" "title")}}<option value="{{.}}"{{if eq . $c}} selected{{end}}>{{.}}</option>{{end}}
     </select>

@@ -132,7 +132,8 @@ var receiptVerbs = map[string]string{
 	"mail_move": "Moved mail", "mail_folder_create": "Created a mail folder",
 	"draft_email_create": "Drafted an email", "draft_email_update": "Changed a draft",
 	"calendar_delete":  "Deleted a calendar event",
-	"media_add_magnet": "Added a download", "media_channel_add": "Started watching a show", "media_channel_remove": "Stopped watching a show",
+	"media_add_magnet": "Added a download", "download_add": "Added a download", "download_control": "Changed a download",
+	"media_channel_add": "Started watching a show", "media_channel_remove": "Stopped watching a show",
 	"schedule_create": "Created a schedule", "schedule_update": "Changed a schedule", "schedule_cancel": "Cancelled a schedule",
 	"track_package": "Started tracking a package", "ops_finding": "Filed a server finding",
 }
@@ -313,18 +314,21 @@ func (p *sourcePage) saw(k ActivityKey, rows, fetch int) {
 }
 
 func writeCategory(categories []review.Category, operation string) string {
-	fallback := ""
+	fallback, best, length := "", "", -1
 	for _, c := range categories {
 		if len(c.Operations) == 0 {
 			fallback = c.Name
 		}
 		for _, prefix := range c.Operations {
-			if strings.HasPrefix(operation, prefix) {
-				return c.Name
+			if strings.HasPrefix(operation, prefix) && len(prefix) > length {
+				best, length = c.Name, len(prefix)
 			}
 		}
 	}
-	return fallback
+	if length < 0 {
+		return fallback
+	}
+	return best
 }
 
 func effectFilter(categories []review.Category, origins []string, category string, limit int) ledger.Filter {
@@ -336,6 +340,13 @@ func effectFilter(categories []review.Category, origins []string, category strin
 		if len(c.Operations) > 0 {
 			for _, prefix := range c.Operations {
 				f.OperationLike = append(f.OperationLike, prefix+"%")
+				for _, other := range categories {
+					for _, longer := range other.Operations {
+						if other.Name != c.Name && len(longer) > len(prefix) && strings.HasPrefix(longer, prefix) {
+							f.OperationNotLike = append(f.OperationNotLike, longer+"%")
+						}
+					}
+				}
 			}
 			continue
 		}

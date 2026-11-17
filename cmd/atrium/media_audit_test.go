@@ -9,9 +9,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/apps/library"
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/media"
 )
 
 func mediaAudit(t *testing.T, d *db.DB, operation, want string) map[string]int {
@@ -54,7 +55,7 @@ func TestMediaAddSelectionDatabaseFailureAuditsPartial(t *testing.T) {
 	mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
-	qb.put(mnpTorrent{hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", name: "Dune.2021", tags: []string{media.TagMedia}, state: "stoppedDL", content: "Dune.2021", files: []mnpFile{{0, "Dune.2021.mkv", 0}}})
+	qb.put(mnpTorrent{hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", name: "Dune.2021", tags: []string{library.TagMedia}, state: "stoppedDL", content: "Dune.2021", files: []mnpFile{{0, "Dune.2021.mkv", 0}}})
 	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
 	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
@@ -65,7 +66,7 @@ func TestMediaAddSelectionDatabaseFailureAuditsPartial(t *testing.T) {
 	}
 	const hash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {mediaMagnet(hash, "Lanterns")}, "mode": {"media"}}, http.StatusBadGateway)
-	mediaEffectID(t, d, media.OpAddMagnet, hash, "done")
+	mediaEffectID(t, d, contract.OpAddMagnet, hash, "done")
 	var outcome string
 	if err := d.Read.QueryRow("SELECT outcome FROM operation_audit WHERE operation = 'media.add' ORDER BY id DESC LIMIT 1").Scan(&outcome); err != nil {
 		t.Fatal(err)
@@ -104,7 +105,7 @@ func TestMediaSavedChannelAndFailedPollKeepCommittedAdds(t *testing.T) {
 	if counts := mediaAudit(t, d, "media.poll", "partial"); counts["added"] != 1 {
 		t.Fatalf("poll counts %v", counts)
 	}
-	mediaEffectID(t, d, media.OpAddMagnet, hash, "done")
+	mediaEffectID(t, d, contract.OpAddMagnet, hash, "done")
 	if _, err := d.Write.Exec("DROP TRIGGER refuse_prime; UPDATE media_channels SET primed = 1; DELETE FROM media_seen; CREATE TRIGGER refuse_prime BEFORE UPDATE ON media_channels BEGIN SELECT RAISE(FAIL, 'unavailable'); END"); err != nil {
 		t.Fatal(err)
 	}
@@ -133,8 +134,8 @@ func TestMediaSweepSelectionThenDeleteFailureAuditsPartial(t *testing.T) {
 	mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
-	qb.put(mnpTorrent{hash: "dddddddddddddddddddddddddddddddddddddddd", name: "Dune.2021", tags: []string{media.TagMedia}, state: "stoppedDL", files: []mnpFile{{0, "Dune.2021.mkv", 0}}})
-	qb.put(mnpTorrent{hash: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", name: "Filed", tags: []string{media.TagMedia, media.TagSelected, media.TagFiled}, state: media.StoppedUP, progress: 1})
+	qb.put(mnpTorrent{hash: "dddddddddddddddddddddddddddddddddddddddd", name: "Dune.2021", tags: []string{library.TagMedia}, state: "stoppedDL", files: []mnpFile{{0, "Dune.2021.mkv", 0}}})
+	qb.put(mnpTorrent{hash: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", name: "Filed", tags: []string{library.TagMedia, library.TagSelected, library.TagFiled}, state: contract.StoppedUP, progress: 1})
 	qb.dropOnce("torrents/delete")
 	if got := runApp(t, "media", "sweep"); got.code != cli.ExitOK {
 		t.Fatalf("sweep: %d %s", got.code, got.stderr)

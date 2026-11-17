@@ -18,11 +18,10 @@ type Category struct {
 }
 
 type Kinds struct {
-	Mode     func(context.Context, db.Querier) (string, error)
-	Needs    func(context.Context, db.Querier) ([]Need, error)
-	Drafts   func(ctx context.Context, take func(int) int) ([]Draft, error)
-	Findings func(context.Context, db.Querier, int) ([]Finding, error)
-	Actions  *Actions
+	Mode    func(context.Context, db.Querier) (string, error)
+	Needs   func(context.Context, db.Querier) ([]Need, error)
+	Drafts  func(ctx context.Context, take func(int) int) ([]Draft, error)
+	Actions *Actions
 }
 
 type Contribution struct {
@@ -56,16 +55,6 @@ type Draft struct {
 	SentAt             *float64
 	SMTPResult         *string
 	Unexpected         []string
-}
-
-type Finding struct {
-	ID       int64
-	Severity string
-	Host     string
-	Metric   string
-	Title    string
-	Body     string
-	Created  float64
 }
 
 type Action struct {

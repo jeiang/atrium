@@ -59,8 +59,15 @@ func (s *Set) settingState(ctx context.Context, q db.Querier, name string) (sett
 		view.Error = held.Detail
 	}
 	if snap := s.Current(); snap != nil {
-		if st, _ := snap.Status(name); st.State == Unavailable {
+		st, _ := snap.Status(name)
+		if st.State == Unavailable {
 			view.Error = st.Err
+		}
+		if view.Error == "" {
+			view.Error = s.unavailableDependency(snap, name)
+		}
+		if view.Error == "" && view.Reason == "" && st.State == NeedsSettings {
+			view.Reason = joinReasons(st.Unmet)
 		}
 	}
 	if view.On && view.Error == "" {
@@ -73,6 +80,29 @@ func (s *Set) settingState(ctx context.Context, q db.Querier, name string) (sett
 		view.Pinned = source
 	}
 	return view, err
+}
+
+func (s *Set) unavailableDependency(snap *Snapshot, name string) string {
+	for _, r := range s.decls {
+		if r.Name != name {
+			continue
+		}
+		for _, dep := range r.Depends {
+			if st, _ := snap.Status(dep); st.State == Unavailable {
+				return s.title(dep) + " is unavailable: " + st.Err
+			}
+		}
+	}
+	return ""
+}
+
+func (s *Set) title(name string) string {
+	for _, r := range s.decls {
+		if r.Name == name && r.Title != "" {
+			return r.Title
+		}
+	}
+	return name
 }
 
 func (s *Set) settingMark(name string) string {

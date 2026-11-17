@@ -26,6 +26,7 @@
         (root + "/web/src/tokens/gen")
       ])))
       (root + "/docs/api/openapi.json")
+      (root + "/docs/api/settings-schema.json")
       (lib.fileset.maybeMissing (root + "/design/tokens"))
     ];
   };
@@ -127,13 +128,31 @@ in {
   web-lint = check {
     pname = "atrium-web-lint";
     nativeBuildInputs = [biome];
-    command = "npm run lint && npm run check";
+    command = ''
+      npm run lint
+      npm run check
+    '';
   };
-  web-e2e = check {
-    pname = "atrium-web-e2e";
-    env = browserEnv // {ATRIUM_WEB_MOCK_DIST = "${atrium-web-mock}";};
-    command = "npm run e2e -- --reporter=line";
-  };
+  web-e2e = let
+    e2e = pname: args:
+      check {
+        inherit pname;
+        env =
+          browserEnv
+          // {
+            ATRIUM_WEB_MOCK_DIST = "${atrium-web-mock}";
+            ATRIUM_WEB_DIST = "${atrium-web}";
+          };
+        command = "npm run e2e -- --reporter=line${args}";
+      };
+  in
+    (e2e "atrium-web-e2e" "").overrideAttrs (old: {
+      passthru =
+        (old.passthru or {})
+        // {
+          engines = lib.genAttrs ["chromium" "firefox" "webkit"] (engine: e2e "atrium-web-e2e-${engine}" " --project=${engine}");
+        };
+    });
   web-size = runCommand "atrium-web-size" {nativeBuildInputs = [nodejs_24];} ''
     node ${sizeSrc}/web/scripts/size.ts ${atrium-web} > report.txt 2>&1 || status=$?
     cat report.txt

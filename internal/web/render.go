@@ -83,8 +83,17 @@ func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, e
 		Rail:        cookieValue(r, railCookie, false) == "1",
 		Data:        data,
 	}
+	if toast, ok := r.Context().Value(toastKey{}).(*tpl.Toast); ok {
+		f.Toast = toast
+	}
 	rd.contribute(r.Context(), f)
 	return f, nil
+}
+
+type toastKey struct{}
+
+func WithToast(ctx context.Context, toast *tpl.Toast) context.Context {
+	return context.WithValue(ctx, toastKey{}, toast)
 }
 
 func (rd *Renderer) contribute(ctx context.Context, f *tpl.Frame) {

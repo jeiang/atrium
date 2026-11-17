@@ -1,0 +1,82 @@
+@import "../../tokens/gen/media.css";
+
+@layer components {
+  .inbox {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    gap: var(--s-6);
+    align-items: start;
+  }
+
+  .inbox__what {
+    font-weight: 600;
+  }
+
+  .inbox__pane,
+  .deck,
+  .inbox-card {
+    display: grid;
+    gap: var(--s-4);
+    min-inline-size: 0;
+  }
+
+  .inbox-card__loading {
+    min-block-size: 30rem;
+  }
+
+  .deck__back {
+    justify-self: start;
+  }
+
+  @media (--touch) {
+    .deck__back {
+      display: inline-flex;
+      align-items: center;
+      min-block-size: var(--target);
+    }
+  }
+
+  .ask,
+  .ask__answer {
+    display: grid;
+    gap: var(--s-3);
+  }
+
+  .ask__eyebrow {
+    margin: 0;
+    color: var(--ink-3);
+    font-size: var(--t-xs);
+  }
+
+  .ask__title {
+    margin: 0;
+    font-size: var(--t-xl);
+  }
+
+  .ask__summary {
+    margin: 0;
+    white-space: pre-wrap;
+  }
+
+  .ask__facts {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--s-1) var(--s-4);
+    margin: 0;
+  }
+
+  .ask__facts dt {
+    color: var(--ink-3);
+  }
+
+  .ask__facts dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .ask__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2);
+  }
+}

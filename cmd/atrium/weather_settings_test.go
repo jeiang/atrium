@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/apps/weather"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/weather"
 )
 
 func TestWeatherLocationSettingsSaveAndRefuseOutOfRangeValues(t *testing.T) {
@@ -90,5 +90,51 @@ func TestWeatherConnectionTestReportsAFailedRequest(t *testing.T) {
 	}
 	if got := connectionState(t, dir, "service/weather"); got != "failing" {
 		t.Fatalf("weather connection state = %q, want failing", got)
+	}
+}
+
+func TestWeatherLocationSavesThroughTheSettingsPatchOnBothPrefixes(t *testing.T) {
+	f := newFixture(t, goldenData{}, nil, "")
+	token := localAPIToken(t, "api")
+	base, _, stop, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(stop)
+	s := &apiSite{t: t, base: base}
+	browser := newWebClient(t, base, nil)
+	browser.session("local")
+	page := func() (string, map[string]string) {
+		t.Helper()
+		got := s.do(http.MethodGet, "/api/v1/settings?group=assistant&limit=100", token, nil)
+		data := apiData(t, got, http.StatusOK)
+		values := map[string]string{}
+		for _, raw := range data["items"].([]any) {
+			item := raw.(map[string]any)
+			if key, _ := item["key"].(string); strings.HasPrefix(key, "weather_") {
+				value, _ := item["value"].(string)
+				values[key] = value
+			}
+		}
+		rev, _ := got.json["revision"].(string)
+		return rev, values
+	}
+	start, values := page()
+	for _, key := range []string{weather.KeyLocationName, weather.KeyLatitude, weather.KeyLongitude} {
+		if _, ok := values[key]; !ok {
+			t.Fatalf("GET /settings omits %s: %v", key, values)
+		}
+	}
+	set := map[string]any{weather.KeyLocationName: "Port of Spain", weather.KeyLatitude: "10.65", weather.KeyLongitude: "-61.5"}
+	apiData(t, browser.do(http.MethodPatch, "/web/v1/settings", map[string]any{"set": set}, "If-Match", `W/"`+start+`"`), http.StatusOK)
+	next, values := page()
+	if values[weather.KeyLocationName] != "Port of Spain" || values[weather.KeyLatitude] != "10.65" || values[weather.KeyLongitude] != "-61.5" {
+		t.Fatalf("weather location after the web patch: %v", values)
+	}
+	expectAPI(t, browser.do(http.MethodPatch, "/web/v1/settings", map[string]any{"set": map[string]any{weather.KeyLocationName: "Arima"}}, "If-Match", `W/"`+start+`"`), http.StatusPreconditionFailed, "precondition_failed")
+	expectAPI(t, s.do(http.MethodPatch, "/api/v1/settings", token, map[string]any{"set": map[string]any{weather.KeyLatitude: "91"}}, "If-Match", `W/"`+next+`"`), http.StatusUnprocessableEntity, "invalid")
+	apiData(t, s.do(http.MethodPatch, "/api/v1/settings", token, map[string]any{"set": map[string]any{weather.KeyLocationName: "Arima"}}, "If-Match", `W/"`+next+`"`), http.StatusOK)
+	if _, values := page(); values[weather.KeyLocationName] != "Arima" || values[weather.KeyLatitude] != "10.65" {
+		t.Fatalf("weather location after the API patch: %v", values)
 	}
 }

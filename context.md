@@ -30,12 +30,12 @@ claims about the running application. Operator contracts are in
   an `event:`-style reference that `Refs` resolves) for a time range, and
   `module.Compile` fails start when two units claim one entry kind. Home
   merges the providers of enabled units by start time, then title. Calendar
-  is the only provider (kind `event`); tasks due stay attention items and
-  birthdays stay under mail. The agenda answers 404 when no provider's unit
+  is the only provider (kind `event`, including the derived Birthdays
+  calendar); tasks due stay attention items. The agenda answers 404 when no provider's unit
   is on and 503 `unavailable` when the calendar cannot be listed, for example
-  when no calendar is configured. `tools/adapterboundary` fails when a
-  package under `internal/assistant` other than the agent tools imports
-  `internal/calendar`, or when `internal/day` imports any unit.
+  when no calendar is configured. `tools/adapterboundary` fails when an
+  assistant package imports `internal/apps/calendar` outside its listed
+  exceptions, or when `internal/day` imports any unit.
 - Core reads stored messages only through the read-only `communications`
   feed (`internal/communications`): a message summary (id, account, sender,
   recipients, subject, date, seen, flagged, inbox, sent and gone flags, and
@@ -61,11 +61,12 @@ claims about the running application. Operator contracts are in
   the SMTP sender and replay live in `internal/apps/mail`. The mail
   write gate is `WriteGate` in `internal/apps/mail/client.go`, called only
   by the client's `gate.check`; the shared consent scopes (approved
-  proposal, operator send, automatic writes) and the pause check stay in
-  `internal/safety`. The draft card kind and the live-action rows reach
-  Review through the Mail declaration's review kinds. The rest of Mail
-  stays in `internal/mail` until the later P13 slices move it, and both
-  trees are the one `mail` unit.
+  proposal, operator send, automatic writes) stay in `internal/safety` and
+  the pause check in `internal/pause`. The draft card kind and the
+  live-action rows reach Review through the Mail declaration's review
+  kinds. The rest of Mail stays in `internal/mail` until the later P13
+  slices move it, and the Mail declaration claims both trees as the one
+  `mail` unit.
 - The core `signals` unit (`internal/signals` for the domain,
   `internal/signals/signalsmodule` for its service, API routes, Loops page,
   `open_loops` tool and declaration) owns open loops, commitments and
@@ -75,28 +76,26 @@ claims about the running application. Operator contracts are in
   communications feed (summaries, recipient envelopes, owner addresses, the
   question test and paid scans), so stored loops and commitments stay
   readable with Mail off, with no message subject or sender. Signals is
-  declared `Core`; `module.Compile` still requires the `core` declaration and
-  lets any core unit own delegated or shared operations. The mail pass, and
+  declared `Core` with no flag; it claims the `internal/signals` packages
+  and its three tables. `module.Compile` still requires the `core`
+  declaration, which alone claims no packages (it owns the unclaimed
+  platform packages), and lets any core unit own delegated or shared
+  operations. The unit-boundary guard rejects a Mail import of signals and
+  a signals import of Mail. The mail pass, and
   the mail-owned `mail.refresh-loops` operation under the mail pass lock,
   call `module.RefreshCommunications` with the paid classifier and
   deferral; the one unit that sets `CommunicationsRefresh` (signals) runs,
   and with no feed provider it skips and keeps stored rows. Operation names,
   `/api/v1/mail/loops*` and `/api/v1/mail/commitments*` routes, the tool
-  name and the `openloops_*` setting keys are unchanged. `tools/adapterboundary`
-  fails when a mail package imports `internal/signals`, and the general rule
-  below fails when signals imports mail. `tools/adapterboundary` fails when a Go
-  file outside `internal/mail` and `internal/apps/mail` (under `internal` or `cmd`) imports a mail
-  package, except the listed exceptions with the slice that removes each
-  (the composition roots `cmd/atrium` and `internal/app`; the agent mail
-  tools until P13.2b; account rows in
-  `internal/config` until P13.3), and when an exception no longer imports
-  mail; it also treats `internal/communications` as platform. No exception
-  covers the mail write path: a file outside Mail that imports
+  name and the `openloops_*` setting keys are unchanged.
+  `internal/communications` is a platform package, so the unit-boundary
+  guard rejects any import of Mail from core outside its listed exceptions.
+  No exception covers the mail write path: `tools/adapterboundary` fails
+  when a Go file outside the Mail unit, composition roots included, imports
   `internal/apps/mail/applier`, `internal/apps/mail/live`,
-  `internal/apps/mail/drafts` (draft send) or `internal/apps/mail/smtp`
-  fails, and so
-  does any Go file outside the `internal/apps/mail` package that calls
-  `WriteGate`.
+  `internal/apps/mail/drafts` (draft send) or `internal/apps/mail/smtp`,
+  and when any
+  Go file outside the `internal/apps/mail` package calls `WriteGate`.
 - Internal undoable tools can act directly and record undo. External,
   irreversible, or paid tools follow their declared approval policy and the
   permission table. This is enforced in code, not left to the prompt.
@@ -124,7 +123,7 @@ claims about the running application. Operator contracts are in
   untrusted-data preamble is fixed in code and always comes first.
 - Assistant history is a per-thread memory tree. A run sends its own
   messages and, newest first, earlier whole exchanges within
-  `memory_verbatim_tokens` (default 16,000, at most a quarter of the context left
+  `memory.TuningMemoryVerbatimTokens` (16,000, at most a quarter of the context left
   after the tools and system prompt) verbatim, tool calls and results
   included; each operator message ends with its run's start time in the
   configured time zone. Older messages come first as memory-tree lines,
@@ -213,11 +212,12 @@ claims about the running application. Operator contracts are in
 - A space is a `projects` row presented in Knowledge; the table, its
   columns and the thread, file, record and task `project_id` links are
   unchanged, so nothing moves. `/api/v1/knowledge/spaces` lists them and
-  creates one, `/knowledge/spaces/{id}` reads the space page (fields, the
+  creates one (effort and context limit default to the thread defaults), `/knowledge/spaces/{id}` reads the space page (fields, the
   instructions split into sections like a subject page, files, chat
   threads, tasks whose source is `project`/id, records linked to it, and
   counts), edits name, instructions, effort, context limit and the private
-  flag, and `/archive` archives or restores it; files live under
+  flag (an optional `If-Match`, the read ETag or the numeric `updated_at`,
+  refuses a stale edit with 409 `stale`), and `/archive` archives or restores it; files live under
   `/knowledge/spaces/{id}/files`. The `/projects*` API is removed. A
   record links to a space with target kind `space` (state `live` or
   `archived`, address `/knowledge/spaces/{id}`). The instructions still
@@ -328,7 +328,12 @@ claims about the running application. Operator contracts are in
   id and an iCloud or Gmail preset, declared as `mail/<id>` connections by the
   host (`services.atrium.mailAccounts`) or added, tested and removed on the
   Mail settings page (stored in the database, password only on an encrypted
-  database). A Gmail account can use an app password or XOAUTH2; XOAUTH2 uses
+  database). A host account's password comes from its `passwordFile`: both
+  UIs show it as set in host configuration with no entry box and refuse a
+  new value (409 `refused`), and the iCloud connection that uses the same
+  password links to the mail account; without a
+  `passwordFile` the operator enters it in the UI and it stays in the
+  database. A Gmail account can use an app password or XOAUTH2; XOAUTH2 uses
   the Google OAuth wizard's Gmail refresh token, refreshes the access token
   once for concurrent callers, reconnects or retries AUTH once after a
   rejected token, and reports needs-reauth or expiring health.
@@ -434,7 +439,13 @@ claims about the running application. Operator contracts are in
   is refused, still answered 422 with the same message). `PUT
   /api/v1/assistant/defaults` (bearer only) takes the same three fields
   (`model`, `effort`, `context_limit`) through the same operation and
-  validation, answering 422 `invalid` with that message.
+  validation, answering 422 `invalid` with that message. An optional
+  `If-Match` with the `GET /assistant/configuration` ETag refuses a stale
+  save with 412 `precondition_failed`; without it the save applies as before.
+  `GET /assistant/tools` (`assistant.tools`) reports the runtime registry of
+  the enabled modules: per tool its name, description, permission channel
+  (`none`, a channel key, or `by_arguments` when `ChannelOf` decides), effect
+  and run kinds, so worker-only tools list only `worker`.
   The catalog also records whether a model accepts a forced `tool_choice`
   (`any` or a named tool): only Haiku does, and the loop sends the request
   to Sonnet and Opus without it. The loop ends a run with a clear thread
@@ -491,8 +502,22 @@ claims about the running application. Operator contracts are in
   needs-reauth rows. Runtime request failures trigger a check (at most
   one per 5 minutes) in every state except disabled; a success while
   failing triggers a recovery check. A first failing result notifies once,
-  also after a host change. A host-declared row dropped from the host file
-  is disabled with its credentials kept and announced once; runtime
+  also after a host change. Notices are damped per connection in process
+  (`flapWindow` 6 hours, `lastingAfter` 30 minutes in
+  `internal/connections/health.go`): at most one failing and one recovery
+  notice per 6 hours; a held failure notifies once it lasts 30 minutes; a
+  recovery notifies only after a notified failure. A CLI process keeps its
+  own memory, so `connections test` notifies each change. A scheduled run whose
+  connection lease reported a failing or needs-reauth result
+  (`scheduler.CauseReporter`) sends no job-failed notice and no stale
+  notice for that run (that memory is in process, so after a restart the
+  stale check may still notice such a run once). A host-declared row dropped from the host file
+  is disabled with its credentials kept. Whichever process opens the
+  database first disables it, but only the health watch's start pass in
+  `serve` announces it, once per removal (the notice's occurrence key is
+  `connection-removed:<id>:<revision>`, so later starts and a CLI command
+  that reconciled first neither repeat nor lose it; a row removed this way
+  before the key existed is announced at the next start). Runtime
   observations do not change a disabled row.
 - In `serve`, IMAP dials (TCP, TLS, greeting, login), SMTP sessions and
   iCloud mirror syncs report their outcome per capability through
@@ -520,6 +545,14 @@ claims about the running application. Operator contracts are in
   notifies once; the hourly watch rechecks such rows. A failure from any
   other state, including a host change, gets no window. Other kinds have
   none.
+- A connection kind lists in `Definition.Interactive` the capabilities only
+  an interactive use can prove (`service/oidc` lists `client_auth`). When a
+  test or health pass reports such a capability `untested`, `Store.record`
+  keeps the stored `ok` or `failing` result that a sign-in observed, at the
+  same revision. A save, a host config change or a credential rotation
+  writes fresh results and drops it. The OIDC flow observes `ok` after a
+  sign-in whose client secret matches the stored one, and `failing` when the
+  token endpoint refuses the client (401 or `invalid_client`).
 - `atrium connections check` runs the silent check of every configured
   connection, and `--changed` only those never checked since they were
   added, declared again, or their host declaration changed (including a
@@ -535,8 +568,9 @@ claims about the running application. Operator contracts are in
   `weather` tool: current conditions and an hourly/daily forecast for the
   configured location or a named place, fetched over the shared transport.
   The record carries the editable location fields (`weather_latitude`,
-  `weather_longitude` and `weather_location_name`), validated in range and
-  read-only when the host file declares them. Without a location name or
+  `weather_longitude` and `weather_location_name`), validated in range,
+  offered in the Weather app's settings group and on the `/next/`
+  weather connection, and read-only when the host file declares them. Without a location name or
   both coordinates, the weather connection checks as `unconfigured` and
   probes nothing. The Integrations page also has a Google OAuth wizard:
   the Cloud console steps, a Web-application client ID and secret, consent
@@ -546,7 +580,37 @@ claims about the running application. Operator contracts are in
   consent starts); the refresh token is stored as a
   secret (`google_calendar_refresh_token` or `google_gmail_refresh_token`);
   Test exchanges it, and a 400 or 401
-  marks the integration needs-reauth.
+  marks the integration needs-reauth. A setup that has never reached `ok`
+  and still lacks its client ID or any consented grant checks as
+  `unconfigured` (no notice, so no unhealthy alert); a capability with no
+  stored grant is not tested. Once Google has worked, losing the client ID
+  or every grant checks as `failing` and notifies.
+- Capability model (`internal/connections/needs.go`): each kind declares
+  `Offers`, the capability names its test reports; each module declares
+  `Needs` (kind, capability, soft, features), checked at compile. Bindings,
+  repairs and dependents are derived from those declarations and the stored
+  rows, with no table: the binding is the first healthy serving connection
+  by id, else the first; a repair (`connection:<id>:<auth|unreachable|config>`)
+  exists for every enabled connection in needs-reauth, failing or
+  unconfigured and lists the features of unmet active needs it could serve.
+  `GET /api/v1/connections/dependencies` (`connections.dependencies`) is the
+  read model; connection views add `dependents`. Failure notices append
+  `; affects <features>`. Connection read revisions also follow the settings
+  counter so module toggles refresh `active`; no connection write takes
+  `If-Match`. The `connection owners` readiness check (non-critical) requires
+  `config_source = 'host'` exactly for enabled rows the host file declares.
+- Unit lifecycle (`internal/connections/lifecycle.go`): the module set signals
+  the registry on every publish; the health watch then runs `SyncUnits`, which
+  disables operator-owned built-in rows (the `builtinConnections` list) whose
+  dependents' units are all turned off (`Status.On`, the flag; a unit that is
+  on but blocked still counts as on) with reason `its app is off`, and
+  re-enables them as untested when one is turned on again. Operator-created and host rows are never
+  written; the view computes `idle` instead, and idle rows skip scheduled
+  checks, `announce` and repairs. `connections.enable`/`connections.disable`
+  (`POST /connections/{kind}/{name}/enable|disable`, operator-only) refuse host
+  rows. Tools `dependencies_status` and `dependency_recheck`
+  (`internal/assistant/tools/dependencies`); recheck is limited in process to
+  once per connection per 5 minutes.
 
 ### State, backups, settings, and keys
 - SQLite holds application records, configuration stored by the application,
@@ -582,19 +646,25 @@ claims about the running application. Operator contracts are in
   keep_days. No directory means `skipped_unconfigured`. `atrium backup`
   shares the job's claim. There is no backup unit or timer.
   `GET /maintenance/backups` (operation `maintenance.backup.list`, operator
-  only, not an agent tool) and `atrium backup list [--json]` list the
-  regular files named `atrium-*.backup` directly in `core.backup_directory`,
-  newest modification first, capped by `limit` (default 50, at most 100;
-  the CLI shows 100) with the full `total`. Symlinks, directories and other
-  names are skipped, and files are opened through an `os.Root` on that
-  directory. Each item carries the name, size, modification time and the
-  unauthenticated archive header (format, created time, schema, encryption
-  and key id, file count) or a `problem` (`not_archive`, `old_format`,
-  `newer_format`). No path is returned. `location.state` is `ready`,
-  `unconfigured` (no host key) or `missing` (the directory does not exist),
-  with the host key and NixOS option that set it. Verify takes a listed
-  name; verify results are not recorded. `atrium backup list` lists; an
-  archive named `list` is written with `atrium backup ./list`.
+  only, not an agent tool) and `atrium backup list [--json]` list every
+  atrium archive directly in `core.backup_directory`: the regular files,
+  without a leading dot, whose tar header entry parses as an archive header.
+  Scheduled and API archives (`atrium-*.backup`, `prunable: true`) and named
+  archives such as `pre-<deploy>-<stamp>.archive` from `atrium backup PATH`
+  (`prunable: false`; pruning never counts or deletes them) are listed
+  together, newest modification first, capped by `limit` (default 50, at
+  most 100; the CLI shows 100) with the full `total`. At most the newest
+  1000 candidate files are examined; `unexamined` counts the rest. Other
+  files, symlinks and directories are skipped silently, and files are opened
+  through an `os.Root` on that directory. Each item carries the name, size,
+  modification time, `prunable` and the unauthenticated archive header
+  (format, created time, schema, encryption and key id, file count) or a
+  `problem` (`old_format`, `newer_format`). No path is returned.
+  `location.state` is `ready`, `unconfigured` (no host key) or `missing`
+  (the directory does not exist), with the host key and NixOS option that
+  set it. Verify takes a listed name; verify results are not recorded.
+  `atrium backup list` lists; an archive named `list` is written with
+  `atrium backup ./list`.
   Rebuildable message and media caches are separate.
 - Database connections: one write connection, a read pool, and one
   dedicated KNN reader (semantic search and mail routing) with a 192 MiB
@@ -613,6 +683,17 @@ claims about the running application. Operator contracts are in
   `<name>_enabled` module flag, wins and makes that setting read-only. Each
   application instance gets its own settings registry from the compiled
   module declaration catalog, and every command reads the same stored operator values.
+  Each settings schema field carries `group`, its placement in the new
+  interface (from `internal/settings/placement.go`), and `restart`, true when
+  a change applies only after serve restarts: only `tz` (module flags apply
+  live). `tz` (Settings › General) sets the day and month
+  boundaries for schedules, calendar days and work hours, open loop
+  reminders, package and mail reports, notifications, the Obsidian export
+  and the attention view; serve reads it once at start. Budget months and
+  classification counts read it live. `digest_notify` and
+  `agent_schedule_min_interval_seconds` (assistant group `schedules`) apply
+  live; the minimum interval is checked when a schedule is created or
+  changed.
   `atrium settings`, `atrium secrets`, the settings group and section forms
   and the assistant permission form run the same `settings.*` operations: a
   value refused as invalid exits 2 on the command line (unknown keys, an
@@ -671,6 +752,8 @@ claims about the running application. Operator contracts are in
   (default 0) on `auth_bearers` and `auth_sessions`, with no row rewrite.
   Migration 4 adds the `record_links` table, its indexes and its revision
   triggers on the `knowledge` scope, with no row rewrite.
+  Migration 5 drops the `ops_findings` table with its indexes and
+  triggers; server-ops findings live in `kb_records`.
   A CLI e2e checks the canonical schema dump in
   `testdata/schema/baseline.v3.txt` and the migration-1 golden database
   (`world.db`), migrates each previous version's golden database
@@ -724,7 +807,11 @@ claims about the running application. Operator contracts are in
   approval selection is invalid input (`atrium proposals approve` exits 2,
   the API answers 422 `bad_selection`) and records no effect. Every readable table has insert, update and delete triggers
   that bump one counter per scope in `read_revisions` (lease, heartbeat and
-  streamed run event writes do not); the append-only
+  streamed run event writes do not). Since migration 7 the `connections`
+  update trigger skips updates that change only the bookkeeping columns
+  `checked_at`, `last_ok_at` and `updated_at`; they move without a
+  revision, so using or checking a connection with an unchanged result
+  publishes no `connections` change. The append-only
   `operation_audit` table records application commands. Both are owned by
   `internal/application/state`. Notification inbox, channel and device controls,
   and delivery commands use `notifications.*` operations. The
@@ -766,7 +853,16 @@ claims about the running application. Operator contracts are in
   scheduled run and records a skip status when the gate refuses. A run that
   ends `error` after a run that did not sends one System push
   (`job-failed:<run id>`, linking its thread or `/scheduled?run=<id>`);
-  repeated failures push nothing until a success.
+  repeated failures push nothing until a success. `GET /schedules/runs`
+  (`assistant.schedule.runs`) pages every schedule's runs newest first, the
+  same rows as `GET /schedules/{job_id}/runs`; run rows carry `job_id`.
+  Run now's 202 body carries the requested run id as `run`;
+  `GET /schedules/{job_id}/runs/{run_id}` (`assistant.schedule.run-read`)
+  returns that one row, whose `thread_id` is null until serve starts it.
+  `GET /schedules/preview?schedule=` (`assistant.schedule.preview`) parses a
+  cadence with `scheduler.Parse` in the server zone and steps
+  `Spec.NextAfter` for the next 5 runs; an unparsable cadence is 422
+  `invalid` on `schedule`.
 - The built-in modules are always compiled
   in. One compiled `module.Declaration` catalog supplies the registration
   path for module pages, commands, tools, settings, connections, hooks,
@@ -824,6 +920,15 @@ claims about the running application. Operator contracts are in
   consecutive unattended threadless unconfigured skips with the same error
   coalesce into the newest run's row, which keeps the first start time, so
   an audit row never names a later run of another job.
+  Two builtin jobs record `skipped_dependency` instead of `ok` when a
+  connection they need is unavailable and the run did no work:
+  `mail/package_tracking` (Ship24 absent while packages wait, or every
+  tracker request failed) and `media/channels` (every EZTV feed failed, or
+  every qBittorrent add failed with nothing added; a magnet with no v1 hash
+  is recorded on its release and is not an add failure). The run error names
+  the capability, the connection and the repair id. These rows do not
+  coalesce. The `packages poll` CLI and the channels poll API keep their
+  results.
   Nightly
   dreaming creates and associates every child thread in one transaction and
   prepares every child run with no spend allowance before the first
@@ -884,10 +989,16 @@ claims about the running application. Operator contracts are in
   grafana needs the assistant, calendar candidates need mail
   for their pipeline stage, and mail uses contacts as an optional source
   for its flag rule. iCloud calendars and address books are mirrored by
-  atrium's own read-only CalDAV/CardDAV sync. A disabled
+  atrium's own read-only CalDAV/CardDAV sync. The DAV login, discovery and
+  mirror sync are platform code (`internal/davmirror`, which imports no unit),
+  and `icloud` is a platform connection kind like `google`: one
+  `icloud/<account>` row and the iCloud mail account's password serve the
+  `caldav` capability for calendar and the `carddav` capability for contacts.
+  Turning either module off leaves the row enabled and the other module
+  syncing; contacts import no other unit. A disabled
   module's pages return not found and its tools and nav entries are omitted;
   its commands exit 0 without doing work, its scheduler jobs, the mail pass's
-  calendar-candidate stage and notification sends are skipped (the mail pause
+  calendar-candidate stage and notification sends are skipped (the pause
   controls stay available), and its tables remain.
   On its first start the application seeds the module flags. A database
   that already holds operator data (settings, secrets, accounts, threads or
@@ -895,11 +1006,16 @@ claims about the running application. Operator contracts are in
   empty database starts core only. The platform checks settings, secrets and
   usage rows; each module declares its own check (`HasOperatorData`: mail
   checks accounts, the assistant checks threads). `atrium settings set <name>_enabled true`
-  is refused with the unmet reasons. A module flag change takes effect after
-  the atrium units restart: the running application has no control that
-  writes a flag, a module's Settings page marks "Restart atrium to apply"
-  when the stored flag differs from the running state, and the API refuses
-  module flags. The assistant tool
+  is refused with the unmet reasons. A module flag change applies live: the
+  operator-only Apps switch (`apps.switch`, `PUT /apps/{id}/enabled`) writes
+  the flag through the settings write and publishes the new module set, and
+  the core `module-flags` service polls the settings revision counter every
+  two seconds so a flag written by a separate CLI process reaches a running
+  serve. `apps.list` (`GET /apps`) is the manifest of the four apps (mail,
+  calendar, media, grafana); the assistant, contacts and notifications are
+  core units the switch refuses (`core_unit`). The settings API still refuses
+  module flags, no assistant tool writes one, and the system prompt lists the
+  apps that are off. The assistant tool
   registry is built from the enabled modules' tools.
   Each run and dispatch resolves the current handler-bound tool registry.
   Pending mutations retain their owner's generation and refuse before recording
@@ -939,9 +1055,69 @@ claims about the running application. Operator contracts are in
   after the publish lock and write connection are released; a failed
   starter marks its module unavailable with the error, is logged once per
   failure and is retried at the next publication.
-- Module ownership is checked at build time. `tools/tableownership` keeps
-  each table's SQL inside its owning module, and `tools/registrationownership`
-  keeps every registration in the module catalog: it type-checks the
+- One platform pause (`internal/pause`) covers all unattended work. Its state
+  is the `pause` file beside the database: the file's existence is the
+  pause, and its JSON body records who (`by`, `source`), when (`since`) and
+  an optional `reason`; an empty file written by an older binary reads as
+  paused since its modification time, and an older binary honors the new
+  file. Every check reads the file, so a pause set by a separate CLI process
+  stops a running `serve`: scheduled admission at its next tick (30 s),
+  run-now requests and each automatic mail write at once. A due job is
+  skipped as `skipped_pause` unless it runs while paused (backups, the mail
+  sync and scan passes, whose automatic writes the gate still refuses, and
+  the CalDAV/CardDAV mirrors); run-now of any other job is refused (409
+  `refused`). Chat stays available; the assistant's direct mailbox writes
+  are refused while paused. Mail's write gate delegates only its pause
+  check. `GET /automation/pause`, `POST /automation/pause` (optional
+  `reason`) and `POST /automation/resume` are operator-only on both
+  prefixes and never agent tools; the two commands are audited as
+  `automation.pause` and `automation.resume`, bump the `automation` event
+  topic and send the pause notice, and `GET /shell` carries the same state
+  as `pause`. `POST /api/v1/mail/live/pause` and `/resume` and `atrium live
+  pause|resume` are aliases of the same pause with unchanged shapes: each
+  gesture records one `automation.*` audit row and, with notifications on,
+  one notice.
+- Each `module.Declaration` states its contract: `Name` (the stable id),
+  `Title`, `Core` (the platform core), `App` (a switchable app; units with
+  `App` false are core units), `Depends` (other units it needs on),
+  `Needs` (connection kinds, hard or `Soft`), `Packages` (the `internal/`
+  package roots it owns; the longest matching root wins; every package under
+  `internal/apps/<name>` belongs to the unit `<name>`) and `Tables`. The
+  Calendar app lives in `internal/apps/calendar` (providers, mirror, ICS and
+  recurrence, proposals and undo, invitations, its tools, CLI, HTTP
+  operations, `day` provider and `event:` resolver); only the candidate
+  queue stays in `internal/calendar/candidates` until the candidates move.
+  The Weather app (`weather`, flag `weather_enabled`) lives in
+  `internal/apps/weather`: the Open-Meteo client, the `service/weather`
+  connection kind and its soft `forecast` and `geocoding` needs, the three
+  location settings (keys and their `assistant` settings module unchanged;
+  the `weather` group now sits on the app's own settings page), the
+  `weather` tool (operation `weather.forecast`) and the Home weather card.
+  It is tool-only: no page, job or table. With Weather off the tool leaves
+  the catalog, `/home` answers the card as `off` without reading settings
+  or starting a refresh, and the built-in `service/weather` row is disabled
+  by the row lifecycle with the reason "its app is off" (never deleted);
+  turning Weather on returns the row enabled and untested. A declaration's
+  `Inherits` names the unit that carried its feature before it became an
+  app: at start, when the new flag has no audit rows, is not pinned, and
+  the named unit's flag is on, the seed writes `<name>_enabled=true` once
+  as a new row (actor `atrium`, source `migration`); a fresh database
+  stays opt-in. Weather inherits from `assistant`.
+  `module.Compile` fails start on an empty title, a core declaration that is
+  an app or declares dependencies, an unknown dependency, a core unit that
+  depends on an app, a dependency cycle (named in order), a need for a
+  connection kind that no module declares, or a table or package root that
+  two units claim. Notifications and core claim no packages, so every
+  unclaimed package is platform.
+- Module ownership is checked at build time from those declarations, by
+  `just verify` and `just check-quick`. `tools/tableownership` takes each
+  unit's tables from its declaration and the platform tables from a fixed
+  list, fails on a schema table with no owner, an owned table the schema
+  does not create, or a table with two owners, and keeps each table's SQL
+  inside its owner's packages. `tools/registrationownership` fails when a
+  `module.Declaration` sits outside the packages of the unit it names (a
+  platform declaration must sit in a platform package), and keeps every
+  registration in the module catalog: it type-checks the
   production packages and fails, naming file and line, when an `init`
   function calls into another package (only the SQLite driver setup in
   `internal/db/open_cgo.go` may), when code outside
@@ -1012,7 +1188,32 @@ claims about the running application. Operator contracts are in
   group-readable (directories also group-writable and searchable), or the
   agent refuses it. Crash recovery only inspects receipts; identical replay
   returns the terminal result and never resumes.
-- Main files media through the agent. The downloads queue maps each tagged
+- Main files media through the agent. Torrents (`internal/apps/torrents`)
+  owns qBittorrent: one intake gates every write by actor (operator any
+  torrent; agent and job only `atrium` or `media` tagged; no tag removal; a
+  job removes only `filed`, stopped torrents) and stamps `atrium` on every
+  add. Library (`internal/apps/library`, unit id `media`, title "Library")
+  consumes it only through `internal/apps/torrents/contract`; Torrents never
+  imports Library, and `tools/adapterboundary` enforces both directions.
+  Library owns followed shows (EZTV channels), intake, filing, sweep, the
+  catalogue, signed and VPN links, TMDB, EZTV and the media agent
+  (`internal/apps/library/mediaagent`). The unit id, setting keys, job keys
+  (`media/media-channels`, `media/media-sweep`), ledger origin and operation
+  names (`media_*`), the notification channel key `media` and the
+  `atrium-media-agent.service` unit are stored or host-facing and keep their
+  names; the Activity category is `library` (operation prefix `media`), except
+  the torrent operations of the Torrents app (`media_add_magnet`,
+  `media_add_file`, `media_file_priority`, `media_tag_add`, `media_tag_remove`,
+  `media_start`, `media_stop`, `media_delete`, undo kind
+  `media_torrent_delete`), which list under its category `downloads` (the
+  longest claimed operation prefix wins), and the
+  notification channel shows the title "Library". Tools: `library_search`,
+  `library_following`, `library_follow`, `library_unfollow`. The channel poll
+  job records `skipped_unconfigured` ("no show is followed") and makes no
+  request while no show is followed. With Torrents off or unavailable,
+  Library is held (`needs torrents` or "Torrents is unavailable:") on
+  `/api/v1/apps` and `/settings/media`.
+  The downloads queue maps each tagged
   torrent's qBittorrent content path to the agent `downloads` root by the
   `media_download_path_prefix` string prefix (no main-side stat). Filing
   re-checks the torrent (hash, `media` tag, complete, unchanged path),
@@ -1025,7 +1226,28 @@ claims about the running application. Operator contracts are in
   inspect-filing <effect-id>` prints the receipt and current evidence. Undo
   asks the agent for the receipt-derived inverse; filings made before the
   agent are refused.
-- The library catalogue, `media_library_search` and library pages read from
+- Automatic filing: the `media-sweep` job, after selection and removal, files
+  a completed, unfiled, unignored media torrent without the operator when it
+  is approved and its plan is exact (`located.exact` in
+  `internal/apps/library/application/filing.go`). Approved means a
+  `library_requests` row (written by the Torrents consumer hook for an
+  operator screen or API add, `approved_by` `operator`, or an approved
+  `download_add` proposal, `approved_by` `proposal`, with its thread) or a
+  done `media_add_*` effect whose operation key is
+  `media:channel:<id>:...` for a channel that still exists. Exact means the
+  Intake default plan has no error, title and year are known, a movie has one
+  video file, every TV video file has an episode, no two files share a
+  destination, and the agent prepares it. Not exact leaves the request
+  `waiting` with the reason. An item with any earlier `media_file` effect is
+  never filed automatically (no retry after failure, no refile after undo).
+  Automatic filings use operation keys `media:auto-file:<hash>:...` (manual:
+  `media:file:`), request `filed_by` `job`, audit `media.file-item` details
+  `automatic: true`, the same receipt and undo, and send one `media`
+  notification per filing (occurrence `media-filed:<effect-id>`, linked to the
+  request thread). Request states are `requested`, `waiting`, `filed` and
+  `failed`; `GET /media/requests` (operation `media.requests`, both
+  prefixes) lists them.
+- The library catalogue, `library_search` and library pages read from
   the agent. The host key
   `media_root` is refused at startup (exit 78) and at Nix evaluation, naming
   `services.atrium.mediaAgent.roots`. The media module requires the
@@ -1071,8 +1293,8 @@ claims about the running application. Operator contracts are in
   `module_disabled`) and again during execution (503 `module_disabled` with
   `Retry-After: 5`). A binary API relay owned by a module (media content and
   artwork, file downloads) answers 409 `module_disabled` before relaying when
-  that module is off. Only
-  `POST /api/v1/mail/live/pause` is unowned. The
+  that module is off. Only the pause aliases
+  `POST /api/v1/mail/live/pause` and `/resume` are unowned. The
   owner generation follows a pending mutation to ledger admission: a halted
   owner cannot start a new effect, an effect already started finishes
   recording its result, and re-enabling an owner does not make an old
@@ -1132,13 +1354,12 @@ claims about the running application. Operator contracts are in
   opener or syncer passes through the module framework or the tool context.
   Mail binds its IMAP opener and post-proposal sync hook in its own module
   declaration, and its assistant tools take the opener from the same place.
-  `tools/adapterboundary` fails when `internal/module`, `internal/unit`,
-  `internal/tool`, `internal/ledger`, `internal/proposals`,
-  `internal/proposals/proposalscmd`, `internal/embed`, `internal/ops`,
-  `internal/ops/collectors`, `internal/scheduler`, `internal/review` and its
-  subpackages, `internal/notify`, `internal/web` or `internal/web/tpl`
-  imports a unit package (mail, media, calendar, contacts, kb, tasks, weather,
-  grafana, serverops, or the agent tools under `internal/assistant/tools`).
+  `tools/adapterboundary` fails when a platform package (any package no
+  unit claims, apart from the composition roots `internal/app` and `cmd`)
+  imports a unit, or when a unit imports another unit other than through
+  that unit's `<root>/contract` package and a declared `Depends`. Each
+  remaining edge is a listed exception, package to package, that names the
+  slice that removes it; an exception that matches no import fails.
   `internal/module` names only `core`; every other module name is a constant
   in the leaf package `internal/unit`, and the list of modules is
   `internal/app/catalog.go`. Platform lookups read registries that units fill
@@ -1197,6 +1418,33 @@ claims about the running application. Operator contracts are in
   write whose outcome is unknown stays blocked; further writes to the same
   calendar are refused until the operator resolves it with `atrium effects
   resolve <id>` or the Activity page.
+- The operator creates, edits and deletes events in either provider through
+  `GET`/`PATCH`/`DELETE /calendar/events/{calendar}/{uid}` and
+  `POST /calendar/events` on both `/api/v1` and `/web/v1`
+  (`calendar.event`, `calendar.event-create`, `calendar.event-update`,
+  `calendar.event-delete`). These operations have operator authority only
+  and no tool binding, so agents keep the proposal path. They share the
+  proposal write path per provider: each write records an effect first, an
+  edit or delete reads the live event on the same fetch that plans the
+  write, and the event's revision (a hash of its calendar, uid, title,
+  start, end, all-day flag, location and notes) is its ETag. Edits require
+  `If-Match` and deletes accept it; a stale revision gets 412 with nothing
+  written. Undo deletes a created event, restores an edited event only while
+  it still has the revision the edit left, and puts a deleted event back
+  (the recorded ICS object for iCloud, the recorded fields for Google). An
+  unknown outcome refuses further operator writes to that event until it is
+  resolved. Birthdays and `birthday-` uids are refused as read-only. Pause
+  does not block these writes: they are operator consent.
+- `GET /calendar/events` rows carry `target` (the calendar id the event
+  routes and writes take: `icloud`, `google` or `birthdays`; `calendar`
+  stays the collection name), `read_only` (Birthdays), `all_day`,
+  `recurring`, `notes` and, for writable events, `revision`, the same value
+  the event read returns (an iCloud occurrence carries its series revision);
+  false and empty values are omitted.
+  The listing and `GET /calendar/calendars` (`calendar.calendars`: each
+  calendar's id, name, `read_only` and `available`) carry `today` and
+  `timezone`, the server's date and zone from `config.Location`. The
+  `calendar_list` tool output keeps its older row shape.
 - The knowledge export is export-only and has one destination, a Markdown
   folder declared by the host (`export.export_obsidian_dir`). The daily
   `knowledge-export` job renders live, non-expired records into it and
@@ -1217,8 +1465,10 @@ claims about the running application. Operator contracts are in
   with undo, restricted to the threads it gathered.
   Research subagents have restricted tools and bounded runs, and their system
   prompt omits the operator profile and project block. The server-ops
-  worker is a separate run kind: it has `ops_samples`, `ops_findings`,
-  `ops_finding`, `atrium_self_diagnose` and the Grafana reads, and
+  worker is a separate run kind of the opt-in Server ops app
+  (`internal/apps/serverops`, flag `grafana_enabled`): it has exactly
+  `ops_samples`, `ops_finding`, `grafana_query`, `grafana_alerts` and
+  `atrium_self_diagnose`, no other run kind has them, and
   its system prompt carries no profile or project block. The built-in `web`
   subagent is retired; `search_web` runs a `search_web` child with the
   server `web_search`, `web_fetch`, `recall` and `report`. The server
@@ -1251,18 +1501,21 @@ claims about the running application. Operator contracts are in
   (default $0.10), the `ops_worker_monthly_usd` source cap (default $5,
   counting reserved, unknown and settled `classifier:ops_condenser` spend)
   and the monthly budget; the thread cost cap does not apply. Validated
-  findings for facts in the change set go to `ops_findings` (marks from the
+  findings for facts in the change set become ops knowledge pages (marks from the
   `Ops` thread); others are dropped. A refusal, provider failure or reply
   that breaks the schema writes no finding and records the change as
   pending; the next pass with no new change retries it once. A monthly
   budget refusal also records a classification deferral and raises the
   core `classification_budget` attention item pointing at
   `/settings/usage`, which clears once the budget has room; a source cap
-  refusal records no deferral. The sampler resolves a finding once its
-  fact is back to normal; resolved findings are pruned after 30 days.
-  Findings of severity warning or critical are attention items, returned by
-  `GET /api/v1/review/items` and the `attention` tool; Needs you shows
-  proposals only. No worker run starts automatically and nothing
+  refusal records no deferral. Each finding is a `kb_records` page with
+  scope `ops`, writer `worker` and origin `ops:<fact>` that expires after
+  30 days; a later finding for the same fact updates that page in place,
+  and the sampler expires the page once its fact is back to normal. A
+  finding on a locked page is dropped. Findings send no push, raise no
+  attention item and are not shown in Needs you; chat finds them through
+  `kb_search`. The only server-ops attention item is the worker budget.
+  No worker run starts automatically and nothing
   restarts or changes a host.
 - Proposals of removed kinds, such as `notion_link` and `notion_edit` from
   v2, stay readable and dismissable. Approvals are only for
@@ -1279,14 +1532,15 @@ claims about the running application. Operator contracts are in
   `contacts_lookup` returns name and organisation and marks nothing;
   emails, phones and dates come back only through `include` and mark
   `pii`. Empty results of `mail_search`, `calendar_list`, `file_search`,
-  `search_threads`, `packages`, `open_loops`,
-  `upcoming_birthdays` and `attention` mark nothing. `mail_read` marks
+  `search_threads`, `packages`, `open_loops`
+  and `attention` mark nothing. `mail_read` marks
   `pii` for headers and `messages`/`untrusted` for a body or attachment
   names; `mail_search` marks `pii` for addresses and
   `messages`/`untrusted` for subjects and snippets; `open_loops` and
   `packages` mark the fields they return the same way; `commitment_list`
   adds `messages` and `untrusted` for commitments and `pii` for a counterpart.
-  A non-empty `calendar_list` marks `messages` and `untrusted`; `find_slot`
+  A non-empty `calendar_list` marks `messages` and `untrusted`, and `pii`
+  when it includes Birthdays entries; `find_slot`
   marks `messages`. `file_read` and a non-empty `file_search` mark
   `messages` and `untrusted`. `search_threads` and `zoom` mark `messages`
   plus the marks of the threads they read. `recall` marks nothing: it only
@@ -1295,9 +1549,8 @@ claims about the running application. Operator contracts are in
   marks of the records they return; an empty result marks nothing.
   Grafana reads and
   `atrium_self_diagnose` mark `untrusted` only. `ops_samples` marks
-  `untrusted` when it returns alert details; `ops_findings` returns the
-  findings' stored marks, `worker_finding` adds `untrusted`, and
-  `ops_finding` and `worker_status` mark nothing. `web_fetch`, `research`
+  `untrusted` when it returns alert details, and
+  `ops_finding` marks nothing. `web_fetch`, `research`
   and a response carrying a server `web_search_tool_result` mark the
   thread `untrusted`; `research` declares all four marks and returns
   `untrusted` plus the child thread's marks. `weather`, the media reads,
@@ -1515,23 +1768,27 @@ claims about the running application. Operator contracts are in
   the web session key on `/web/v1`, and each server instance owns its
   counts. Static assets are served from content-hashed immutable URLs.
 - Client read models (both prefixes): `GET /shell` (navigation, sections
-  and tabs, Needs you count, mail mode and pause, module states, version),
+  and tabs, Needs you count, mail mode, the platform `pause` state (paused,
+  by, source, since, reason), module states, version),
   `GET /about` (version, VCS build when stamped, schema version, modules),
   `GET /settings/schema` (offered settings per page with type, choices,
   bounds, default, source, editable, secret; secret values are never sent),
   `GET /connections/schema` (kinds and per-connection fields with secret
   and host-owned flags, no credential values) and `GET /files` (the
   thread and space file library, newest first, keyset cursor). `GET
-  /home` always carries a `weather` card with a `state`: `off` (no weather
-  connection, or its forecast capability disabled), `unconfigured` (no
+  /home` always carries a `weather` card with a `state`: `off` (the Weather
+  app off, no weather connection, or its forecast capability disabled), `unconfigured` (no
   location), `loading` (no reading yet), `failed` (no reading, last fetch
   failed; `failure` is `unreachable`, `timeout`, `no_match`, `bad_reply` or
   `unavailable`), `stale` (the last reading is shown but the refresh after
   it failed, or it is older than 60 minutes) or `ok`, plus `fetched_at` and
   the reading (location, current, today, hourly). `/home` never calls the
-  weather service: it serves the last reading held in memory per database
+  weather service: the Weather app's card (declared as `HomeWeather` and
+  read through `module.HomeWeather`, so the assistant does not import the
+  app) serves the last reading held in memory per database
   (`weather.LastFor`) and starts a background refresh when the reading is
-  15 minutes old (a failed fetch is retried after 60 seconds). A finished
+  15 minutes old (a failed fetch is retried after 60 seconds). With the
+  Weather app off the card is `off` and no refresh starts. A finished
   refresh bumps the `assistant` app-event topic so the client refetches. A
   location change discards the held reading, so the next `/home` answers
   `loading` and refreshes for the new place.
@@ -1553,19 +1810,55 @@ claims about the running application. Operator contracts are in
   `Service-Worker-Allowed` header, so its scope cannot widen beyond `/next/`
   and it never controls the old UI's pages, while it does see every request
   a `/next/` page makes, `/web/v1` writes included.
+- The `/next/` client registers `/next/sw.js` (scope `/next/`, production
+  build only, through the `atrium-sw` Trusted Types policy). The worker
+  precaches the shell and every hashed asset, lazy route chunks included,
+  answers `/next/assets/` cache-first and `/next/` navigations network-first
+  with a 3 s timeout and the cached shell as fallback, and passes everything
+  else through untouched, so `/web/v1`, `/api/v1`, streams, `/login` and
+  `/auth/` never reach its cache. Caches are named `next-shell-<build>`, not
+  `atrium-`, because the old UI worker deletes `atrium-*` caches. A new
+  worker waits; it activates at once only when the open page's own scripts
+  are in its precache list, otherwise on the next in-app navigation, which
+  becomes a full load. Activation deletes older `next-shell-*` caches.
+- Read models from queries that declare `meta.topics` or `meta.persist: true`
+  are kept for 7 days in the IndexedDB database `atrium-read-cache`, keyed to
+  the signed-in subject, with the session's identity but never its CSRF
+  token. Keys starting with `session`, `settings`, `connections`, `auth`,
+  `tokens` or `secrets` are never kept. Sign-out, a 401, a different subject,
+  a changed API contract hash or 7 days without a verified session delete
+  it; storage errors mean no cache. Offline means atrium itself did not
+  answer: the last request or stream to it failed, and the next response
+  clears it. `navigator.onLine` is never trusted; its `online` and `offline`
+  events only probe the session at once, and while atrium is unreachable
+  the client probes on its own every 2 s doubling to 60 s, because
+  a VPN or LAN can reach atrium while the browser reports offline. While
+  offline, writes refuse at once and are never queued. A lazy page missing
+  from the device shows "Not available" instead of failing.
 - The one inbox is `GET /queue` (both prefixes): parked `ask_operator`
   questions and permission requests (`ask`), pending and outcome-unknown
   proposals (`proposal`), drafts to send or resolve (`draft`), and
   overdue, due-soon and needs-decision attention items (`attention`;
   waiting-on-them loops and packages are left out). Order: asks oldest
   first, then items with a due time by due, then the rest oldest first,
-  ties on id. A module that is off hides only its own items. `total` and
-  `counts` ignore the filter and page and are the Needs you count of
+  ties on id. A module that is off hides only its own items. The `kind` and
+  `module` filters narrow the items; `total` and
+  `counts` ignore the filters and page and are the Needs you count of
   `/shell` and the web badge, computed by the same function
   (`reviewapp.Service.NeedsCount`). Item ids are
   `<source type>:<source id>`; `GET /queue/{item_id}` returns one item, so
   `proposal:<id>` and `draft:<id>` resolve the old proposal and draft
   addresses. `GET /pending` keeps its older proposals-plus-drafts count.
+  Open-loop attention items carry `loop_id` (the `open_loops` rowid the
+  `/mail/loops/{loop_id}/...` verbs take), and proposal items carry
+  `proposal_kind` (the proposal's kind). `GET /home` returns `needs_you`
+  (`total`, `counts`, and the first three `items`) from the same queue read,
+  and its revision folds in the queue revision.
+- `POST /commitments/{ref}/snooze` (`commitments.snooze`, body `until` in Unix
+  seconds, in the future, open items only) writes `attention_snoozes` through
+  one local undoable effect (`task_snooze` or `commitment_snooze`); the item
+  leaves `/queue` and Needs you until then and `/commitments` shows
+  `snoozed_until`.
   Operations may carry an OpenAPI `description`
   (`application.APIShape.Description`); the queue's lists the topics to
   refetch on.
@@ -1585,7 +1878,9 @@ claims about the running application. Operator contracts are in
   `precondition_failed` with the current `revision`; per-key and cross-field
   (`Def.Peers`) failures, checked against the final state, return 422 with one
   field per key; a pinned or unoffered key refuses the whole request. Success
-  returns the keys and the new revision. Operations marked
+  returns the keys and the new revision. `PUT /permissions` takes an optional
+  `If-Match` with the `GET /permissions` ETag (settings and review scopes),
+  checked in the write transaction; a stale tag is 412. Operations marked
   `x-atrium-undoable` are `review.approve` and the local-undoable or audited
   conditional operations of modules that register ledger undoers; a command
   response with `effect_ids` also carries `undoable`. Proposal payloads carry
@@ -1600,8 +1895,9 @@ claims about the running application. Operator contracts are in
 - Search has its own `assistant.search` operation; its cursors are shared with `/threads?q=…`. New cursors bind the operation, filters and path parameters; legacy thread and inbox cursors remain accepted. Schedule history remains readable for cancelled jobs and returns not_found for absent jobs on every page. API subagent saves refuse built-in definitions without changing the CLI's editing behavior. OpenAPI marks handler-required schedule and enabled fields as required, while queued memory work remains optional.
 - One search, `search.all` at `GET /search/all` (core module, operator
   authority, never writes), covers threads, mail messages, knowledge records,
-  tasks and library files. `types` (comma list of `thread`, `message`,
-  `record`, `task`, `file`) narrows it; `limit` (1 to 20, default 5) is per
+  tasks, library files, spaces and contacts. `types` (comma list of `thread`,
+  `message`, `record`, `task`, `file`, `space`, `contact`) narrows it; a contact
+  hit has no numeric id and names its vCard UID in `ref`; `limit` (1 to 20, default 5) is per
   type. Each type comes from the module that owns it and only while that
   module is on; messages come only from enabled accounts. The answer holds a
   group per type in its own best-match order, a `top` list of at most five
@@ -1636,11 +1932,21 @@ claims about the running application. Operator contracts are in
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.
 - **New web client:** a plain Svelte 5 client is being built under `web/`, typed from `docs/api/openapi.json` and calling same-origin `/web/v1`. The binary embeds its production build and serves it at `/next/`, but nothing links to it yet; the server-rendered UI remains the web UI. Its design tokens are DTCG JSON in `design/tokens/`, built by Style Dictionary into CSS cascade layers with light and dark values: brown neutrals, a moss accent, an olive "ok", no blue, Alegreya Sans and Fira Mono; the build fails on a blue hue, a zero radius, type under 12 px or a contrast pair under its ratio.
+- **New web client shell:** `/next/` opens with a frame prerendered in its HTML, then signs in through `GET /web/v1/session` only: a 401 with `login_url` sends the browser there once with a same-origin `next`, a 401 without it shows what to do, and a 503 or a network failure offers a retry. Signed in, it shows Home, Plan, Knowledge, Apps and Assistant in a rail (Inbox with the `needs_you` count, enabled apps under Apps, and Chats, Settings and Sign out behind the avatar), or Home, Decide, Chats and Spaces in a phone tab bar. Modules turned off hide their entries. One tab per browser holds the `/web/v1/events` stream and shares its notices with the others. Pages not yet built link to the same place in the server-rendered UI, which stays the default.
 - **Telemetry:** traces and metrics are implemented (see Observability); the
   trace backend is a host choice.
 - **Integrations:** weather (Open-Meteo, later WeatherKit) and package tracking (Ship24 free tier for flagged packages).
 - **An iOS app** through the `/api/v1` JSON API. Chat with attachments, the run stream, the inbox, approvals, undo entries and drafts are implemented; APNs push registration is deferred.
-- **Birthdays** have no page; the agent keeps access.
+- **Birthdays** are the read-only Birthdays calendar of the Calendar app
+  (calendar id `birthdays`), derived at read time from contact dates of kind
+  `birthday` in the contacts mirror: an all-day entry titled
+  `Birthday: <name>`, with `(turns N)` when the birth year is known, and a
+  Feb 29 birthday on Feb 28 in common years. `calendar_list` and
+  `GET /calendar/events` include it (filter `birthdays`) and Today shows it,
+  only while Calendar is on and the contacts directory exists;
+  `calendar_update`, `calendar_rsvp` and `calendar_delete` refuse its entries
+  (change the date on the contact). Anniversaries are not listed. Contacts
+  keep their dates with Calendar off.
 - **Open loops** cover only mail addressed to the owner that needs a reply.
 
 ### Other

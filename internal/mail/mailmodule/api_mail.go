@@ -20,6 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/apps/mail/search"
 	mailsync "github.com/jeiang/atrium/internal/apps/mail/sync"
 	"github.com/jeiang/atrium/internal/apps/mail/triage"
+	"github.com/jeiang/atrium/internal/config"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/ruleedit"
 	"github.com/jeiang/atrium/internal/module"
@@ -301,7 +302,13 @@ func (m Module) mailAPIRoutes(d *web.Deps) []application.Binding {
 			if err != nil {
 				return application.Read[MailSearchPage]{}, err
 			}
-			r, err := svc().Search(ctx, mailapp.SearchInput{Query: in.Q, Limit: int(in.Limit) + 1, Offset: offset, Filters: search.Filters{Account: search.Text(in.Account), Folder: search.Text(in.Folder), From: search.Text(in.From), Unread: in.Unread, Flagged: in.Flagged, HasAttachment: in.HasAttachment, DateFrom: in.DateFrom, DateTo: in.DateTo}})
+			var disabled []string
+			for _, a := range config.From(ctx).Accounts() {
+				if !a.Enabled {
+					disabled = append(disabled, a.Name)
+				}
+			}
+			r, err := svc().Search(ctx, mailapp.SearchInput{Query: in.Q, Limit: int(in.Limit) + 1, Offset: offset, Filters: search.Filters{Account: search.Text(in.Account), Folder: search.Text(in.Folder), From: search.Text(in.From), Unread: in.Unread, Flagged: in.Flagged, HasAttachment: in.HasAttachment, DateFrom: in.DateFrom, DateTo: in.DateTo, Disabled: disabled}})
 			if err != nil {
 				return application.Read[MailSearchPage]{}, err
 			}
@@ -420,7 +427,7 @@ func (m Module) mailAPIRoutes(d *web.Deps) []application.Binding {
 		api.Command(d, mailapp.DescribePause(), application.APIShape{Area: area, Unowned: true}, "POST /mail/live/pause", func(ctx context.Context, in mailapp.PauseInput) (application.Change[mailapp.PauseResult], error) {
 			return svc().Pause(ctx, in)
 		}),
-		api.Command(d, mailapp.DescribeResume(), application.APIShape{Area: area}, "POST /mail/live/resume", func(ctx context.Context, in mailapp.PauseInput) (application.Change[mailapp.PauseResult], error) {
+		api.Command(d, mailapp.DescribeResume(), application.APIShape{Area: area, Unowned: true}, "POST /mail/live/resume", func(ctx context.Context, in mailapp.PauseInput) (application.Change[mailapp.PauseResult], error) {
 			return svc().Resume(ctx, in)
 		}),
 		api.Query(d, mailapp.DescribeLiveStatus(), application.APIShape{Area: area}, "GET /mail/live", func(ctx context.Context, in struct{}) (application.Read[live.Status], error) {

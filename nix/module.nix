@@ -60,7 +60,7 @@
         enabled = lib.boolToString account.enabled;
       };
       capabilities = ["imap" "smtp"];
-      credential_files = {"mail/${id}/password" = "\${CREDENTIALS_DIRECTORY}/${accountCredential id}";};
+      credential_files = lib.optionalAttrs (account.passwordFile != null) {"mail/${id}/password" = "\${CREDENTIALS_DIRECTORY}/${accountCredential id}";};
     })
   cfg.mailAccounts;
 
@@ -287,7 +287,7 @@
     ++ lib.concatLists (lib.mapAttrsToList (id: c:
       lib.mapAttrsToList (slot: path: "${connectionCredential id slot}:${path}") c.credentialFiles)
     allConnections)
-    ++ lib.mapAttrsToList (id: account: "${accountCredential id}:${account.passwordFile}") cfg.mailAccounts
+    ++ lib.mapAttrsToList (id: account: "${accountCredential id}:${account.passwordFile}") (lib.filterAttrs (_: account: account.passwordFile != null) cfg.mailAccounts)
     ++ lib.optional (cfg.database.keyFile != null) "db-key:${cfg.database.keyFile}";
 
   obsidianDir = cfg.knowledgeExport.obsidianDirectory;
@@ -647,8 +647,9 @@ in {
             description = "IMAP and SMTP login.";
           };
           passwordFile = mkOption {
-            type = types.str;
-            description = "Host file holding the app password, delivered through LoadCredential.";
+            type = types.nullOr types.str;
+            default = null;
+            description = "Host file holding the app password, delivered through LoadCredential. When null the operator enters the password in Settings, Connections and it is stored in the database.";
           };
           enabled = mkOption {
             type = types.bool;
@@ -665,7 +666,7 @@ in {
           passwordFile = "/run/secrets/icloud-app-password";
         };
       };
-      description = "Mail accounts by id, rendered as mail/<id> connections with their IMAP and SMTP capabilities and a host-file password credential. The id keys the account's cached mail; keep it stable.";
+      description = "Mail accounts by id, rendered as mail/<id> connections with their IMAP and SMTP capabilities and, when passwordFile is set, a host-file password credential. The id keys the account's cached mail; keep it stable.";
     };
 
     secretFiles = mkOption {
@@ -750,7 +751,7 @@ in {
     };
 
     media = {
-      enable = mkEnableOption "the Media section: filing, EZTV channels and the library; needs the media agent connection, from services.atrium.mediaAgent or an explicit services.atrium.connections.\"service/media-agent\"";
+      enable = mkEnableOption "the Library app (unit media): followed shows (EZTV channels), filing and the library; needs the media agent connection, from services.atrium.mediaAgent or an explicit services.atrium.connections.\"service/media-agent\"";
 
       group = mkOption {
         type = types.str;

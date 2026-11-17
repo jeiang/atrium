@@ -136,7 +136,7 @@ func TestRouteUsageCountersSurviveARestartAndSplitAgentTraffic(t *testing.T) {
 	base, stop = serve()
 	code, _ = hit(t, base, "/about")
 	want(code, http.StatusOK, "operator page after restart")
-	body := scrape(t, opsBase)
+	body := scrape(t, opsBase())
 	if got := scrapeValue(t, body, `atrium_http_route_requests_total{surface="page",method="GET",route="/about",agent="false"}`); got != 2 {
 		t.Fatalf("the route metric after a restart = %v, want the 2 saved operator requests:\n%s", got, body)
 	}
@@ -197,9 +197,9 @@ func scrapeValue(t *testing.T, body, series string) float64 {
 	return -1
 }
 
-func scrape(t *testing.T, opsBase string) string {
+func scrape(t *testing.T, base string) string {
 	t.Helper()
-	status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, opsBase+"/metrics", nil)
+	status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, base+"/metrics", nil)
 	if status != http.StatusOK {
 		t.Fatalf("ops /metrics = %d", status)
 	}
@@ -221,7 +221,7 @@ func TestSchedulerJobRunCounterSurvivesARestart(t *testing.T) {
 
 	_, _, stop := startServeStoppable(t, dir)
 	waitUntil(t, 60*time.Second, "the first backup run", schedulerTerminal(d, passrun.Backup))
-	body := scrape(t, opsBase)
+	body := scrape(t, opsBase())
 	before := scrapeValue(t, body, series)
 	if before < 1 {
 		t.Fatalf("%s = %v after one backup run, want at least 1:\n%s", series, before, body)
@@ -239,7 +239,7 @@ func TestSchedulerJobRunCounterSurvivesARestart(t *testing.T) {
 	waitUntil(t, 60*time.Second, "the second backup run", func() bool {
 		return schedulerRuns(t, d, passrun.Backup) == 2 && schedulerTerminal(d, passrun.Backup)()
 	})
-	if after := scrapeValue(t, scrape(t, opsBase), series); after != before+1 {
+	if after := scrapeValue(t, scrape(t, opsBase()), series); after != before+1 {
 		t.Fatalf("%s = %v after a restart and one more run, want %v", series, after, before+1)
 	}
 }

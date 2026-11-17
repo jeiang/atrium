@@ -58,7 +58,7 @@ func (s *Service) open(ctx context.Context) (Connection, error) {
 
 func (s *Service) lease(ctx context.Context) (Connection, error) { return s.open(ctx) }
 
-func (s *Service) recordClientAuth(ctx context.Context, secret string) {
+func (s *Service) recordClientAuth(ctx context.Context, secret string, result ProbeResult) {
 	conn, err := s.open(ctx)
 	if err != nil {
 		return
@@ -68,11 +68,7 @@ func (s *Service) recordClientAuth(ctx context.Context, secret string) {
 	if err != nil || current != secret {
 		return
 	}
-	_ = conn.Observe(ctx, ProbeResult{
-		Capability: "client_auth",
-		State:      "ok",
-		Reason:     "client authentication proved by an interactive login",
-	})
+	_ = conn.Observe(ctx, result)
 }
 
 func configValues(c Connection) map[string]string { return c.Values() }

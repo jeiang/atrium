@@ -14,7 +14,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
@@ -39,7 +38,6 @@ func agentRun(t *testing.T, args ...string) runView {
 func TestThreadCostCapCountsEveryRunOfTheThread(t *testing.T) {
 	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	seedSettings(t, map[string]string{loop.CacheTTLKey: "5m"})
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("first")))
 	first := agentRun(t, "--text", "hello")
 	if first.State != "done" {

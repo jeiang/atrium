@@ -206,11 +206,14 @@ type ListFilter struct {
 	Kind   string
 	State  string
 	Limit  int
+	Sort   string
 	After  *ListKey
 }
 
 type ListKey struct {
 	UpdatedAt float64
+	CreatedAt float64
+	Title     string
 	ID        int64
 }
 
@@ -246,15 +249,31 @@ func List(ctx context.Context, q db.Querier, f ListFilter) ([]Record, error) {
 	case "imported":
 		where += " AND r.writer = 'import'"
 	}
+	order := "r.updated_at DESC, r.id DESC"
+	switch f.Sort {
+	case "title":
+		order = "r.title COLLATE NOCASE ASC, r.id ASC"
+	case "created":
+		order = "r.created_at DESC, r.id DESC"
+	}
 	if f.After != nil {
-		where += " AND (r.updated_at, r.id) < (?, ?)"
-		args = append(args, f.After.UpdatedAt, f.After.ID)
+		switch f.Sort {
+		case "title":
+			where += " AND (r.title COLLATE NOCASE > ? OR (r.title COLLATE NOCASE = ? AND r.id > ?))"
+			args = append(args, f.After.Title, f.After.Title, f.After.ID)
+		case "created":
+			where += " AND (r.created_at, r.id) < (?, ?)"
+			args = append(args, f.After.CreatedAt, f.After.ID)
+		default:
+			where += " AND (r.updated_at, r.id) < (?, ?)"
+			args = append(args, f.After.UpdatedAt, f.After.ID)
+		}
 	}
 	limit := f.Limit
 	if limit <= 0 {
 		limit = 200
 	}
-	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM kb_records r WHERE "+where+" ORDER BY r.updated_at DESC, r.id DESC LIMIT ?",
+	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM kb_records r WHERE "+where+" ORDER BY "+order+" LIMIT ?",
 		append(args, limit)...)
 	if err != nil {
 		return nil, err
