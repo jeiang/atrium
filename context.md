@@ -1218,9 +1218,10 @@ claims about the running application. Operator contracts are in
   names; the Activity category is `library` (operation prefix `media`), except
   the torrent operations of the Torrents app (`media_add_magnet`,
   `media_add_file`, `media_file_priority`, `media_tag_add`, `media_tag_remove`,
-  `media_start`, `media_stop`, `media_delete`, undo kind
-  `media_torrent_delete`), which list under its category `downloads` (the
-  longest claimed operation prefix wins), and the
+  `media_start`, `media_stop`, `media_delete`, undo kinds
+  `media_torrent_delete`, `media_torrent_state` and `media_torrent_tag`),
+  which list under its category `downloads` (the longest claimed operation
+  prefix wins), and the
   notification channel shows the title "Library". Tools: `library_search`,
   `library_following`, `library_follow`, `library_unfollow`. The channel poll
   job records `skipped_unconfigured` ("no show is followed") and makes no
@@ -1240,6 +1241,21 @@ claims about the running application. Operator contracts are in
   inspect-filing <effect-id>` prints the receipt and current evidence. Undo
   asks the agent for the receipt-derived inverse; filings made before the
   agent are refused.
+- Torrent and library undo: every operator or agent pause or resume that
+  changes the torrent's state records the opposite action as undo kind
+  `media_torrent_state`, and every operator tag change that changes the tags
+  records `media_torrent_tag`; job writes, removals and no-op changes carry
+  no undo. `POST /media/torrents/{hash}/control`,
+  `POST /media/filings/{hash}` (the `media_file` effect) and
+  `POST /media/filings/{hash}/ignore` (its tag effects) answer `effect_ids`
+  and `undoable`. `media.channel-add` and `media.channel-remove` record
+  `media_channel_add` and `media_channel_remove` effects for the operator as
+  for approved proposals; undoing a removal restores the row with its id.
+- The `downloads` app event topic (Torrents on) advances after every
+  qBittorrent write or undo atrium makes and when the `downloads-watch`
+  service, which lists qBittorrent every 5 seconds (and at once when a
+  stream opens) only while at least one app event stream is open on either
+  prefix, sees a torrent's name, state, tags or whole-percent progress change.
 - Automatic filing: the `media-sweep` job, after selection and removal, files
   a completed, unfiled, unignored media torrent without the operator when it
   is approved and its plan is exact (`located.exact` in

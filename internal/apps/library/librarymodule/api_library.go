@@ -114,9 +114,16 @@ type MediaFilingPreview struct {
 	Error string            `json:"error,omitempty"`
 }
 type MediaFiled struct {
-	ID     string `json:"id"`
-	Placed int    `json:"placed"`
+	ID        string  `json:"id"`
+	Placed    int     `json:"placed"`
+	EffectIDs []int64 `json:"effect_ids,omitempty"`
+	Undoable  *bool   `json:"undoable,omitempty"`
 }
+
+func (m *MediaFiled) ReportEffects(ids []int64, undoable *bool) {
+	m.EffectIDs, m.Undoable = ids, undoable
+}
+
 type MediaSwept struct {
 	Selected int `json:"selected"`
 	Removed  int `json:"removed"`

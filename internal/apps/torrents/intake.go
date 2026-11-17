@@ -23,7 +23,9 @@ const (
 	OpStop      = "media_stop"
 	OpDelete    = "media_delete"
 
-	UndoTorrent = contract.UndoTorrent
+	UndoTorrent      = contract.UndoTorrent
+	UndoTorrentState = "media_torrent_state"
+	UndoTorrentTag   = "media_torrent_tag"
 
 	origin = "media"
 )
@@ -59,8 +61,11 @@ type intake struct {
 }
 
 type torrentUndo struct {
-	Op   string `json:"op"`
-	Hash string `json:"hash"`
+	Op     string          `json:"op"`
+	Hash   string          `json:"hash"`
+	Action contract.Action `json:"action,omitempty"`
+	Tag    string          `json:"tag,omitempty"`
+	On     bool            `json:"on,omitempty"`
 }
 
 func jsonOf(v any) json.RawMessage {
@@ -208,6 +213,7 @@ func (in *intake) Add(ctx context.Context, req contract.AddRequest) (string, err
 	if err != nil {
 		return "", err
 	}
+	defer touchDownloads(ctx, in.d.DB)
 	if len(req.Data) > 0 {
 		err = qb.AddFile(ctx, req.Data, req.Name, tags)
 	} else {
@@ -249,18 +255,31 @@ func (in *intake) gate(ctx context.Context, qb *Qbit, scope contract.Scope, hash
 	return found, nil
 }
 
-func (in *intake) command(ctx context.Context, scope contract.Scope, hash, label, operation string, action map[string]any, check func(*Torrent) error, run func(*Qbit) error) error {
+func (in *intake) command(ctx context.Context, scope contract.Scope, hash, label, operation string, action map[string]any, check func(*Torrent) error, undo func(*Torrent) *torrentUndo, run func(*Qbit) error) (int64, error) {
 	qb, prefix, err := in.client(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	found, err := in.gate(ctx, qb, scope, hash, label)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if check != nil {
 		if err := check(found); err != nil {
-			return err
+			return 0, err
+		}
+	}
+	var reverse json.RawMessage
+	if undo != nil && actorOf(scope) != contract.Job {
+		if found == nil {
+			if found, err = qb.Torrent(ctx, hash); err != nil {
+				return 0, err
+			}
+		}
+		if found != nil {
+			if u := undo(found); u != nil {
+				reverse = jsonOf(u)
+			}
 		}
 	}
 	action["actor"] = actorOf(scope)
@@ -268,16 +287,17 @@ func (in *intake) command(ctx context.Context, scope contract.Scope, hash, label
 	ticket, err := store.Begin(ctx, ledger.New{
 		Origin: origin, Operation: operation, OperationKey: "media:" + operation + ":" + ledger.NewKey(),
 		ProposalID: scope.ProposalID, ThreadID: scope.ThreadID, RunID: scope.RunID,
-		Target: hash, Action: jsonOf(action), Resources: []ledger.Resource{{Key: prefix + strings.ToLower(hash)}},
+		Target: hash, Action: jsonOf(action), Undo: reverse, Resources: []ledger.Resource{{Key: prefix + strings.ToLower(hash)}},
 	}, nil)
 	if err != nil {
-		return err
+		return 0, err
 	}
+	defer touchDownloads(ctx, in.d.DB)
 	if err := run(qb); err != nil {
 		_ = store.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: settleState(err), Target: hash, Error: err.Error()}, nil)
-		return err
+		return ticket.ID, err
 	}
-	return store.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: ledger.Done, Target: hash, After: jsonOf(action)}, nil)
+	return ticket.ID, store.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: ledger.Done, Target: hash, After: jsonOf(action)}, nil)
 }
 
 func (in *intake) SetWanted(ctx context.Context, scope contract.Scope, hash, label string, ids []int, wanted bool) error {
@@ -285,9 +305,10 @@ func (in *intake) SetWanted(ctx context.Context, scope contract.Scope, hash, lab
 	if wanted {
 		priority = contract.PriorityNormal
 	}
-	return in.command(ctx, scope, hash, label, OpPriority, map[string]any{"hash": hash, "ids": ids, "priority": priority}, nil, func(qb *Qbit) error {
+	_, err := in.command(ctx, scope, hash, label, OpPriority, map[string]any{"hash": hash, "ids": ids, "priority": priority}, nil, nil, func(qb *Qbit) error {
 		return qb.SetPriority(ctx, hash, ids, priority)
 	})
+	return err
 }
 
 func (in *intake) protected(mark string) bool {
@@ -298,15 +319,21 @@ func (in *intake) protected(mark string) bool {
 	return ok
 }
 
-func (in *intake) Mark(ctx context.Context, scope contract.Scope, hash, label, mark string, on bool) error {
+func (in *intake) Mark(ctx context.Context, scope contract.Scope, hash, label, mark string, on bool) (int64, error) {
 	if !on && in.protected(mark) {
-		return &contract.Refused{Hash: hash, Reason: contract.Protected}
+		return 0, &contract.Refused{Hash: hash, Reason: contract.Protected}
 	}
 	operation := OpTagRemove
 	if on {
 		operation = OpTagAdd
 	}
-	return in.command(ctx, scope, hash, label, operation, map[string]any{"hash": hash, "tag": mark}, nil, func(qb *Qbit) error {
+	undo := func(found *Torrent) *torrentUndo {
+		if found.HasTag(mark) == on {
+			return nil
+		}
+		return &torrentUndo{Op: UndoTorrentTag, Hash: hash, Tag: mark, On: !on}
+	}
+	return in.command(ctx, scope, hash, label, operation, map[string]any{"hash": hash, "tag": mark}, nil, undo, func(qb *Qbit) error {
 		if on {
 			return qb.AddTags(ctx, hash, mark)
 		}
@@ -314,13 +341,21 @@ func (in *intake) Mark(ctx context.Context, scope contract.Scope, hash, label, m
 	})
 }
 
-func (in *intake) Control(ctx context.Context, c contract.Control) error {
+func (in *intake) Control(ctx context.Context, c contract.Control) (int64, error) {
 	action := map[string]any{"hash": c.Hash}
+	reverse := func(stopped bool, back contract.Action) func(*Torrent) *torrentUndo {
+		return func(found *Torrent) *torrentUndo {
+			if found.Stopped() != stopped {
+				return nil
+			}
+			return &torrentUndo{Op: UndoTorrentState, Hash: c.Hash, Action: back}
+		}
+	}
 	switch c.Action {
 	case contract.Pause:
-		return in.command(ctx, c.Scope, c.Hash, c.Label, OpStop, action, nil, func(qb *Qbit) error { return qb.Stop(ctx, c.Hash) })
+		return in.command(ctx, c.Scope, c.Hash, c.Label, OpStop, action, nil, reverse(false, contract.Resume), func(qb *Qbit) error { return qb.Stop(ctx, c.Hash) })
 	case contract.Resume:
-		return in.command(ctx, c.Scope, c.Hash, c.Label, OpStart, action, nil, func(qb *Qbit) error { return qb.Start(ctx, c.Hash) })
+		return in.command(ctx, c.Scope, c.Hash, c.Label, OpStart, action, nil, reverse(true, contract.Pause), func(qb *Qbit) error { return qb.Start(ctx, c.Hash) })
 	case contract.Remove:
 		action["files"] = c.DeleteFiles
 		check := func(found *Torrent) error {
@@ -338,41 +373,58 @@ func (in *intake) Control(ctx context.Context, c contract.Control) error {
 			}
 			return nil
 		}
-		return in.command(ctx, c.Scope, c.Hash, c.Label, OpDelete, action, check, func(qb *Qbit) error { return qb.Delete(ctx, c.Hash, c.DeleteFiles) })
+		return in.command(ctx, c.Scope, c.Hash, c.Label, OpDelete, action, check, nil, func(qb *Qbit) error { return qb.Delete(ctx, c.Hash, c.DeleteFiles) })
 	}
-	return contract.Invalid("unknown torrent action " + string(c.Action))
+	return 0, contract.Invalid("unknown torrent action " + string(c.Action))
 }
 
-func validateUndo(raw json.RawMessage) error {
-	var head struct {
-		Op string `json:"op"`
+func validateUndo(op string) func(json.RawMessage) error {
+	return func(raw json.RawMessage) error {
+		var head struct {
+			Op string `json:"op"`
+		}
+		if err := json.Unmarshal(raw, &head); err != nil {
+			return ledger.Refused("media undo payload is invalid")
+		}
+		if head.Op != op {
+			return ledger.Refused("media undo payload names " + head.Op)
+		}
+		return nil
 	}
-	if err := json.Unmarshal(raw, &head); err != nil {
-		return ledger.Refused("media undo payload is invalid")
+}
+
+func (a *App) undoClient(ctx context.Context, store *ledger.Store, env config.Env, raw json.RawMessage) (torrentUndo, *Qbit, *Torrent, error) {
+	var u torrentUndo
+	if err := json.Unmarshal(raw, &u); err != nil || u.Hash == "" {
+		return u, nil, nil, ledger.Refused("media undo payload is invalid")
 	}
-	if head.Op != UndoTorrent {
-		return ledger.Refused("media undo payload names " + head.Op)
+	in := &intake{app: a, d: contract.Deps{DB: store.DB, Env: env, Ledger: store}}
+	qb, _, err := in.client(ctx)
+	if err != nil {
+		return u, nil, nil, ledger.Refused(err.Error())
 	}
-	return nil
+	found, err := qb.Torrent(ctx, u.Hash)
+	return u, qb, found, err
 }
 
 func (a *App) Undo(store *ledger.Store, env config.Env) []ledger.UndoDefinition {
+	gone := ledger.Result{State: ledger.Failed, Error: "the torrent is no longer in qBittorrent"}
+	watched := func(run func(context.Context, json.RawMessage) (ledger.Result, error)) func(context.Context, json.RawMessage) (ledger.Result, error) {
+		return func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
+			defer touchDownloads(ctx, store.DB)
+			return run(ctx, raw)
+		}
+	}
 	return []ledger.UndoDefinition{{Operation: UndoTorrent, Undoer: ledger.Undoer{
-		Validate: validateUndo,
-		External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
-			var u torrentUndo
-			if err := json.Unmarshal(raw, &u); err != nil || u.Hash == "" {
-				return ledger.Result{}, ledger.Refused("media undo payload is invalid")
+		Validate: validateUndo(UndoTorrent),
+		External: watched(func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
+			u, qb, found, err := a.undoClient(ctx, store, env, raw)
+			if qb == nil {
+				return ledger.Result{}, err
 			}
-			in := &intake{app: a, d: contract.Deps{DB: store.DB, Env: env, Ledger: store}}
-			qb, _, err := in.client(ctx)
-			if err != nil {
-				return ledger.Result{}, ledger.Refused(err.Error())
-			}
-			found, err := qb.Torrent(ctx, u.Hash)
 			if err == nil {
 				if found == nil {
-					return ledger.Result{State: ledger.Failed, Error: "the torrent is no longer in qBittorrent"}, nil
+					return gone, nil
 				}
 				for _, c := range a.consumers {
 					if found.HasTag(c.Consumed) {
@@ -385,6 +437,55 @@ func (a *App) Undo(store *ledger.Store, env config.Env) []ledger.UndoDefinition 
 				return ledger.Result{State: settleState(err), Error: err.Error()}, nil
 			}
 			return ledger.Result{State: ledger.Done, After: jsonOf(map[string]any{"deleted": u.Hash})}, nil
-		},
+		}),
+	}}, {Operation: UndoTorrentState, Undoer: ledger.Undoer{
+		Validate: validateUndo(UndoTorrentState),
+		External: watched(func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
+			u, qb, found, err := a.undoClient(ctx, store, env, raw)
+			if qb == nil {
+				return ledger.Result{}, err
+			}
+			if err == nil {
+				switch {
+				case found == nil:
+					return gone, nil
+				case u.Action == contract.Pause:
+					err = qb.Stop(ctx, u.Hash)
+				case u.Action == contract.Resume:
+					err = qb.Start(ctx, u.Hash)
+				default:
+					return ledger.Result{}, ledger.Refused("media undo payload names action " + string(u.Action))
+				}
+			}
+			if err != nil {
+				return ledger.Result{State: settleState(err), Error: err.Error()}, nil
+			}
+			return ledger.Result{State: ledger.Done, After: jsonOf(map[string]any{"hash": u.Hash, "action": u.Action})}, nil
+		}),
+	}}, {Operation: UndoTorrentTag, Undoer: ledger.Undoer{
+		Validate: validateUndo(UndoTorrentTag),
+		External: watched(func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
+			u, qb, found, err := a.undoClient(ctx, store, env, raw)
+			if qb == nil {
+				return ledger.Result{}, err
+			}
+			if u.Tag == "" {
+				return ledger.Result{}, ledger.Refused("media undo payload is invalid")
+			}
+			if err == nil {
+				switch {
+				case found == nil:
+					return gone, nil
+				case u.On:
+					err = qb.AddTags(ctx, u.Hash, u.Tag)
+				default:
+					err = qb.RemoveTags(ctx, u.Hash, u.Tag)
+				}
+			}
+			if err != nil {
+				return ledger.Result{State: settleState(err), Error: err.Error()}, nil
+			}
+			return ledger.Result{State: ledger.Done, After: jsonOf(map[string]any{"hash": u.Hash, "tag": u.Tag, "on": u.On})}, nil
+		}),
 	}}}
 }

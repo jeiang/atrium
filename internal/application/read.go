@@ -22,6 +22,10 @@ type Read[T any] struct {
 	Data     T        `json:"data"`
 }
 
+type EffectReport interface {
+	ReportEffects(ids []int64, undoable *bool)
+}
+
 type Change[T any] struct {
 	Data      T       `json:"data"`
 	EffectIDs []int64 `json:"effect_ids,omitempty"`

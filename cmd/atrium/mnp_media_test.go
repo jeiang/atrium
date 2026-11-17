@@ -48,6 +48,7 @@ type mnpQbit struct {
 	writes  []string
 	deleted []string
 	drop    map[string]bool
+	lists   int
 }
 
 func mnpNewQbit(t *testing.T) (*mnpQbit, string) {
@@ -96,6 +97,12 @@ func mnpDropConn(w http.ResponseWriter) {
 			_ = conn.Close()
 		}
 	}
+}
+
+func (f *mnpQbit) listed() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.lists
 }
 
 func (f *mnpQbit) put(tor mnpTorrent) {
@@ -161,6 +168,7 @@ func (f *mnpQbit) handle(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "v5.2.0")
 		return
 	case "torrents/info":
+		f.lists++
 		rows := []map[string]any{}
 		for _, h := range f.order {
 			t := f.items[h]

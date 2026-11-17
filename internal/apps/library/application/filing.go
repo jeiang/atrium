@@ -136,7 +136,7 @@ func (s *Service) FileItem(ctx context.Context, in FilingInput) (application.Cha
 	if err != nil {
 		return application.Change[Filed]{}, err
 	}
-	return application.Change[Filed]{Data: out, AuditID: id}, nil
+	return application.Change[Filed]{Data: out, EffectIDs: []int64{out.EffectID}, AuditID: id}, nil
 }
 
 func (s *Service) fileItem(ctx context.Context, in FilingInput) (Filed, error) {
@@ -221,11 +221,11 @@ func (s *Service) place(ctx context.Context, at located, ops []library.Op, actor
 	if at.item.Torrent {
 		scope := contract.Scope{Actor: actor}
 		if actor == contract.Operator {
-			if err := at.set.Intake.Mark(ctx, scope, at.item.ID, library.TagMedia, library.TagIgnored, false); err != nil {
+			if _, err := at.set.Intake.Mark(ctx, scope, at.item.ID, library.TagMedia, library.TagIgnored, false); err != nil {
 				return done, classifyFiling(&library.PartialError{Cause: err, Placed: dests})
 			}
 		}
-		if err := at.set.Intake.Mark(ctx, scope, at.item.ID, library.TagMedia, library.TagFiled, true); err != nil {
+		if _, err := at.set.Intake.Mark(ctx, scope, at.item.ID, library.TagMedia, library.TagFiled, true); err != nil {
 			return done, classifyFiling(&library.PartialError{Cause: err, Placed: dests})
 		}
 	} else {
@@ -370,23 +370,24 @@ func DescribeIgnore() application.Definition {
 }
 
 func (s *Service) Ignore(ctx context.Context, in IgnoreInput) (application.Change[Ignored], error) {
-	err := s.ignore(ctx, in)
-	id, err := s.record(ctx, IgnoreName, in.ID, nil, err)
+	effects, err := s.ignore(ctx, in)
+	id, err := s.record(ctx, IgnoreName, in.ID, map[string]any{"effect_ids": effects}, err)
 	if err != nil {
 		return application.Change[Ignored]{}, err
 	}
-	return application.Change[Ignored]{Data: Ignored(in), AuditID: id}, nil
+	return application.Change[Ignored]{Data: Ignored(in), EffectIDs: effects, AuditID: id}, nil
 }
 
-func (s *Service) ignore(ctx context.Context, in IgnoreInput) error {
+func (s *Service) ignore(ctx context.Context, in IgnoreInput) ([]int64, error) {
 	if in.ID == "" {
-		return invalid("id", "Field required")
+		return nil, invalid("id", "Field required")
 	}
 	at, err := s.find(ctx, in.ID)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return classifyFiling(library.Ignore(ctx, at.set, at.item))
+	effects, err := library.Ignore(ctx, at.set, at.item)
+	return effects, classifyFiling(err)
 }
 
 func (s *Service) find(ctx context.Context, id string) (located, error) {

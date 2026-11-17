@@ -56,8 +56,14 @@ type TorrentControlInput struct {
 	DeleteFiles bool   `json:"delete_files,omitempty"`
 }
 type TorrentControlled struct {
-	Hash   string `json:"hash"`
-	Action string `json:"action"`
+	Hash      string  `json:"hash"`
+	Action    string  `json:"action"`
+	EffectIDs []int64 `json:"effect_ids,omitempty"`
+	Undoable  *bool   `json:"undoable,omitempty"`
+}
+
+func (t *TorrentControlled) ReportEffects(ids []int64, undoable *bool) {
+	t.EffectIDs, t.Undoable = ids, undoable
 }
 
 func shape[T any](area string) application.APIShape {

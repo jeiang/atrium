@@ -33,6 +33,7 @@ var topicModules = map[string]string{
 	state.Calendar:  unit.Calendar,
 	state.Media:     unit.Media,
 	state.Notify:    unit.Notifications,
+	state.Downloads: unit.Torrents,
 }
 
 func eventOperations() ([]application.Definition, []application.Binding) {
@@ -77,6 +78,7 @@ func serveEvents(d *web.Deps, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer release()
+	defer state.Listen()()
 	wake, unsubscribe := db.Commits()
 	defer unsubscribe()
 	store := state.New(d.DB)

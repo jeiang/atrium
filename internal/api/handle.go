@@ -94,6 +94,9 @@ func Command[I, O any](d *web.Deps, def application.Definition, shape applicatio
 				if undoable, err := ledger.EffectsUndoable(ctx, d.DB.Read, change.EffectIDs); err == nil {
 					change.Undoable = &undoable
 				}
+				if report, ok := any(&change.Data).(application.EffectReport); ok {
+					report.ReportEffects(change.EffectIDs, change.Undoable)
+				}
 			}
 			write(w, shape, reflect.TypeFor[O](), change.Data, change)
 		})
