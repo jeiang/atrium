@@ -5,8 +5,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -67,15 +65,8 @@ func TestAUIAAddedMailAccountStaysOperatorOwnedAcrossBoots(t *testing.T) {
 
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	if code, _, _ := fetch(t, client, http.MethodGet, s.base+"/settings/mail", nil); code != http.StatusOK {
-		t.Fatalf("mail settings: %d", code)
-	}
-	add := url.Values{"id": {"work"}, "label": {"Work"}, "preset": {"gmail"}, "login": {"me@work.test"}, "password": {"work-pass"}}
-	if code, body, _ := fetch(t, client, http.MethodPost, s.base+"/settings/mail/accounts", add); code != http.StatusOK {
-		t.Fatalf("add: %d %.300s", code, body)
-	}
+	add := map[string]any{"id": "work", "label": "Work", "preset": "gmail", "login": "me@work.test", "password": "work-pass"}
+	apiData(t, localWebG1(t, s.base).do(http.MethodPost, "/web/v1/mail/accounts", add), http.StatusCreated)
 	s.stop()
 	s.start()
 

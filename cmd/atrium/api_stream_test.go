@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"net/http"
-	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -142,9 +141,8 @@ func TestRunEventsPersistAcrossRuns(t *testing.T) {
 	if replay, _ := s.events(s.token, threadID, runID, ""); replay != first {
 		t.Fatal("restart changed the durable stream")
 	}
-	browser := asstBrowse(t, s.base)
-	if code, body, _ := browser.post(fmt.Sprintf("/chat/%d/delete", threadID), url.Values{}, true); code != http.StatusOK && code != http.StatusSeeOther && code != http.StatusNoContent {
-		t.Fatalf("delete: %d %s", code, body)
+	if got := localWebG1(t, s.base).do(http.MethodDelete, fmt.Sprintf("/web/v1/threads/%d", threadID), nil); got.status != http.StatusNoContent {
+		t.Fatalf("delete: %d %s", got.status, got.body)
 	}
 	if n := asstCount(t, s.d, "SELECT COUNT(*) FROM run_events WHERE run_id = ? OR stream_run_id = ?", runID, runID); n != 0 {
 		t.Fatalf("%d events retained after deletion", n)
@@ -295,10 +293,7 @@ func TestStreamExpiredIs410(t *testing.T) {
 			t.Fatalf("%d expired events kept for run %d", n, old)
 		}
 	}
-	browser := asstBrowse(t, s.base)
-	if code, body, _ := browser.get(fmt.Sprintf("/chat/%d/events?run=%d", threadID, runID), false); code != http.StatusGone {
-		t.Fatalf("browser stream with a pruned cursor: %d %s", code, body)
-	}
+	expectAPI(t, localWebG1(t, s.base).do(http.MethodGet, fmt.Sprintf("/web/v1/threads/%d/runs/%d/events", threadID, runID), nil), http.StatusGone, "stream_expired")
 
 	path := fmt.Sprintf("/api/v1/threads/%d/runs/%d/events", threadID, runID)
 	expired := s.do(http.MethodGet, path, s.token, nil)

@@ -155,7 +155,7 @@
       <InboxEntry target={selected} ondecided={onDecided} />
     </div>
   {:else if phone}
-    <div class="deck">
+    <div class="deck" aria-busy={pending.isFetching || undefined}>
       {#if pending.isPending && !offline}
         <div class="card inbox-card__loading"><Skeleton lines={9} label="Loading the Inbox" /></div>
       {/if}
@@ -166,7 +166,7 @@
     </div>
   {:else}
     <div class="inbox">
-      <div class="inbox__list">
+      <div class="inbox__list" aria-busy={pending.isFetching || undefined}>
         {#if offline || (pending.isError && !pending.data)}
           {@render listState()}
         {:else}

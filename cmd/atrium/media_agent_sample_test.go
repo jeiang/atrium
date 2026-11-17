@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"io/fs"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,12 +53,16 @@ func TestCleanupNeverDeletesRealVideosNamedLikeSamples(t *testing.T) {
 	mnpWrite(t, filepath.Join(small, "sample.mkv"), []byte("sample"))
 
 	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
-	b.want(http.MethodPost, "/apps/media/file", url.Values{"id": {library.Import + "/Show.S02"}, "action": {"file"}, "kind": {"tv"}, "title": {"Show"}, "year": {"2020"},
-		"s0": {"2"}, "e0": {"1"}, "s1": {"2"}, "e1": {"5"}}, http.StatusOK)
-	b.want(http.MethodPost, "/apps/media/file", url.Values{"id": {library.Import + "/Other.1999"}, "action": {"file"}, "kind": {"movie"}, "title": {"Other"}, "year": {"1999"}}, http.StatusOK)
-	b.want(http.MethodPost, "/apps/media/file", url.Values{"id": {library.Import + "/Small.2021"}, "action": {"file"}, "kind": {"movie"}, "title": {"Small"}, "year": {"2021"}}, http.StatusOK)
+	c := webG4(t, startServeIn(t, dir))
+	queueG4(c)
+	if got := fileG4(c, library.Import+"/Show.S02", "tv", "Show", "2020", [2]string{"2", "1"}, [2]string{"2", "5"}); got.status != http.StatusOK {
+		t.Fatalf("filing Show.S02 = %d: %s", got.status, got.body)
+	}
+	for _, item := range [][3]string{{"Other.1999", "Other", "1999"}, {"Small.2021", "Small", "2021"}} {
+		if got := fileG4(c, library.Import+"/"+item[0], "movie", item[1], item[2]); got.status != http.StatusOK {
+			t.Fatalf("filing %s = %d: %s", item[0], got.status, got.body)
+		}
+	}
 
 	if got := sizedFiles(t, filepath.Join(root, "tv"), episode); len(got) != 1 || !strings.Contains(filepath.Base(got[0]), "E05") {
 		t.Fatalf("the episode named like a sample was not filed: %v", got)

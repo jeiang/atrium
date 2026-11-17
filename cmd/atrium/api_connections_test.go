@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
@@ -233,19 +232,13 @@ func TestConnectionCredentialCannotFollowAnEndpointChange(t *testing.T) {
 	if count := queryValue(t, d.Read, "SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'service/grafana' AND slot = 'unexpected'"); count != "0" {
 		t.Fatalf("unknown slot was stored: %s", count)
 	}
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
+	browser := newWebClient(t, base, nil)
+	browser.session("local")
+	if reply := browser.do(http.MethodPut, "/web/v1/connections/service/grafana", map[string]any{"url": b.URL}); reply.status != http.StatusUnprocessableEntity || strings.Contains(reply.body, old["viewer_token"]) {
+		t.Fatalf("web endpoint change: %d %s", reply.status, reply.body)
 	}
-	browser := &http.Client{Jar: jar}
-	if status, _, _ := fetch(t, browser, http.MethodGet, base+"/settings/connections", nil); status != http.StatusOK {
-		t.Fatalf("connections page: %d", status)
-	}
-	if status, body, _ := fetch(t, browser, http.MethodPost, base+"/settings/connections/test", url.Values{"id": {"service/grafana"}, "url": {b.URL}}); status != http.StatusUnprocessableEntity || strings.Contains(body, old["viewer_token"]) {
-		t.Fatalf("HTML endpoint change: %d %s", status, body)
-	}
-	if status, body, _ := fetch(t, browser, http.MethodPost, base+"/settings/connections/test", url.Values{"id": {"service/grafana"}, "url": {userinfoURL.String()}}); status != http.StatusUnprocessableEntity || strings.Contains(body, userinfoPassword) {
-		t.Fatalf("HTML userinfo refusal: status %d; password absent %t", status, !strings.Contains(body, userinfoPassword))
+	if reply := browser.do(http.MethodPut, "/web/v1/connections/service/grafana", map[string]any{"url": userinfoURL.String()}); reply.status != http.StatusUnprocessableEntity || strings.Contains(reply.body, userinfoPassword) {
+		t.Fatalf("web userinfo refusal: status %d; password absent %t", reply.status, !strings.Contains(reply.body, userinfoPassword))
 	}
 	if count := queryValue(t, d.Read, "SELECT COUNT(*) FROM settings_audit WHERE instr(COALESCE(old_value, '') || COALESCE(new_value, ''), ?) > 0", userinfoPassword); count != "0" {
 		t.Fatal("userinfo password entered the settings audit")

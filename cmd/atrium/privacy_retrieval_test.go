@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"slices"
@@ -176,19 +177,31 @@ func TestPrivateSpacePinnedFactsStayOutOfOtherPrompts(t *testing.T) {
 
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
-	w := asstBrowse(t, base)
-	code, body, _ := w.get("/library/knowledge/profile", false)
-	if code != http.StatusOK {
-		t.Fatalf("profile page = %d: %s", code, body)
+	got := webG4(t, base).do(http.MethodGet, "/web/v1/knowledge/profile", nil)
+	if got.status != http.StatusOK {
+		t.Fatalf("profile = %d: %s", got.status, got.body)
 	}
-	for _, shown := range []string{"Vault code", "Spare key", "Office code", ">private<", "The office code is 1111."} {
-		if !strings.Contains(body, shown) {
-			t.Errorf("operator profile page lacks %q: %.600s", shown, body)
+	profile := dataG4(got)
+	block, _ := profile["block"].(string)
+	entries, _ := profile["entries"].([]any)
+	titles := map[string]bool{}
+	var private bool
+	for _, raw := range entries {
+		entry, _ := raw.(map[string]any)
+		titles[fmt.Sprint(entry["title"])] = true
+		private = private || entry["reason"] == "private"
+	}
+	for _, shown := range []string{"Vault code", "Spare key", "Office code"} {
+		if !titles[shown] {
+			t.Errorf("operator profile lacks %q: %.600s", shown, got.body)
 		}
 	}
+	if !private || !strings.Contains(block, "The office code is 1111.") {
+		t.Errorf("operator profile lacks the private reason or the office fact in the model block: %.600s", got.body)
+	}
 	for _, hidden := range []string{"The vault combination is 8842.", "The spare key is 5150."} {
-		if strings.Contains(body, hidden) {
-			t.Errorf("operator profile page shows %q in the model block: %.600s", hidden, body)
+		if strings.Contains(block, hidden) {
+			t.Errorf("operator profile shows %q in the model block: %.600s", hidden, block)
 		}
 	}
 }

@@ -237,16 +237,18 @@ func asstServe(t *testing.T) (string, *modelLog, *db.DB, *asstWeb) {
 
 func TestAsstChatTurnStreamsEditsRegeneratesBranchesAndDeletes(t *testing.T) {
 	t.Parallel()
-	_, api, d, w := asstServe(t)
+	_, api, d, w := webServeG1(t)
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Thinking("pondering", "sig"), anthropictest.Text("Hello **there** zebrafish")))
-	thread := w.start(map[string]string{"text": "firstmarker"})
+	thread := webStartG1(t, w, map[string]any{"text": "firstmarker"})
 	run := asstLastRun(t, d, thread)
 	if state, _ := asstSettle(t, d, run); state != "done" {
 		t.Fatalf("first run %s", state)
 	}
 
-	code, events, h := w.get(fmt.Sprintf("/chat/%d/events?run=%d", thread, run), false)
-	w.want(code, http.StatusOK, events, "event: text\n")
+	stream := threadG1(thread, fmt.Sprintf("/runs/%d/events", run))
+	got := w.do(http.MethodGet, stream, nil)
+	webWantG1(t, got, http.StatusOK, "event: text\n")
+	events, h := got.body, got.header
 	if h.Get("Content-Type") != "text/event-stream; charset=utf-8" || h.Get("Cache-Control") != "private, no-store, no-transform" || h.Get("X-Accel-Buffering") != "no" || h.Get("X-Content-Type-Options") != "nosniff" {
 		t.Errorf("event stream headers %v", h)
 	}
@@ -257,26 +259,23 @@ func TestAsstChatTurnStreamsEditsRegeneratesBranchesAndDeletes(t *testing.T) {
 	if len(ids) < 2 {
 		t.Fatalf("frame ids %v", ids)
 	}
-	_, resumed, _ := w.get(fmt.Sprintf("/chat/%d/events?run=%d", thread, run), false, "Last-Event-ID", ids[len(ids)-2])
-	if got := asstFrameIDs(resumed); len(got) != 1 || got[0] != ids[len(ids)-1] {
+	resumed := w.do(http.MethodGet, stream, nil, "Last-Event-ID", ids[len(ids)-2])
+	if got := asstFrameIDs(resumed.body); len(got) != 1 || got[0] != ids[len(ids)-1] {
 		t.Errorf("resumed frames %v, want only %s", got, ids[len(ids)-1])
 	}
 
 	api.Push(asstReply("Answer two"))
-	code, body, _ := w.upload(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": "secondmarker", "edit": "1"}, nil, true)
-	w.want(code, http.StatusOK, body, "secondmarker")
+	webWantG1(t, w.do(http.MethodPatch, threadG1(thread, "/messages/latest"), map[string]any{"text": "secondmarker"}), http.StatusAccepted)
 	if state := asstSettleThread(t, d, thread); state != "done" {
 		t.Fatalf("edited run %s", state)
 	}
-	_, page, _ := w.get(fmt.Sprintf("/chat/%d", thread), false)
-	if !strings.Contains(page, "Answer two") {
-		t.Errorf("the edit did not replace the answer")
+	if page := w.do(http.MethodGet, threadG1(thread, ""), nil); !strings.Contains(page.body, "secondmarker") || !strings.Contains(page.body, "Answer two") {
+		t.Errorf("the edit did not replace the answer: %.600s", page.body)
 	}
 
 	api.Push(asstReply("Answer three"))
 	before := asstLastRun(t, d, thread)
-	code, body, _ = w.post(fmt.Sprintf("/chat/%d/regenerate", thread), url.Values{}, true)
-	w.want(code, http.StatusOK, body)
+	webWantG1(t, w.do(http.MethodPost, threadG1(thread, "/regenerate"), nil), http.StatusAccepted)
 	for deadline := time.Now().Add(20 * time.Second); asstLastRun(t, d, thread) == before; time.Sleep(20 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatal("regenerate started no run")
@@ -285,8 +284,7 @@ func TestAsstChatTurnStreamsEditsRegeneratesBranchesAndDeletes(t *testing.T) {
 	if state := asstSettleThread(t, d, thread); state != "done" {
 		t.Fatalf("regenerated run %s", state)
 	}
-	_, page, _ = w.get(fmt.Sprintf("/chat/%d", thread), false)
-	if !strings.Contains(page, "Answer three") || strings.Contains(page, "Answer two") {
+	if page := w.do(http.MethodGet, threadG1(thread, ""), nil); !strings.Contains(page.body, "Answer three") || strings.Contains(page.body, "Answer two") {
 		t.Errorf("regenerate did not replace the answer")
 	}
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM thread_messages WHERE thread_id = ? AND superseded = 0", thread); n != 2 {
@@ -298,42 +296,34 @@ func TestAsstChatTurnStreamsEditsRegeneratesBranchesAndDeletes(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT MIN(seq) FROM thread_messages WHERE thread_id = ? AND superseded = 0", thread).Scan(&seq); err != nil {
 		t.Fatal(err)
 	}
-	code, body, h = w.post(fmt.Sprintf("/chat/%d/branch", thread), url.Values{"seq": {strconv.FormatInt(seq, 10)}}, false)
-	w.want(code, http.StatusSeeOther, body)
-	child := h.Get("Location")
-	code, page, _ = w.get(child, false)
-	w.want(code, http.StatusOK, page, "Branched from “firstmarker”")
-	childID, err := strconv.ParseInt(strings.TrimPrefix(child, "/chat/"), 10, 64)
-	if err != nil {
-		t.Fatal(err)
+	branched := w.do(http.MethodPost, threadG1(thread, "/branch"), map[string]any{"seq": seq})
+	webWantG1(t, branched, http.StatusCreated)
+	childID := number(t, branched.json["thread_id"])
+	child := w.do(http.MethodGet, threadG1(childID, ""), nil)
+	webWantG1(t, child, http.StatusOK, "firstmarker")
+	if parent, _ := child.json["thread"].(map[string]any); parent == nil || number(t, parent["branched_from_thread_id"]) != thread {
+		t.Errorf("the branch does not name its source: %.600s", child.body)
 	}
 	asstWaitCount(t, d, 1, "SELECT COUNT(*) FROM memory_nodes WHERE thread_id = ? AND level = 0", childID)
-	if code, body, _ := w.post(fmt.Sprintf("/chat/%d/branch", thread), url.Values{"seq": {"99"}}, false); code != http.StatusNotFound {
-		t.Errorf("branch from a missing message: %d %s", code, body)
-	}
+	expectAPI(t, w.do(http.MethodPost, threadG1(thread, "/branch"), map[string]any{"seq": 99}), http.StatusConflict, "nothing_to_edit")
 
-	code, body, h = w.post(fmt.Sprintf("/chat/%d/delete", thread), url.Values{}, true)
-	if code != http.StatusNoContent || h.Get("HX-Redirect") != "/chat" {
-		t.Fatalf("delete: %d %q %s", code, h.Get("HX-Redirect"), body)
-	}
-	if code, _, _ := w.get(fmt.Sprintf("/chat/%d", thread), false); code != http.StatusNotFound {
-		t.Errorf("deleted thread answers %d", code)
+	webWantG1(t, w.do(http.MethodDelete, threadG1(thread, ""), nil), http.StatusNoContent)
+	if got := w.do(http.MethodGet, threadG1(thread, ""), nil); got.status != http.StatusNotFound {
+		t.Errorf("deleted thread answers %d", got.status)
 	}
 }
 
 func TestAsstAskOperatorParksTheRunUntilTheOperatorAnswers(t *testing.T) {
 	t.Parallel()
-	_, api, d, w := asstServe(t)
+	_, api, d, w := webServeG1(t)
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("ask-1", "ask_operator", map[string]any{"question": "Which account?"})), asstReply("done"))
-	thread := w.start(map[string]string{"text": "check my accounts"})
+	thread := webStartG1(t, w, map[string]any{"text": "check my accounts"})
 	if state, errText := asstSettle(t, d, asstLastRun(t, d, thread)); state != "parked" || errText != "" {
 		t.Fatalf("asking run %s %q, want parked", state, errText)
 	}
-	_, page, _ := w.get(fmt.Sprintf("/chat/%d", thread), false)
-	w.want(http.StatusOK, http.StatusOK, page, "Which account?")
+	webWantG1(t, w.do(http.MethodGet, threadG1(thread, ""), nil), http.StatusOK, "Which account?")
 	sent := len(api.Requests())
-	code, body, _ := w.post(fmt.Sprintf("/chat/%d/answer", thread), url.Values{"text": {"personal"}}, true)
-	w.want(code, http.StatusOK, body)
+	webWantG1(t, w.do(http.MethodPost, threadG1(thread, "/answer"), map[string]any{"text": "personal"}), http.StatusAccepted)
 	asstWaitRequests(t, api, sent+1)
 	if state := asstSettleThread(t, d, thread); state != "done" {
 		t.Fatalf("answered run %s", state)
@@ -350,13 +340,13 @@ func TestAsstStreamedReplyOutlivesTheConnectionTimeoutAndStopsPromptly(t *testin
 	asstWarm(t)
 	d := asstDB(t, dir)
 	base, _, _ := startServeStoppable(t, dir)
-	w := asstBrowse(t, base)
+	w := localWebG1(t, base)
 
 	held := asstReply("held")
 	held.Trickle = 16 * time.Second
 	api.Push(held)
 	began := time.Now()
-	thread := w.start(map[string]string{"text": "long reply"})
+	thread := webStartG1(t, w, map[string]any{"text": "long reply"})
 	if state, errText := asstSettle(t, d, asstLastRun(t, d, thread)); state != "done" {
 		t.Fatalf("held run %s %q", state, errText)
 	}
@@ -368,10 +358,9 @@ func TestAsstStreamedReplyOutlivesTheConnectionTimeoutAndStopsPromptly(t *testin
 	stalled.Trickle = 5 * time.Minute
 	api.Push(stalled)
 	sent := len(api.Requests())
-	stopped := w.start(map[string]string{"text": "stop me"})
+	stopped := webStartG1(t, w, map[string]any{"text": "stop me"})
 	asstWaitRequests(t, api, sent+1)
-	code, body, _ := w.post(fmt.Sprintf("/chat/%d/stop", stopped), url.Values{}, false)
-	w.want(code, http.StatusNoContent, body)
+	webWantG1(t, w.do(http.MethodPost, threadG1(stopped, "/stop"), nil), http.StatusOK)
 	asked := time.Now()
 	if state, errText := asstSettle(t, d, asstLastRun(t, d, stopped)); state != "failed" || !strings.Contains(errText, "stop") {
 		t.Fatalf("stopped run %s %q", state, errText)
@@ -390,15 +379,18 @@ func TestAsstLiveRunQueuesStopsAndStaysResumableAcrossShutdown(t *testing.T) {
 	asstWarm(t)
 	d := asstDB(t, dir)
 	base, _, stop := startServeStoppable(t, dir)
-	w := asstBrowse(t, base)
+	w := localWebG1(t, base)
 
 	api.Push(asstReply("first"), asstReply("second"))
 	release := asstHold(t, api)
 	sent := len(api.Requests())
-	queuedThread := w.start(map[string]string{"text": "start"})
+	queuedThread := webStartG1(t, w, map[string]any{"text": "start"})
 	asstWaitRequests(t, api, sent+1)
-	code, body, _ := w.upload(fmt.Sprintf("/chat/%d/messages", queuedThread), map[string]string{"text": "queued note"}, nil, true)
-	w.want(code, http.StatusOK, body, "queued note")
+	queued := w.do(http.MethodPost, threadG1(queuedThread, "/messages"), map[string]any{"text": "queued note"})
+	webWantG1(t, queued, http.StatusAccepted)
+	if queued.json["queued_id"] == nil {
+		t.Errorf("the note sent during a run was not queued: %s", queued.body)
+	}
 	run := asstLastRun(t, d, queuedThread)
 	release()
 	if state, errText := asstSettle(t, d, run); state != "done" {
@@ -414,19 +406,15 @@ func TestAsstLiveRunQueuesStopsAndStaysResumableAcrossShutdown(t *testing.T) {
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("p-stop", "profile_get", map[string]any{"key": "k"})))
 	release = asstHold(t, api)
 	sent = len(api.Requests())
-	stopped := w.start(map[string]string{"text": "long job"})
+	stopped := webStartG1(t, w, map[string]any{"text": "long job"})
 	asstWaitRequests(t, api, sent+1)
-	code, body, _ = w.post(fmt.Sprintf("/chat/%d/regenerate", stopped), url.Values{}, true)
-	w.want(code, http.StatusUnprocessableEntity, body, "Still working")
-	code, body, _ = w.post(fmt.Sprintf("/chat/%d/stop", stopped), url.Values{}, false)
-	w.want(code, http.StatusNoContent, body)
+	expectAPI(t, w.do(http.MethodPost, threadG1(stopped, "/regenerate"), nil), http.StatusConflict, "run_active")
+	webWantG1(t, w.do(http.MethodPost, threadG1(stopped, "/stop"), nil), http.StatusOK)
 	release()
 	if state, errText := asstSettle(t, d, asstLastRun(t, d, stopped)); state != "failed" || !strings.Contains(errText, "stop") {
 		t.Fatalf("stopped run %s %q", state, errText)
 	}
-	if code, _, _ := w.post(fmt.Sprintf("/chat/%d/stop", stopped), url.Values{}, false); code != http.StatusConflict {
-		t.Errorf("second stop %d, want 409", code)
-	}
+	expectAPI(t, w.do(http.MethodPost, threadG1(stopped, "/stop"), nil), http.StatusConflict, "no_active_run")
 	if len(api.Requests()) != sent+1 {
 		t.Errorf("the stopped run kept calling the model")
 	}
@@ -434,7 +422,7 @@ func TestAsstLiveRunQueuesStopsAndStaysResumableAcrossShutdown(t *testing.T) {
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("outlive", "profile_get", map[string]any{"key": "k"})))
 	release = asstHold(t, api)
 	sent = len(api.Requests())
-	busy := w.start(map[string]string{"text": "outlive shutdown"})
+	busy := webStartG1(t, w, map[string]any{"text": "outlive shutdown"})
 	asstWaitRequests(t, api, sent+1)
 	stopWhileHeld(t, stop, release)
 	var state string
@@ -448,31 +436,23 @@ func TestAsstLiveRunQueuesStopsAndStaysResumableAcrossShutdown(t *testing.T) {
 
 func TestAsstUploadsAreLimitedAndServedSafely(t *testing.T) {
 	t.Parallel()
-	_, api, d, w := asstServe(t)
+	_, api, d, w := webServeG1(t)
 	live := "SELECT COUNT(*) FROM threads WHERE deleted_at IS NULL"
 	threads := asstCount(t, d, live)
 
-	body, contentType := asstMultipart(t, map[string]string{"text": "big"}, []asstFile{
+	expectAPI(t, webFormG1(t, w, http.MethodPost, "/web/v1/threads", map[string]string{"text": "big"}, []asstFile{
 		{"a.bin", "application/octet-stream", make([]byte, 32<<20)},
 		{"b.bin", "application/octet-stream", make([]byte, 32<<20)},
 		{"c.bin", "application/octet-stream", make([]byte, 2<<20)},
-	})
-	code, resp, _ := w.send(http.MethodPost, "/chat", struct{ io.Reader }{body}, contentType, true)
-	w.want(code, http.StatusUnprocessableEntity, resp, "files in one message must total under 64 MB")
-	code, resp, _ = w.upload("/chat", map[string]string{"text": "big"}, []asstFile{{"big.txt", "text/plain", make([]byte, 32<<20+1)}}, true)
-	w.want(code, http.StatusUnprocessableEntity, resp, "big.txt is over the 32 MB limit")
-	code, resp, _ = w.upload("/chat", nil, []asstFile{{"a.txt", "text/plain", []byte("hi")}}, true)
-	w.want(code, http.StatusUnprocessableEntity, resp, "Type a message to go with the files.")
+	}), http.StatusRequestEntityTooLarge, "too_large")
+	expectAPI(t, webFormG1(t, w, http.MethodPost, "/web/v1/threads", map[string]string{"text": "big"}, []asstFile{{"big.txt", "text/plain", make([]byte, 32<<20+1)}}), http.StatusRequestEntityTooLarge, "too_large")
+	expectAPI(t, webFormG1(t, w, http.MethodPost, "/web/v1/threads", nil, []asstFile{{"a.txt", "text/plain", []byte("hi")}}), http.StatusUnprocessableEntity, "invalid")
 	many := map[string]string{"text": "hi"}
 	for i := range 1001 {
 		many[fmt.Sprintf("f%d", i)] = "x"
 	}
-	if code, _, _ := w.upload("/chat", many, nil, true); code != http.StatusBadRequest {
-		t.Errorf("1001 parts: %d, want 400", code)
-	}
-	if code, _, _ := w.upload("/chat", map[string]string{"text": strings.Repeat("x", 1<<20+1)}, nil, true); code != http.StatusBadRequest {
-		t.Errorf("a field over 1 MiB: %d, want 400", code)
-	}
+	expectAPI(t, webFormG1(t, w, http.MethodPost, "/web/v1/threads", many, nil), http.StatusUnprocessableEntity, "invalid")
+	webWantG1(t, webFormG1(t, w, http.MethodPost, "/web/v1/threads", map[string]string{"text": strings.Repeat("x", 1<<20+1)}, nil), http.StatusUnprocessableEntity, "Multipart fields are too large.")
 	if n := asstCount(t, d, live); n != threads {
 		t.Fatalf("refused uploads created %d threads", n-threads)
 	}
@@ -482,11 +462,16 @@ func TestAsstUploadsAreLimitedAndServedSafely(t *testing.T) {
 
 	png := []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82")
 	api.Push(asstReply("read them"))
-	owner := w.startFiles(map[string]string{"text": "look"}, []asstFile{
+	started := webFormG1(t, w, http.MethodPost, "/web/v1/threads", map[string]string{"text": "look"}, []asstFile{
 		{`report "q" 1.html`, "text/html", []byte("<script>alert(1)</script>")},
 		{"pixel.png", "image/png", png},
 		{"secret.txt", "text/plain", []byte("TOPSECRET")},
 	})
+	made, _ := started.json["thread"].(map[string]any)
+	if started.status != http.StatusCreated || made == nil {
+		t.Fatalf("start with files = %d: %.600s", started.status, started.body)
+	}
+	owner := number(t, made["id"])
 	if state := asstSettleThread(t, d, owner); state != "done" {
 		t.Fatalf("upload run %s", state)
 	}
@@ -498,21 +483,21 @@ func TestAsstUploadsAreLimitedAndServedSafely(t *testing.T) {
 		return id
 	}
 	html, image := fileID(`report "q" 1.html`), fileID("pixel.png")
-	code, _, h := w.get(fmt.Sprintf("/chat/%d/files/%d/download", owner, html), false)
-	if code != http.StatusOK || h.Get("Content-Type") != "text/html; charset=utf-8" || h.Get("X-Content-Type-Options") != "nosniff" ||
-		h.Get("Content-Disposition") != `attachment; filename*=utf-8''report%20%22q%22%201.html` {
-		t.Errorf("html download %d %v", code, h)
+	content := func(thread, file int64) string {
+		return threadG1(thread, fmt.Sprintf("/files/%d/content", file))
 	}
-	if code, _, _ := w.get(fmt.Sprintf("/chat/%d/files/%d/raw", owner, html), false); code != http.StatusNotFound {
-		t.Errorf("html served inline: %d", code)
+	got := w.do(http.MethodGet, content(owner, html), nil)
+	if h := got.header; got.status != http.StatusOK || got.body != "<script>alert(1)</script>" || h.Get("X-Content-Type-Options") != "nosniff" ||
+		h.Get("Content-Disposition") != `attachment; filename="report \"q\" 1.html"` {
+		t.Errorf("html download %d %v", got.status, h)
 	}
-	if code, _, h := w.get(fmt.Sprintf("/chat/%d/files/%d/raw", owner, image), false); code != http.StatusOK || h.Get("Content-Type") != "image/png" {
-		t.Errorf("png inline %d %v", code, h)
+	if got := w.do(http.MethodGet, content(owner, image), nil); got.status != http.StatusOK || got.header.Get("Content-Type") != "image/png" || got.header.Get("X-Content-Type-Options") != "nosniff" {
+		t.Errorf("png content %d %v", got.status, got.header)
 	}
 
-	other := w.start(map[string]string{"text": ""})
-	if code, _, _ := w.get(fmt.Sprintf("/chat/%d/files/%d/download", other, html), false); code != http.StatusNotFound {
-		t.Errorf("another thread downloads the file: %d", code)
+	other := webStartG1(t, w, map[string]any{})
+	if got := w.do(http.MethodGet, content(other, html), nil); got.status != http.StatusNotFound {
+		t.Errorf("another thread downloads the file: %d", got.status)
 	}
 	var stored string
 	if err := d.Read.QueryRow("SELECT content_json FROM thread_messages WHERE thread_id = ? AND role = 'user' ORDER BY seq LIMIT 1", owner).Scan(&stored); err != nil {
@@ -529,26 +514,12 @@ func TestAsstUploadsAreLimitedAndServedSafely(t *testing.T) {
 	asstExec(t, d, "INSERT INTO thread_messages (thread_id, seq, role, content_json, created_at) VALUES (?, 1, 'user', ?, 0)", other, string(foreign))
 	api.Push(asstReply("nothing"))
 	sent := len(api.Requests())
-	code, resp, _ = w.upload(fmt.Sprintf("/chat/%d/messages", other), map[string]string{"text": "read it"}, nil, true)
-	w.want(code, http.StatusOK, resp)
+	webWantG1(t, webFormG1(t, w, http.MethodPost, threadG1(other, "/messages"), map[string]string{"text": "read it"}, nil), http.StatusAccepted)
 	asstWaitRequests(t, api, sent+1)
 	asstSettleThread(t, d, other)
 	if leaked := string(api.Requests()[sent].Body); strings.Contains(leaked, "TOPSECRET") || !strings.Contains(leaked, "is no longer available") {
 		t.Errorf("a file from another thread reached the model")
 	}
-}
-
-func (w *asstWeb) startFiles(fields map[string]string, files []asstFile) int64 {
-	w.t.Helper()
-	code, body, h := w.upload("/chat", fields, files, true)
-	if code != http.StatusNoContent {
-		w.t.Fatalf("POST /chat with files = %d: %s", code, body)
-	}
-	id, err := strconv.ParseInt(strings.TrimPrefix(h.Get("HX-Redirect"), "/chat/"), 10, 64)
-	if err != nil {
-		w.t.Fatal(err)
-	}
-	return id
 }
 
 func asstThreadRow(t *testing.T, d *db.DB, id int64) (project *int64, effort string, limit int64) {
@@ -561,65 +532,53 @@ func asstThreadRow(t *testing.T, d *db.DB, id int64) (project *int64, effort str
 
 func TestAsstSpacesGiveDefaultsAndArchivedSpacesRefuseNewContent(t *testing.T) {
 	t.Parallel()
-	_, _, d, w := asstServe(t)
+	_, _, d, w := webServeG1(t)
 
-	code, body, h := w.post("/settings/assistant", url.Values{"effort": {"high"}, "context_limit": {"200000"}}, false)
-	if code != http.StatusSeeOther || h.Get("Location") != "/settings/assistant?saved=1" {
-		t.Fatalf("assistant defaults: %d %q %s", code, h.Get("Location"), body)
-	}
-	code, body, _ = w.post("/settings/assistant", url.Values{"effort": {"ultra"}, "context_limit": {"200000"}}, false)
-	w.want(code, http.StatusUnprocessableEntity, body, "effort must be one of low, medium, high, xhigh, max")
-	loose := w.start(map[string]string{"text": ""})
+	webOKG1(t, w.do(http.MethodPut, "/web/v1/assistant/defaults", map[string]any{"effort": "high", "context_limit": 200000}))
+	expectAPI(t, w.do(http.MethodPut, "/web/v1/assistant/defaults", map[string]any{"effort": "ultra", "context_limit": 200000}), http.StatusUnprocessableEntity, "invalid")
+	loose := webStartG1(t, w, map[string]any{})
 	if project, effort, limit := asstThreadRow(t, d, loose); project != nil || effort != "high" || limit != 200_000 {
 		t.Errorf("new thread took %v %s %d, want the saved defaults", project, effort, limit)
 	}
 
-	code, body, h = w.post("/projects", url.Values{"name": {"Kitchen"}, "instructions": {"Always answer in metric units."}, "effort": {"xhigh"}, "context_limit": {"500000"}}, false)
-	if code != http.StatusSeeOther || !strings.HasSuffix(h.Get("Location"), "/edit") {
-		t.Fatalf("create project: %d %q %s", code, h.Get("Location"), body)
-	}
-	id := strings.TrimSuffix(strings.TrimPrefix(h.Get("Location"), "/projects/"), "/edit")
+	created := w.do(http.MethodPost, "/web/v1/knowledge/spaces", map[string]any{"name": "Kitchen", "instructions": "Always answer in metric units.", "effort": "xhigh", "context_limit": 500000})
+	webWantG1(t, created, http.StatusCreated)
+	projectID := number(t, created.json["id"])
+	id := strconv.FormatInt(projectID, 10)
+	files := "/web/v1/knowledge/spaces/" + id + "/files"
 	note := asstFile{"note.md", "text/markdown", []byte("# Note\nhello")}
-	code, body, _ = w.upload("/projects/"+id+"/files", nil, []asstFile{note}, true)
-	w.want(code, http.StatusOK, body, "note.md")
-	code, body, _ = w.upload("/projects/"+id+"/files", nil, []asstFile{{"", "text/plain", []byte("nameless")}, {"empty.txt", "text/plain", nil}}, true)
-	w.want(code, http.StatusUnprocessableEntity, body, "Choose at least one file.")
+	webWantG1(t, webFormG1(t, w, http.MethodPost, files, nil, []asstFile{note}), http.StatusCreated)
+	webWantG1(t, webFormG1(t, w, http.MethodPost, files, nil, []asstFile{{"", "text/plain", []byte("nameless")}}), http.StatusUnprocessableEntity, "invalid")
+	webWantG1(t, webFormG1(t, w, http.MethodPost, files, nil, []asstFile{{"empty.txt", "text/plain", nil}}), http.StatusUnprocessableEntity, "Choose at least one file.")
 	var fileID int64
 	if err := d.Read.QueryRow("SELECT id FROM thread_files WHERE project_id = ?", id).Scan(&fileID); err != nil {
 		t.Fatal(err)
 	}
+	file := fmt.Sprintf("%s/%d", files, fileID)
 
-	inside := w.start(map[string]string{"text": "", "project_id": id})
-	if project, effort, limit := asstThreadRow(t, d, inside); project == nil || strconv.FormatInt(*project, 10) != id || effort != "xhigh" || limit != 500_000 {
+	inside := webStartG1(t, w, map[string]any{"project_id": projectID})
+	if project, effort, limit := asstThreadRow(t, d, inside); project == nil || *project != projectID || effort != "xhigh" || limit != 500_000 {
 		t.Errorf("thread in the project took %v %s %d, want the project defaults", project, effort, limit)
 	}
-	code, body, _ = w.post(fmt.Sprintf("/chat/%d/project", loose), url.Values{"project_id": {id}}, false)
-	w.want(code, http.StatusSeeOther, body)
+	webOKG1(t, w.do(http.MethodPut, threadG1(loose, "/project"), map[string]any{"project_id": projectID}))
 	if project, _, _ := asstThreadRow(t, d, loose); project == nil {
 		t.Fatal("the thread did not move into the project")
 	}
-	code, body, _ = w.post(fmt.Sprintf("/chat/%d/project", loose), url.Values{"project_id": {"0"}}, false)
-	w.want(code, http.StatusSeeOther, body)
+	webOKG1(t, w.do(http.MethodPut, threadG1(loose, "/project"), map[string]any{"project_id": 0}))
 	if project, _, _ := asstThreadRow(t, d, loose); project != nil {
 		t.Fatal("the thread did not move out of the project")
 	}
 
-	code, body, _ = w.post("/projects/"+id+"/archive", url.Values{"archived": {"1"}}, false)
-	w.want(code, http.StatusSeeOther, body)
-	files := asstCount(t, d, "SELECT COUNT(*) FROM thread_files")
+	webOKG1(t, w.do(http.MethodPost, "/web/v1/knowledge/spaces/"+id+"/archive", map[string]any{"archived": true}))
+	fileCount := asstCount(t, d, "SELECT COUNT(*) FROM thread_files")
 	threads := asstCount(t, d, "SELECT COUNT(*) FROM threads")
-	code, body, _ = w.upload("/projects/"+id+"/files", nil, []asstFile{note}, true)
-	w.want(code, http.StatusUnprocessableEntity, body, "“Kitchen” is archived. Restore it to add files.")
-	code, body, _ = w.post(fmt.Sprintf("/projects/%s/files/%d/delete", id, fileID), url.Values{}, true)
-	w.want(code, http.StatusUnprocessableEntity, body, "Restore it to remove files.")
-	code, body, _ = w.upload("/chat", map[string]string{"text": "hello", "project_id": id}, []asstFile{note}, true)
-	w.want(code, http.StatusUnprocessableEntity, body, "Project archived", "Restore it to start chats in it.")
-	code, body, _ = w.post(fmt.Sprintf("/chat/%d/project", loose), url.Values{"project_id": {id}}, true)
-	w.want(code, http.StatusUnprocessableEntity, body, "Restore it to move chats into it.")
-	code, body, _ = w.post(fmt.Sprintf("/chat/%d/branch", inside), url.Values{"seq": {"1"}}, true)
-	w.want(code, http.StatusUnprocessableEntity, body, "Project archived")
-	if n := asstCount(t, d, "SELECT COUNT(*) FROM thread_files"); n != files {
-		t.Errorf("archived project files changed: %d, want %d", n, files)
+	expectAPI(t, webFormG1(t, w, http.MethodPost, files, nil, []asstFile{note}), http.StatusConflict, "project_archived")
+	expectAPI(t, w.do(http.MethodDelete, file, nil), http.StatusConflict, "project_archived")
+	expectAPI(t, webFormG1(t, w, http.MethodPost, "/web/v1/threads", map[string]string{"text": "hello", "project_id": id}, []asstFile{note}), http.StatusConflict, "project_archived")
+	expectAPI(t, w.do(http.MethodPut, threadG1(loose, "/project"), map[string]any{"project_id": projectID}), http.StatusConflict, "project_archived")
+	expectAPI(t, w.do(http.MethodPost, threadG1(inside, "/branch"), map[string]any{"seq": 1}), http.StatusConflict, "project_archived")
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM thread_files"); n != fileCount {
+		t.Errorf("archived project files changed: %d, want %d", n, fileCount)
 	}
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM threads"); n != threads {
 		t.Errorf("archived project threads changed: %d, want %d", n, threads)
@@ -627,27 +586,23 @@ func TestAsstSpacesGiveDefaultsAndArchivedSpacesRefuseNewContent(t *testing.T) {
 	if project, _, _ := asstThreadRow(t, d, loose); project != nil {
 		t.Error("a thread moved into the archived project")
 	}
-	if code, _, _ := w.get(fmt.Sprintf("/projects/%s/files/%d/download", id, fileID), false); code != http.StatusOK {
-		t.Errorf("archived project file download %d", code)
+	if got := w.do(http.MethodGet, file+"/content", nil); got.status != http.StatusOK {
+		t.Errorf("archived project file download %d", got.status)
 	}
 
-	code, body, _ = w.post("/projects/"+id+"/archive", url.Values{"archived": {"0"}}, false)
-	w.want(code, http.StatusSeeOther, body)
-	code, body, _ = w.upload("/projects/"+id+"/files", nil, []asstFile{note}, true)
-	w.want(code, http.StatusOK, body)
-	code, body, _ = w.post(fmt.Sprintf("/chat/%d/project", loose), url.Values{"project_id": {id}}, false)
-	w.want(code, http.StatusSeeOther, body)
-	code, body, _ = w.post(fmt.Sprintf("/projects/%s/files/%d/delete", id, fileID), url.Values{}, true)
-	w.want(code, http.StatusOK, body)
+	webOKG1(t, w.do(http.MethodPost, "/web/v1/knowledge/spaces/"+id+"/archive", map[string]any{"archived": false}))
+	webWantG1(t, webFormG1(t, w, http.MethodPost, files, nil, []asstFile{note}), http.StatusCreated)
+	webOKG1(t, w.do(http.MethodPut, threadG1(loose, "/project"), map[string]any{"project_id": projectID}))
+	webWantG1(t, w.do(http.MethodDelete, file, nil), http.StatusNoContent)
 }
 
 func TestAsstThreadModelIsPricedPerThreadAndADownSwitchDropsThinking(t *testing.T) {
 	t.Parallel()
-	_, api, d, w := asstServe(t)
+	_, api, d, w := webServeG1(t)
 	api.Push(asstReply("sonnet here"), anthropictest.Reply("end_turn", anthropictest.Thinking("deep thought", "sig"), anthropictest.Text("opus here")))
 
 	sent := len(api.Requests())
-	thread := w.start(map[string]string{"text": "hi", "model": pricing.SonnetID, "effort": "low", "context_limit": "200000"})
+	thread := webStartG1(t, w, map[string]any{"text": "hi", "model": pricing.SonnetID, "effort": "low", "context_limit": 200000})
 	run := asstLastRun(t, d, thread)
 	if state, errText := asstSettle(t, d, run); state != "done" {
 		t.Fatalf("sonnet run %s %q", state, errText)
@@ -664,10 +619,8 @@ func TestAsstThreadModelIsPricedPerThreadAndADownSwitchDropsThinking(t *testing.
 		t.Errorf("sonnet usage %s %s %v, want flat %v", model, tier, cost, want)
 	}
 
-	code, body, _ := w.post(fmt.Sprintf("/chat/%d/options", thread), url.Values{"model": {pricing.OpusID}, "effort": {"high"}, "context_limit": {"500000"}}, true)
-	w.want(code, http.StatusOK, body)
-	code, body, _ = w.upload(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": "again"}, nil, true)
-	w.want(code, http.StatusOK, body)
+	webOKG1(t, w.do(http.MethodPatch, threadG1(thread, "/options"), map[string]any{"model": pricing.OpusID, "effort": "high", "context_limit": 500000}))
+	webWantG1(t, w.do(http.MethodPost, threadG1(thread, "/messages"), map[string]any{"text": "again"}), http.StatusAccepted)
 	asstWaitRequests(t, api, sent+2)
 	run = asstLastRun(t, d, thread)
 	if state, errText := asstSettle(t, d, run); state != "done" {
@@ -684,20 +637,17 @@ func TestAsstThreadModelIsPricedPerThreadAndADownSwitchDropsThinking(t *testing.
 	}
 
 	threads := asstCount(t, d, "SELECT COUNT(*) FROM threads")
-	code, body, _ = w.upload("/chat", map[string]string{"text": "hi", "model": "claude-fable-5-1"}, nil, true)
-	w.want(code, http.StatusUnprocessableEntity, body, "Not started")
+	webWantG1(t, w.do(http.MethodPost, "/web/v1/threads", map[string]any{"text": "hi", "model": "claude-fable-5-1"}), http.StatusUnprocessableEntity)
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM threads"); n != threads {
 		t.Errorf("a refused model created a thread")
 	}
-	code, body, _ = w.post(fmt.Sprintf("/chat/%d/options", thread), url.Values{"model": {"gpt-5"}, "effort": {"low"}, "context_limit": {"90000"}}, true)
-	w.want(code, http.StatusUnprocessableEntity, body, "Not saved")
+	webWantG1(t, w.do(http.MethodPatch, threadG1(thread, "/options"), map[string]any{"model": "gpt-5", "effort": "low", "context_limit": 90000}), http.StatusUnprocessableEntity)
 
 	thinking := `SELECT COUNT(*) FROM thread_messages WHERE thread_id = ? AND role = 'assistant' AND content_json LIKE '%"type":"thinking"%'`
 	if n := asstCount(t, d, thinking, thread); n != 1 {
 		t.Fatalf("%d stored thinking blocks before the switch, want 1", n)
 	}
-	code, body, _ = w.post(fmt.Sprintf("/chat/%d/options", thread), url.Values{"model": {pricing.SonnetID}, "effort": {"low"}, "context_limit": {"200000"}}, true)
-	w.want(code, http.StatusOK, body)
+	webOKG1(t, w.do(http.MethodPatch, threadG1(thread, "/options"), map[string]any{"model": pricing.SonnetID, "effort": "low", "context_limit": 200000}))
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM threads WHERE id = ? AND model = ?", thread, pricing.SonnetID); n != 1 {
 		t.Fatal("the switch back to sonnet was not saved")
 	}
@@ -708,29 +658,32 @@ func TestAsstThreadModelIsPricedPerThreadAndADownSwitchDropsThinking(t *testing.
 
 func TestAsstTodayOpensOneThreadUnderConcurrentVisits(t *testing.T) {
 	t.Parallel()
-	_, _, d, w := asstServe(t)
-	locations := make([]string, 8)
+	_, _, d, w := webServeG1(t)
+	requests := make([]*http.Request, 8)
+	for i := range requests {
+		requests[i] = w.request(http.MethodPost, "/web/v1/today", nil)
+	}
+	threads := make([]int64, len(requests))
 	var wg sync.WaitGroup
-	for i := range locations {
+	for i, req := range requests {
 		wg.Go(func() {
-			req, err := http.NewRequest(http.MethodGet, w.base+"/today", nil)
+			resp, err := w.http.Do(req)
 			if err != nil {
 				return
 			}
-			resp, err := w.client.Do(req)
-			if err != nil {
-				return
+			defer func() { _ = resp.Body.Close() }()
+			var out struct {
+				ThreadID int64 `json:"thread_id"`
 			}
-			_ = resp.Body.Close()
-			if resp.StatusCode == http.StatusSeeOther {
-				locations[i] = resp.Header.Get("Location")
+			if resp.StatusCode == http.StatusOK && json.NewDecoder(resp.Body).Decode(&out) == nil {
+				threads[i] = out.ThreadID
 			}
 		})
 	}
 	wg.Wait()
-	for _, at := range locations {
-		if at == "" || at != locations[0] || !strings.HasPrefix(at, "/chat/") {
-			t.Fatalf("today locations %q", locations)
+	for _, id := range threads {
+		if id == 0 || id != threads[0] {
+			t.Fatalf("today threads %v", threads)
 		}
 	}
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM threads WHERE role = 'today'"); n != 1 {
@@ -765,9 +718,8 @@ func TestAsstScheduledJobsToggleCancelAndProtectBuiltins(t *testing.T) {
 	audits := func(operation, outcome, target string) int {
 		return asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = ? AND outcome = ? AND target = ?", operation, outcome, target)
 	}
-	w := asstBrowse(t, startServeIn(t, dir))
-	code, page, _ := w.get("/scheduled", false)
-	w.want(code, http.StatusOK, page, "Digest", "weekly-review")
+	w := localWebG1(t, startServeIn(t, dir))
+	webWantG1(t, w.do(http.MethodGet, "/web/v1/schedules?limit=100", nil), http.StatusOK, "Digest", "weekly-review")
 	digest, nightly := jobID("Digest"), jobID("nightly")
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit a JOIN effects e ON a.details_json = '{\"effect_ids\":[' || e.id || ']}' "+
 		"WHERE a.operation = 'assistant.schedule.create' AND a.outcome = 'ok' AND a.target = ? AND e.operation = 'schedule_create'", "schedule:"+digest); n != 1 {
@@ -799,40 +751,35 @@ func TestAsstScheduledJobsToggleCancelAndProtectBuiltins(t *testing.T) {
 		t.Errorf("undo left prompt %q", column("prompt", digest))
 	}
 
-	code, body, _ := w.post("/scheduled/"+digest+"/toggle", url.Values{}, true)
-	w.want(code, http.StatusOK, body)
+	job := func(id string) string { return "/web/v1/schedules/" + id }
+	webOKG1(t, w.do(http.MethodPut, job(digest)+"/enabled", map[string]any{"enabled": false}))
 	if state(digest) == "active" {
-		t.Error("toggle left the job active")
+		t.Error("disabling left the job active")
 	}
-	code, body, h := w.post("/scheduled/"+digest+"/toggle", url.Values{}, false)
-	if code != http.StatusSeeOther || h.Get("Location") != "/scheduled" {
-		t.Errorf("no-JS toggle: %d %q %s", code, h.Get("Location"), body)
-	}
+	webOKG1(t, w.do(http.MethodPut, job(digest)+"/enabled", map[string]any{"enabled": true}))
 	if state(digest) != "active" {
-		t.Error("second toggle did not enable the job")
+		t.Error("enabling did not enable the job")
 	}
 
 	weekly := jobID("weekly-review")
-	code, body, _ = w.post("/scheduled/"+weekly+"/cancel", url.Values{}, true)
-	w.want(code, http.StatusUnprocessableEntity, body)
+	webWantG1(t, w.do(http.MethodDelete, job(weekly), nil), http.StatusConflict)
 	if state(weekly) == "cancelled" {
 		t.Error("a built-in run was cancelled")
 	}
 
-	code, body, _ = w.post("/scheduled/"+digest+"/cancel", url.Values{}, true)
-	w.want(code, http.StatusOK, body)
+	webWantG1(t, w.do(http.MethodDelete, job(digest), nil), http.StatusNoContent)
 	if state(digest) != "cancelled" {
 		t.Errorf("cancelled job state %s", state(digest))
 	}
-	if code, _, _ := w.post("/scheduled/"+digest+"/toggle", url.Values{}, false); code != http.StatusNotFound {
-		t.Errorf("toggle of a cancelled job: %d, want 404", code)
+	if got := w.do(http.MethodPut, job(digest)+"/enabled", map[string]any{"enabled": false}); got.status != http.StatusNotFound {
+		t.Errorf("disable of a cancelled job: %d, want 404", got.status)
 	}
 	schedule := func(id string) string { return column("schedule", id) }
-	if code, body, _ := w.post("/scheduled/"+nightly+"/schedule", url.Values{"schedule": {"daily 03:15"}}, true); code != http.StatusOK || schedule(nightly) != "daily 03:15" {
-		t.Errorf("edit the nightly schedule = %d, stored %q: %.200s", code, schedule(nightly), body)
+	if got := w.do(http.MethodPatch, job(nightly), map[string]any{"schedule": "daily 03:15"}); got.status != http.StatusOK || schedule(nightly) != "daily 03:15" {
+		t.Errorf("edit the nightly schedule = %d, stored %q: %.200s", got.status, schedule(nightly), got.body)
 	}
-	if code, _, _ := w.post("/scheduled/"+nightly+"/schedule", url.Values{"schedule": {"whenever"}}, true); code != http.StatusUnprocessableEntity || schedule(nightly) != "daily 03:15" {
-		t.Errorf("an invalid schedule = %d, stored %q, want a refusal that keeps the old one", code, schedule(nightly))
+	if got := w.do(http.MethodPatch, job(nightly), map[string]any{"schedule": "whenever"}); got.status != http.StatusUnprocessableEntity || schedule(nightly) != "daily 03:15" {
+		t.Errorf("an invalid schedule = %d, stored %q, want a refusal that keeps the old one", got.status, schedule(nightly))
 	}
 	for _, want := range []struct {
 		operation, outcome, target string
@@ -849,16 +796,16 @@ func TestAsstScheduledJobsToggleCancelAndProtectBuiltins(t *testing.T) {
 			t.Errorf("%s %s %s audits = %d, want %d", want.operation, want.outcome, want.target, n, want.n)
 		}
 	}
-	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation LIKE 'assistant.schedule.%' AND source = 'ui' AND actor = 'operator'"); n != 7 {
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation LIKE 'assistant.schedule.%' AND source = 'api' AND actor = 'operator'"); n != 7 {
 		t.Errorf("operator schedule audits = %d, want 7", n)
 	}
 }
 
 func TestBranchKeepsRunOptions(t *testing.T) {
 	t.Parallel()
-	_, api, d, w := asstServe(t)
+	_, api, d, w := webServeG1(t)
 	api.Push(asstReply("branch source answer"))
-	thread := w.start(map[string]string{"text": "branch options", "web_search": "0", "cost_cap": "2.5"})
+	thread := webStartG1(t, w, map[string]any{"text": "branch options", "web_search": false, "cost_cap_usd": 2.5})
 	if state := asstSettleThread(t, d, thread); state != "done" {
 		t.Fatalf("source run %s", state)
 	}
@@ -866,12 +813,9 @@ func TestBranchKeepsRunOptions(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT MIN(seq) FROM thread_messages WHERE thread_id = ? AND superseded = 0", thread).Scan(&seq); err != nil {
 		t.Fatal(err)
 	}
-	code, body, h := w.post(fmt.Sprintf("/chat/%d/branch", thread), url.Values{"seq": {strconv.FormatInt(seq, 10)}}, false)
-	w.want(code, http.StatusSeeOther, body)
-	child, err := strconv.ParseInt(strings.TrimPrefix(h.Get("Location"), "/chat/"), 10, 64)
-	if err != nil {
-		t.Fatal(err)
-	}
+	made := w.do(http.MethodPost, threadG1(thread, "/branch"), map[string]any{"seq": seq})
+	webWantG1(t, made, http.StatusCreated)
+	child := number(t, made.json["thread_id"])
 	options := func(id int64) string {
 		var model, effort, thinking string
 		var limit, search int64
@@ -893,45 +837,39 @@ func TestBranchKeepsRunOptions(t *testing.T) {
 
 func TestSpaceFilesStayInTheirSpaceAndAreAudited(t *testing.T) {
 	t.Parallel()
-	_, _, d, w := asstServe(t)
+	_, _, d, w := webServeG1(t)
 	project := func(name string) string {
-		code, body, h := w.post("/projects", url.Values{"name": {name}, "effort": {"high"}, "context_limit": {"200000"}}, false)
-		if code != http.StatusSeeOther {
-			t.Fatalf("create project %s: %d %s", name, code, body)
-		}
-		return strings.TrimSuffix(strings.TrimPrefix(h.Get("Location"), "/projects/"), "/edit")
+		created := w.do(http.MethodPost, "/web/v1/knowledge/spaces", map[string]any{"name": name, "effort": "high", "context_limit": 200000})
+		webWantG1(t, created, http.StatusCreated)
+		return strconv.FormatInt(number(t, created.json["id"]), 10)
 	}
 	home, other := project("Home"), project("Other")
-	code, body, _ := w.upload("/projects/"+home+"/files", nil, []asstFile{{"plan.txt", "text/plain", []byte("the plan")}}, true)
-	if code != http.StatusOK {
-		t.Fatalf("upload: %d %s", code, body)
-	}
+	files := func(space string) string { return "/web/v1/knowledge/spaces/" + space + "/files" }
+	webWantG1(t, webFormG1(t, w, http.MethodPost, files(home), nil, []asstFile{{"plan.txt", "text/plain", []byte("the plan")}}), http.StatusCreated)
 	var fileID int64
 	var stored string
 	if err := d.Read.QueryRow("SELECT id, path FROM thread_files WHERE project_id = ?", home).Scan(&fileID, &stored); err != nil {
 		t.Fatal(err)
 	}
-	if code, body, _ := w.get(fmt.Sprintf("/projects/%s/files/%d/download", home, fileID), false); code != http.StatusOK || body != "the plan" {
-		t.Fatalf("own project download: %d %q", code, body)
+	if got := w.do(http.MethodGet, fmt.Sprintf("%s/%d/content", files(home), fileID), nil); got.status != http.StatusOK || got.body != "the plan" {
+		t.Fatalf("own project download: %d %q", got.status, got.body)
 	}
 	for _, path := range []string{
-		fmt.Sprintf("/projects/%s/files/%d/download", other, fileID),
-		fmt.Sprintf("/projects/%s/files/%d/download", home, fileID+1000),
-		fmt.Sprintf("/chat/1/files/%d/download", fileID),
+		fmt.Sprintf("%s/%d/content", files(other), fileID),
+		fmt.Sprintf("%s/%d/content", files(home), fileID+1000),
+		threadG1(1, fmt.Sprintf("/files/%d/content", fileID)),
 	} {
-		if code, _, _ := w.get(path, false); code != http.StatusNotFound {
-			t.Errorf("GET %s: %d, want 404", path, code)
+		if got := w.do(http.MethodGet, path, nil); got.status != http.StatusNotFound {
+			t.Errorf("GET %s: %d, want 404", path, got.status)
 		}
 	}
-	if code, _, _ := w.post(fmt.Sprintf("/projects/%s/files/%d/delete", other, fileID), url.Values{}, true); code != http.StatusNotFound {
-		t.Fatalf("delete through another project: %d, want 404", code)
+	if got := w.do(http.MethodDelete, fmt.Sprintf("%s/%d", files(other), fileID), nil); got.status != http.StatusNotFound {
+		t.Fatalf("delete through another project: %d, want 404", got.status)
 	}
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM thread_files WHERE id = ?", fileID); n != 1 {
 		t.Fatalf("a foreign delete removed the file row")
 	}
-	if code, body, _ := w.post(fmt.Sprintf("/projects/%s/files/%d/delete", home, fileID), url.Values{}, true); code != http.StatusOK {
-		t.Fatalf("delete: %d %s", code, body)
-	}
+	webWantG1(t, w.do(http.MethodDelete, fmt.Sprintf("%s/%d", files(home), fileID), nil), http.StatusNoContent)
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM thread_files WHERE id = ?", fileID); n != 0 {
 		t.Errorf("the deleted file row remains")
 	}

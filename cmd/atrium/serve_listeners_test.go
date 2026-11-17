@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/cookiejar"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -86,11 +85,11 @@ func TestServeListenersShareStateButNotRateLimits(t *testing.T) {
 	notify.Wait("READY=1")
 	notify.Wait("WATCHDOG=1")
 
-	browser := oidcBrowser(t, s.base, s.idp, "owner")
-	code, body, _ := fetch(t, browser, http.MethodPost, s.base+"/settings/auth/tokens", url.Values{"name": {"laptop"}})
-	secret := regexp.MustCompile(`atr_[A-Za-z0-9_-]{43}`).FindString(body)
-	if code != http.StatusOK || secret == "" {
-		t.Fatalf("issue on the public listener: %d %.300s", code, body)
+	browser := webAsG4(t, s.base, oidcBrowser(t, s.base, s.idp, "owner"))
+	issued := browser.do(http.MethodPost, "/web/v1/auth/tokens", map[string]any{"name": "laptop"})
+	secret, _ := dataG4(issued)["secret"].(string)
+	if issued.status != http.StatusCreated || !regexp.MustCompile(`^atr_[A-Za-z0-9_-]{43}$`).MatchString(secret) {
+		t.Fatalf("issue on the public listener: %d %.300s", issued.status, issued.body)
 	}
 	for _, site := range []*apiSite{s, emergency} {
 		if me := site.do(http.MethodGet, "/api/v1/me", secret, nil); me.status != http.StatusOK {
@@ -98,14 +97,20 @@ func TestServeListenersShareStateButNotRateLimits(t *testing.T) {
 		}
 	}
 
-	local := jarClient(t)
-	code, body, _ = fetch(t, local, http.MethodGet, emergency.base+"/settings/auth", nil)
-	match := regexp.MustCompile(`/settings/auth/tokens/(\d+)/revoke`).FindStringSubmatch(body)
-	if code != http.StatusOK || !strings.Contains(body, "laptop") || match == nil {
-		t.Fatalf("the emergency listener does not list the token issued on the public listener: %d %.400s", code, body)
+	local := webAsG4(t, emergency.base, nil)
+	listed := local.do(http.MethodGet, "/web/v1/auth/tokens", nil)
+	tokens, _ := dataG4(listed)["tokens"].([]any)
+	var laptop int64
+	for _, raw := range tokens {
+		if token, _ := raw.(map[string]any); token["name"] == "laptop" {
+			laptop = number(t, token["id"])
+		}
 	}
-	if code, body, _ := fetch(t, local, http.MethodPost, emergency.base+"/settings/auth/tokens/"+match[1]+"/revoke", url.Values{}); code != http.StatusOK {
-		t.Fatalf("revoke on the emergency listener: %d %.300s", code, body)
+	if listed.status != http.StatusOK || laptop == 0 {
+		t.Fatalf("the emergency listener does not list the token issued on the public listener: %d %.400s", listed.status, listed.body)
+	}
+	if got := local.do(http.MethodDelete, fmt.Sprintf("/web/v1/auth/tokens/%d", laptop), nil); got.status != http.StatusNoContent {
+		t.Fatalf("revoke on the emergency listener: %d %.300s", got.status, got.body)
 	}
 	for _, site := range []*apiSite{s, emergency} {
 		if refused := site.do(http.MethodGet, "/api/v1/me", secret, nil); refused.status != http.StatusUnauthorized || refused.code() != "invalid_token" {
@@ -113,40 +118,27 @@ func TestServeListenersShareStateButNotRateLimits(t *testing.T) {
 		}
 	}
 
-	_, _, _ = fetch(t, local, http.MethodGet, emergency.base+"/settings/assistant", nil)
-	if code, body, h := fetch(t, local, http.MethodPost, emergency.base+"/settings/assistant", url.Values{"effort": {"high"}, "context_limit": {"200000"}}); code != http.StatusSeeOther {
-		t.Fatalf("save on the emergency listener: %d %q %.300s", code, h.Get("Location"), body)
+	if got := local.do(http.MethodPut, "/web/v1/assistant/defaults", map[string]any{"effort": "high", "context_limit": 200000}); got.status != http.StatusOK {
+		t.Fatalf("save on the emergency listener: %d %.300s", got.status, got.body)
 	}
-	if code, body, _ := fetch(t, browser, http.MethodGet, s.base+"/settings/assistant", nil); code != http.StatusOK || !strings.Contains(body, `value="200000" selected`) {
-		t.Fatalf("the public listener does not show the setting saved on the emergency listener: %d %.300s", code, body)
+	cfg := browser.do(http.MethodGet, "/web/v1/assistant/configuration", nil)
+	if defaults, _ := cfg.json["defaults"].(map[string]any); cfg.status != http.StatusOK || defaults["context_limit"] != float64(200000) || defaults["effort"] != "high" {
+		t.Fatalf("the public listener does not show the setting saved on the emergency listener: %d %s", cfg.status, cfg.body)
 	}
 
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/me", "", nil), http.StatusUnauthorized, "unauthenticated")
 	if got := s.do(http.MethodGet, "/api/v1/me", "", nil, "Host", "evil.example"); got.status == http.StatusOK {
 		t.Fatalf("the public listener accepted a foreign Host: %d", got.status)
 	}
-	if code, _, _ := fetch(t, jarClient(t), http.MethodGet, s.base+"/settings/auth", nil); code == http.StatusOK {
-		t.Fatalf("the public listener served settings without a session")
+	if got := newWebClient(t, s.base, nil).do(http.MethodGet, "/web/v1/settings", nil); got.status != http.StatusUnauthorized {
+		t.Fatalf("the public listener served settings without a session: %d", got.status)
 	}
-	req, err := http.NewRequest(http.MethodPost, s.base+"/settings/auth/tokens", strings.NewReader("name=csrf"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	for _, c := range browser.Jar.Cookies(req.URL) {
-		req.AddCookie(c)
-	}
-	resp, err := browser.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("a public token POST without a CSRF token: %d", resp.StatusCode)
+	if got := browser.do(http.MethodPost, "/web/v1/auth/tokens", map[string]any{"name": "csrf"}, "X-CSRF-Token", ""); got.status != http.StatusForbidden {
+		t.Fatalf("a public token POST without a CSRF token: %d %s", got.status, got.body)
 	}
 
 	limited := rateToken(t, "limited")
-	allowed, _, body := rateUntilRefused(t, newRateCall(t, emergency.base), "/api/v1/me", "", limited, http.StatusOK, 130)
+	allowed, _, body := rateUntilRefused(t, newRateCall(t, emergency.base), "/api/v1/me", "", limited, http.StatusOK, tokenBucket)
 	if allowed < 55 || rateCode(t, body) != "rate_limited" {
 		t.Fatalf("the emergency listener allowed %d before refusing: %.200s", allowed, body)
 	}
@@ -274,9 +266,7 @@ func TestServeStartsWhenTheOpsListenerAddressIsNotAssignedYet(t *testing.T) {
 		t.Fatalf("serve did not start with an unassigned ops address: %v", err)
 	}
 	t.Cleanup(stop)
-	if status, _, _ := fetch(t, jarClient(t), http.MethodGet, base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat on the public listener = %d", status)
-	}
+	webG4(t, base)
 	if raw, err := os.ReadFile(opsFile); err != nil || !strings.HasPrefix(string(raw), "192.0.2.10:") {
 		t.Fatalf("ops listener address %q, %v", raw, err)
 	}
@@ -298,26 +288,19 @@ func TestEmergencyListenerApprovesAndDismissesAPermissionRequest(t *testing.T) {
 	}
 	t.Cleanup(stop)
 	emergency := "http://127.0.0.1:" + port
-	public, local := jarClient(t), jarClient(t)
-	if status, _, _ := fetch(t, public, http.MethodGet, base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat = %d", status)
-	}
-	if status, _, _ := fetch(t, local, http.MethodGet, emergency+"/review", nil); status != http.StatusOK {
-		t.Fatalf("GET /review on the emergency listener = %d", status)
-	}
+	public, local := webG4(t, base), webAsG4(t, emergency, nil)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
-	decide := func(decision string, form url.Values, replies ...anthropictest.Response) []anthropictest.Request {
+	decide := func(decision string, replies ...anthropictest.Response) []anthropictest.Request {
 		t.Helper()
 		start := len(api.Requests())
 		api.Push(replies...)
-		if status, body, _ := fetch(t, public, http.MethodPost, fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {decision + ": read " + srv.URL + "/a then " + srv.URL + "/b"}}); status >= http.StatusBadRequest {
-			t.Fatalf("%s: POST message = %d: %s", decision, status, body)
-		}
+		sendG4(public, thread, decision+": read "+srv.URL+"/a then "+srv.URL+"/b")
 		proposal := waitParkedPermission(t, d, thread)
-		code, body := hxFetch(t, local, http.MethodPost, emergency+fmt.Sprintf("/proposals/%d/%s", proposal, decision), form)
-		if code != http.StatusOK || strings.Contains(body, "the assistant module is not running") {
-			t.Fatalf("%s on the emergency listener = %d: %s", decision, code, body)
+		route := map[string]string{"approve": "approve", "dismiss": "deny"}[decision]
+		got := local.do(http.MethodPost, fmt.Sprintf("/web/v1/approvals/%d/%s", proposal, route), nil)
+		if got.status != http.StatusOK || strings.Contains(got.body, "the assistant module is not running") {
+			t.Fatalf("%s on the emergency listener = %d: %s", decision, got.status, got.body)
 		}
 		waitRunState(t, d, thread, "done")
 		var status string
@@ -326,7 +309,7 @@ func TestEmergencyListenerApprovesAndDismissesAPermissionRequest(t *testing.T) {
 		}
 		return api.Requests()[start:]
 	}
-	approved := decide("approve", url.Values{"all": {"1"}},
+	approved := decide("approve",
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})),
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("f2", "web_fetch", map[string]any{"url": srv.URL + "/b"})),
 		anthropictest.Reply("end_turn", anthropictest.Text("approved")),
@@ -337,7 +320,7 @@ func TestEmergencyListenerApprovesAndDismissesAPermissionRequest(t *testing.T) {
 	if result := toolResultFor(t, approved[2], "f2"); result["is_error"] == true || !strings.Contains(fmt.Sprint(result["content"]), pageBText) {
 		t.Fatalf("the approved fetch returned %v", result)
 	}
-	dismissed := decide("dismiss", url.Values{},
+	dismissed := decide("dismiss",
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("f3", "web_fetch", map[string]any{"url": srv.URL + "/a"})),
 		anthropictest.Reply("end_turn", anthropictest.Text("dismissed")),
 	)

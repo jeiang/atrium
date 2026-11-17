@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
-	"net/url"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -115,24 +113,10 @@ func TestQueuedMarkedReferenceAppliesToTheRestOfTheBatch(t *testing.T) {
 	}
 	reader := latestThread(t, dir)
 
-	var base string
-	var client *http.Client
+	var c *webClient
 	queued := make(chan struct{}, 1)
 	forecast := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		form := url.Values{"text": {fmt.Sprintf("@thread/%d", source)}}
-		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/chat/%d/messages", base, reader), strings.NewReader(form.Encode()))
-		if err != nil {
-			t.Errorf("queue reference: %v", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		for _, c := range client.Jar.Cookies(req.URL) {
-			if c.Name == "atrium_csrf" {
-				req.Header.Set("X-CSRF-Token", c.Value)
-			}
-		}
-		resp, err := client.Do(req)
+		resp, err := c.http.Do(c.request(http.MethodPost, fmt.Sprintf("/web/v1/threads/%d/messages", reader), map[string]any{"text": fmt.Sprintf("@thread/%d", source)}))
 		if err != nil {
 			t.Errorf("queue reference: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -140,7 +124,7 @@ func TestQueuedMarkedReferenceAppliesToTheRestOfTheBatch(t *testing.T) {
 		}
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
-		if resp.StatusCode >= http.StatusBadRequest {
+		if resp.StatusCode != http.StatusAccepted {
 			t.Errorf("queue reference = %d: %s", resp.StatusCode, body)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -153,15 +137,8 @@ func TestQueuedMarkedReferenceAppliesToTheRestOfTheBatch(t *testing.T) {
 	setEnv(t, "ATRIUM_HOST_CONFIG", weatherHost(t, dir, forecast.URL+"/v1/forecast", forecast.URL+"/v1/search"))
 	seedSettings(t, map[string]string{weather.KeyLatitude: "10.65", weather.KeyLongitude: "-61.5", weather.KeyLocationName: "Port of Spain"})
 
-	base, _, _ = startServeApp(t, freshApp(f), &lockedBuffer{})
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client = &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat = %d", status)
-	}
+	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
+	c = webG4(t, base)
 
 	start := len(api.Requests())
 	api.Push(
@@ -170,9 +147,7 @@ func TestQueuedMarkedReferenceAppliesToTheRestOfTheBatch(t *testing.T) {
 			anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})),
 		anthropictest.Reply("end_turn", anthropictest.Text("done")),
 	)
-	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, reader), url.Values{"text": {"weather then read " + srv.URL + "/a"}}); status >= http.StatusBadRequest {
-		t.Fatalf("POST message = %d: %s", status, body)
-	}
+	sendG4(c, reader, "weather then read "+srv.URL+"/a")
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	waitRunState(t, d, reader, "done")
 	requests := api.Requests()[start:]
@@ -283,14 +258,7 @@ func TestApprovedPermissionExecutesOnceAndDoesNotReplay(t *testing.T) {
 	warm(t, api)
 	thread := latestThread(t, dir)
 	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat = %d", status)
-	}
+	c := webG4(t, base)
 	start := len(api.Requests())
 	api.Push(
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})),
@@ -298,16 +266,14 @@ func TestApprovedPermissionExecutesOnceAndDoesNotReplay(t *testing.T) {
 		anthropictest.Reply("end_turn", anthropictest.Text("read both")),
 	)
 	text := "read " + srv.URL + "/a then " + srv.URL + "/b"
-	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {text}}); status >= http.StatusBadRequest {
-		t.Fatalf("POST message = %d: %s", status, body)
-	}
+	sendG4(c, thread, text)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	proposal := waitParkedPermission(t, d, thread)
 	if hits := pages.seen(); !slices.Equal(hits, []string{"/a"}) {
 		t.Fatalf("page fetches before approval = %v, want /a only", hits)
 	}
-	if code, body := hxFetch(t, client, http.MethodPost, base+fmt.Sprintf("/proposals/%d/approve", proposal), url.Values{"all": {"1"}}); code != http.StatusOK {
-		t.Fatalf("approve = %d\n%s", code, body)
+	if got := approveG4(c, proposal); got.status != http.StatusOK || got.json["outcome"] != "applied" {
+		t.Fatalf("approve = %d\n%s", got.status, got.body)
 	}
 	waitRunState(t, d, thread, "done")
 	if hits := pages.seen(); !slices.Equal(hits, []string{"/a", "/b"}) {
@@ -318,9 +284,8 @@ func TestApprovedPermissionExecutesOnceAndDoesNotReplay(t *testing.T) {
 	if n := strings.Count(string(last.Body), pageBText); n != 1 {
 		t.Errorf("the approved page reached the model %d times, want 1", n)
 	}
-	code, body := hxFetch(t, client, http.MethodPost, base+fmt.Sprintf("/proposals/%d/approve", proposal), url.Values{"all": {"1"}})
-	if code != http.StatusOK || !strings.Contains(body, "is not open") {
-		t.Errorf("the replayed approval = %d: %s, want a refusal", code, body)
+	if got := approveG4(c, proposal); got.status != http.StatusConflict {
+		t.Errorf("the replayed approval = %d: %s, want a refusal", got.status, got.body)
 	}
 	if hits := pages.seen(); !slices.Equal(hits, []string{"/a", "/b"}) {
 		t.Errorf("page fetches after the replay = %v, want /a then /b once", hits)
@@ -338,23 +303,14 @@ func TestApprovalDeniedByANewMarkPerformsNothing(t *testing.T) {
 	warm(t, api)
 	thread := latestThread(t, dir)
 	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat = %d", status)
-	}
+	c := webG4(t, base)
 	start := len(api.Requests())
 	api.Push(
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("s1", "search_threads", map[string]any{"query": "warm"})),
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})),
 		anthropictest.Reply("end_turn", anthropictest.Text("done")),
 	)
-	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {"find the warm thread then read " + srv.URL + "/a"}}); status >= http.StatusBadRequest {
-		t.Fatalf("POST message = %d: %s", status, body)
-	}
+	sendG4(c, thread, "find the warm thread then read "+srv.URL+"/a")
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	proposal := waitParkedPermission(t, d, thread)
 	if hits := pages.seen(); len(hits) != 0 {
@@ -364,8 +320,8 @@ func TestApprovalDeniedByANewMarkPerformsNothing(t *testing.T) {
 		float64(time.Now().UnixNano())/1e9, int64(tool.PII), thread); err != nil {
 		t.Fatal(err)
 	}
-	if code, body := hxFetch(t, client, http.MethodPost, base+fmt.Sprintf("/proposals/%d/approve", proposal), url.Values{"all": {"1"}}); code != http.StatusOK {
-		t.Fatalf("approve = %d\n%s", code, body)
+	if got := approveG4(c, proposal); got.status != http.StatusOK {
+		t.Fatalf("approve = %d\n%s", got.status, got.body)
 	}
 	waitRunState(t, d, thread, "done")
 	if hits := pages.seen(); len(hits) != 0 {
@@ -514,14 +470,7 @@ func TestParkedBatchKeepsCompletedResultsAndDoesNotReplayThem(t *testing.T) {
 	warm(t, api)
 	thread := latestThread(t, dir)
 	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat = %d", status)
-	}
+	c := webG4(t, base)
 	start := len(api.Requests())
 	api.Push(
 		anthropictest.Reply("tool_use",
@@ -530,9 +479,7 @@ func TestParkedBatchKeepsCompletedResultsAndDoesNotReplayThem(t *testing.T) {
 		anthropictest.Reply("end_turn", anthropictest.Text("read both")),
 	)
 	text := "read " + srv.URL + "/a then " + srv.URL + "/b"
-	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {text}}); status >= http.StatusBadRequest {
-		t.Fatalf("POST message = %d: %s", status, body)
-	}
+	sendG4(c, thread, text)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	proposal := waitParkedPermission(t, d, thread)
 	if hits := pages.seen(); !slices.Equal(hits, []string{"/a"}) {
@@ -541,8 +488,8 @@ func TestParkedBatchKeepsCompletedResultsAndDoesNotReplayThem(t *testing.T) {
 	if n := permissionProposals(t, dir); n != 1 {
 		t.Fatalf("%d permission proposals before approval, want 1", n)
 	}
-	if code, body := hxFetch(t, client, http.MethodPost, base+fmt.Sprintf("/proposals/%d/approve", proposal), url.Values{"all": {"1"}}); code != http.StatusOK {
-		t.Fatalf("approve = %d\n%s", code, body)
+	if got := approveG4(c, proposal); got.status != http.StatusOK || got.json["outcome"] != "applied" {
+		t.Fatalf("approve = %d\n%s", got.status, got.body)
 	}
 	waitRunState(t, d, thread, "done")
 	if hits := pages.seen(); !slices.Equal(hits, []string{"/a", "/b"}) {

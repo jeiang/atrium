@@ -56,8 +56,10 @@ func TestAuthTokenLocalBearerLifecycle(t *testing.T) {
 	if me := api.do(http.MethodGet, "/api/v1/me", secret, nil); me.status != http.StatusOK {
 		t.Fatalf("a local token cannot read the API: %d %s", me.status, me.body)
 	}
-	if page := api.do(http.MethodGet, "/settings/auth", "", nil); page.status != http.StatusOK || !strings.Contains(page.body, "API tokens") {
-		t.Fatalf("the token settings page is not reachable in local mode: %d %.300s", page.status, page.body)
+	web := newWebClient(t, base, nil)
+	web.session("local")
+	if page := web.do(http.MethodGet, "/web/v1/auth/tokens", nil); page.status != http.StatusOK || !strings.Contains(page.body, "phone") || strings.Contains(page.body, secret) {
+		t.Fatalf("the token list is not reachable in local mode: %d %.300s", page.status, page.body)
 	}
 
 	phone := tokenRow(t, runAppOn(t, authTokenApp(t), "auth", "token", "list").stdout, "phone")

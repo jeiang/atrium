@@ -97,7 +97,7 @@ func TestAgentTickLeavesAnotherProcessLiveRunOnTheJobThread(t *testing.T) {
 	ownRun := asstLastRun(t, d, thread)
 
 	api.Push(asstReply("reviewed in serve"))
-	w := asstBrowse(t, startServeIn(t, dir))
+	w := webLocalG2(t, startServeIn(t, dir))
 	waitUntil(t, 20*time.Second, "serve's held resume", func() bool { return jobSeen.Load() == 2 })
 	resumer := liveRun(t, d, ownRun)
 
@@ -119,8 +119,7 @@ func TestAgentTickLeavesAnotherProcessLiveRunOnTheJobThread(t *testing.T) {
 	spent := asstReply("operator answer")
 	spent.Usage = json.RawMessage(`{"input_tokens":50000,"output_tokens":100}`)
 	api.Push(spent)
-	code, body, _ := w.upload(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": operatorMarker}, nil, true)
-	w.want(code, http.StatusOK, body)
+	webOKG2(t, w.do(http.MethodPost, fmt.Sprintf("/web/v1/threads/%d/messages", thread), map[string]any{"text": operatorMarker}))
 	waitUntil(t, 20*time.Second, "the held operator request", func() bool { return operatorSeen.Load() == 1 })
 	operatorRun := asstLastRun(t, d, thread)
 	if operatorRun == ownRun {

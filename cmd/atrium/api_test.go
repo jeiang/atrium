@@ -342,11 +342,13 @@ func TestAPIRefusesRequestsWithoutAValidBearer(t *testing.T) {
 
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/me", "", nil, "Remote-Groups", "atrium_access,atrium_admin", "Remote-User", "owner"), http.StatusUnauthorized, "unauthenticated")
 
-	browser := oidcBrowser(t, s.base, s.idp, "owner")
-	if code, _, _ := fetch(t, browser, http.MethodGet, s.base+"/settings/auth", nil); code != http.StatusOK {
-		t.Fatalf("the web session does not work: %d", code)
+	browser := newWebClient(t, s.base, nil)
+	browser.http = oidcBrowser(t, s.base, s.idp, "owner")
+	browser.session("oidc")
+	if me := browser.do(http.MethodGet, "/web/v1/me", nil); me.status != http.StatusOK {
+		t.Fatalf("the web session does not work: %d %s", me.status, me.body)
 	}
-	code, body, _ := fetch(t, browser, http.MethodGet, s.base+"/api/v1/me", nil)
+	code, body, _ := fetch(t, browser.http, http.MethodGet, s.base+"/api/v1/me", nil)
 	if code != http.StatusUnauthorized || !strings.Contains(body, `"unauthenticated"`) {
 		t.Fatalf("a session cookie authenticated the API: %d %s", code, body)
 	}
@@ -608,7 +610,7 @@ func TestStartRefusalLeavesNoThreadInEveryInterface(t *testing.T) {
 	asstSpendAt(t, d, inference.SourceLoop, 5, float64(time.Now().Unix()))
 	s := startAPISite(t, dir, api)
 	owner := s.token("owner")
-	client := s.browser()
+	client := webProxyOwnerG2(t, s.base)
 	threads := func() int { return asstCount(t, d, "SELECT COUNT(*) FROM threads") }
 	before, requests := threads(), len(api.Requests())
 	listed := len(s.do(http.MethodGet, "/api/v1/threads", owner, nil).json["items"].([]any))
@@ -617,8 +619,8 @@ func TestStartRefusalLeavesNoThreadInEveryInterface(t *testing.T) {
 	if after := s.do(http.MethodGet, "/api/v1/threads", owner, nil); len(after.json["items"].([]any)) != listed {
 		t.Fatalf("API refusal changed the thread list: %s", after.body)
 	}
-	if status, body, _ := fetch(t, client, http.MethodPost, s.base+"/chat", url.Values{"text": {"x"}}); status < http.StatusBadRequest {
-		t.Fatalf("HTML start under an exhausted budget = %d: %s", status, body)
+	if got := client.do(http.MethodPost, "/web/v1/threads", map[string]any{"text": "x"}); got.status < http.StatusBadRequest {
+		t.Fatalf("web start under an exhausted budget = %d: %s", got.status, got.body)
 	}
 	if ran := runApp(t, "agent", "run", "--text", "x"); ran.code == cli.ExitOK {
 		t.Fatalf("CLI start under an exhausted budget: %d %s", ran.code, ran.stdout)
@@ -641,14 +643,14 @@ func TestStartRefusedAfterTheThreadRowLeavesNoThread(t *testing.T) {
 	d := asstDB(t, dir)
 	s := startAPISite(t, dir, api)
 	owner := s.token("owner")
-	client := s.browser()
+	client := webProxyOwnerG2(t, s.base)
 	threads := func() int { return asstCount(t, d, "SELECT COUNT(*) FROM threads") }
 	before, requests := threads(), len(api.Requests())
 	refusedRef := "@thread/999999 compare"
 
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/threads", owner, map[string]any{"text": refusedRef}), http.StatusUnprocessableEntity, "reference_refused")
-	if status, body, _ := fetch(t, client, http.MethodPost, s.base+"/chat", url.Values{"text": {refusedRef}}); status < http.StatusBadRequest {
-		t.Fatalf("HTML start with a refused reference = %d: %s", status, body)
+	if got := client.do(http.MethodPost, "/web/v1/threads", map[string]any{"text": refusedRef}); got.status < http.StatusBadRequest {
+		t.Fatalf("web start with a refused reference = %d: %s", got.status, got.body)
 	}
 	if ran := runApp(t, "agent", "run", "--text", refusedRef); ran.code == cli.ExitOK {
 		t.Fatalf("CLI start with a refused reference: %d %s", ran.code, ran.stdout)

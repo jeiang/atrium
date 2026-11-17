@@ -96,11 +96,11 @@ func TestRouteUsageCountersSurviveARestartAndSplitAgentTraffic(t *testing.T) {
 
 	base, stop := serve()
 	for range 2 {
-		code, _ := hit(t, base, "/about")
-		want(code, http.StatusOK, "operator page")
+		code, _ := hit(t, base, "/web/v1/about", "Atrium-Client", "web")
+		want(code, http.StatusOK, "operator read")
 	}
-	code, _ := hit(t, base, "/about", "Atrium-Agent", "1")
-	want(code, http.StatusOK, "agent page")
+	code, _ := hit(t, base, "/web/v1/about", "Atrium-Client", "web", "Atrium-Agent", "1")
+	want(code, http.StatusOK, "agent read")
 	code, _ = hit(t, base, "/web/v1/session", "Atrium-Client", "web")
 	want(code, http.StatusOK, "web session")
 	code, _ = hit(t, base, "/api/v1/me", "Authorization", "Bearer "+plain)
@@ -124,7 +124,7 @@ func TestRouteUsageCountersSurviveARestartAndSplitAgentTraffic(t *testing.T) {
 			t.Fatalf("%s = %+v (present %v), want operator %d agent %d; all: %+v", key, r, ok, operator, agentCount, routes)
 		}
 	}
-	check("page GET /about", 2, 1)
+	check("web GET /web/v1/about", 2, 1)
 	check("web GET /web/v1/session", 1, 0)
 	check("api GET /api/v1/me", 1, 2)
 	check("page GET unmatched", 1, 0)
@@ -135,10 +135,10 @@ func TestRouteUsageCountersSurviveARestartAndSplitAgentTraffic(t *testing.T) {
 	}
 
 	base, stop = serve()
-	code, _ = hit(t, base, "/about")
-	want(code, http.StatusOK, "operator page after restart")
+	code, _ = hit(t, base, "/web/v1/about", "Atrium-Client", "web")
+	want(code, http.StatusOK, "operator read after restart")
 	body := scrape(t, opsBase())
-	if got := scrapeValue(t, body, `atrium_http_route_requests_total{surface="page",method="GET",route="/about",agent="false"}`); got != 2 {
+	if got := scrapeValue(t, body, `atrium_http_route_requests_total{surface="web",method="GET",route="/web/v1/about",agent="false"}`); got != 2 {
 		t.Fatalf("the route metric after a restart = %v, want the 2 saved operator requests:\n%s", got, body)
 	}
 	if got := scrapeValue(t, body, `atrium_http_route_requests_total{surface="api",method="GET",route="/api/v1/me",agent="true"}`); got != 2 {
@@ -149,7 +149,7 @@ func TestRouteUsageCountersSurviveARestartAndSplitAgentTraffic(t *testing.T) {
 	}
 	stop()
 	routes = usageRoutes(t)
-	check("page GET /about", 3, 1)
+	check("web GET /web/v1/about", 3, 1)
 }
 
 func TestAgentMarkStaysWithTheSignInSession(t *testing.T) {
@@ -173,9 +173,8 @@ func TestAgentMarkStaysWithTheSignInSession(t *testing.T) {
 	if body := session(); !strings.Contains(body, `"agent":true`) {
 		t.Fatalf("the mark does not stay with the session: %s", body)
 	}
-	code, _ := hitWith(t, browser, s.base, "/settings/auth")
-	if code != http.StatusOK {
-		t.Fatalf("a marked session lost access to a page: %d", code)
+	if code, body := hitWith(t, browser, s.base, "/web/v1/about", "Atrium-Client", "web"); code != http.StatusOK {
+		t.Fatalf("a marked session lost access to a read: %d %s", code, body)
 	}
 	d := mustConnect(t, filepath.Join(s.dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()

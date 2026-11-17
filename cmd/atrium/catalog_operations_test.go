@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -97,20 +98,22 @@ func TestCatalogOperationsReportsAreasAndMissingAPI(t *testing.T) {
 		t.Fatal("settings.set missing")
 	}
 	if !slices.ContainsFunc(setting.Bindings, func(b catalogOperationBinding) bool {
-		return b.Kind == "html" && b.Target == "POST /settings/permissions" && slices.Contains(b.Delegates, "settings.set")
+		return b.Kind == "cli" && b.Target == "settings set"
 	}) {
-		t.Fatal("missing explicit settings delegation for POST /settings/permissions")
-	}
-	if slices.ContainsFunc(setting.Bindings, func(b catalogOperationBinding) bool {
-		return b.Target == "POST /settings/assistant"
-	}) {
-		t.Fatal("POST /settings/assistant claims settings.set")
+		t.Fatalf("settings.set bindings = %+v, want cli settings set", setting.Bindings)
 	}
 	defaults, ok := hasOperation(all.Operations, "assistant.defaults-set")
 	if !ok || !slices.ContainsFunc(defaults.Bindings, func(b catalogOperationBinding) bool {
-		return b.Kind == "html" && b.Target == "POST /settings/assistant"
+		return b.Kind == "api" && b.Target == "PUT /assistant/defaults"
 	}) {
-		t.Fatalf("assistant.defaults-set bindings = %+v, want html POST /settings/assistant", defaults.Bindings)
+		t.Fatalf("assistant.defaults-set bindings = %+v, want api PUT /assistant/defaults", defaults.Bindings)
+	}
+	for _, row := range all.Operations {
+		for _, b := range row.Bindings {
+			if b.Kind == "html" && (strings.HasPrefix(b.Target, "GET /settings") || strings.HasPrefix(b.Target, "POST /settings")) {
+				t.Errorf("%s still binds the server-rendered page %s", row.Name, b.Target)
+			}
+		}
 	}
 	for _, name := range []string{"connections.oauth-start", "connections.oauth-complete"} {
 		op, ok := hasOperation(all.Operations, name)

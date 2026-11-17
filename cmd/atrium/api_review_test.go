@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math"
 	"net"
 	"net/http"
@@ -16,7 +15,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -184,32 +182,20 @@ func TestAPIApprovesUndoesAndSendsThroughTheSameGates(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation='mail.draft-update' AND target=? AND source='api' AND outcome='conflict'", strconv.FormatInt(number(t, draft["id"]), 10)).Scan(&audits); err != nil || audits != 1 {
 		t.Fatalf("stale draft audit: %d %v", audits, err)
 	}
-	browser := oidcBrowser(t, s.base, s.idp, "owner")
-	htmlPath := s.base + "/drafts/" + strconv.FormatInt(number(t, draft["id"]), 10)
-	submitted := url.Values{
-		"account": {"oauth"}, "subject": {"Operator's unsaved subject"},
-		"body": {"Operator's unsaved body"}, "to": {"operator-edit@x.test"}, "cc": {"copy-edit@x.test"},
-		"revision": {strconv.FormatInt(reviewed, 10)},
+	browser := newWebClient(t, s.base, nil)
+	browser.http = oidcBrowser(t, s.base, s.idp, "owner")
+	browser.session("oidc")
+	webDraft := "/web/v1/drafts/" + strconv.FormatInt(number(t, draft["id"]), 10)
+	submitted := map[string]any{
+		"account": "oauth", "subject": "Operator's unsaved subject",
+		"body": "Operator's unsaved body", "to": "operator-edit@x.test", "cc": "copy-edit@x.test",
+		"revision": reviewed,
 	}
-	for _, partial := range []bool{true, false, true} {
-		var code int
-		var body string
-		if partial {
-			code, body = hxFetch(t, browser, http.MethodPost, htmlPath, submitted)
-		} else {
-			code, body, _ = fetch(t, browser, http.MethodPost, htmlPath, submitted)
-		}
-		if code != http.StatusConflict {
-			t.Fatalf("stale HTML edit (partial %v): %d %s", partial, code, body)
-		}
-		for _, want := range []string{"Operator&#39;s unsaved subject", "Operator&#39;s unsaved body", "operator-edit@x.test", "copy-edit@x.test", `name="revision" value="` + strconv.FormatInt(reviewed, 10) + `"`} {
-			if !strings.Contains(body, want) {
-				t.Fatalf("stale HTML edit lost %q (partial %v): %s", want, partial, body)
-			}
-		}
+	for range 3 {
+		expectAPI(t, browser.do(http.MethodPatch, webDraft, submitted), http.StatusConflict, "stale")
 	}
 	if current := s.do(http.MethodGet, draftPath, owner, nil); current.status != http.StatusOK || current.json["subject"] != "Lease renewal (signed)" || current.json["body"] != "Happy to renew." || number(t, current.json["revision"]) != reviewed+1 {
-		t.Fatalf("stale HTML edit changed draft: %d %s", current.status, current.body)
+		t.Fatalf("stale web edit changed draft: %d %s", current.status, current.body)
 	}
 	expectAPI(t, s.do(http.MethodPatch, draftPath, owner, map[string]any{"body": "  "}), http.StatusUnprocessableEntity, "invalid_draft")
 	expectAPI(t, s.do(http.MethodPost, draftPath+"/send", owner, map[string]any{}), http.StatusUnprocessableEntity, "invalid")
@@ -324,39 +310,20 @@ func TestApprovalSourceAndInvalidSelection(t *testing.T) {
 	}
 
 	base, _, stop := startServeStoppable(t, dir)
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	if code, _, _ := fetch(t, client, http.MethodGet, base+"/chat", nil); code != http.StatusOK {
-		t.Fatalf("GET /chat = %d", code)
-	}
-	pending := regexp.MustCompile(`id="pending-count"[^>]*>(\d*)`)
-	badge := func() string {
+	web := localWebG1(t, base)
+	badge := func() int {
 		t.Helper()
-		req, err := http.NewRequest(http.MethodGet, base+"/library/knowledge", nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		req.Header.Set("If-None-Match", "*")
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-		body, err := io.ReadAll(resp.Body)
-		found := pending.FindSubmatch(body)
-		if err != nil || resp.StatusCode != http.StatusOK || resp.Header.Get("ETag") != "" || found == nil {
-			t.Fatalf("revalidated knowledge page = %d etag %q: %v %.300s", resp.StatusCode, resp.Header.Get("ETag"), err, body)
-		}
-		return string(found[1])
+		approvals, _ := webOKG1(t, web.do(http.MethodGet, "/web/v1/pending", nil))["approvals"].([]any)
+		return len(approvals)
 	}
-	if got := badge(); got != "2" {
-		t.Fatalf("review badge before the approval = %q, want 2", got)
+	if got := badge(); got != 2 {
+		t.Fatalf("pending approvals before the approval = %d, want 2", got)
 	}
-	if code, body := hxFetch(t, client, http.MethodPost, base+"/proposals/"+viaHTML+"/approve", url.Values{"all": {"1"}}); code != http.StatusOK || !strings.Contains(body, `data-status="applied"`) {
-		t.Fatalf("HTML approve: %d\n%s", code, body)
+	if approved := webOKG1(t, web.do(http.MethodPost, "/web/v1/approvals/"+viaHTML+"/approve", nil)); approved["outcome"] != "applied" {
+		t.Fatalf("web approve: %v", approved)
 	}
-	if got := badge(); got != "1" {
-		t.Fatalf("review badge after the approval = %q, want 1", got)
+	if got := badge(); got != 1 {
+		t.Fatalf("pending approvals after the approval = %d, want 1", got)
 	}
 	stop()
 
@@ -373,7 +340,7 @@ func TestApprovalSourceAndInvalidSelection(t *testing.T) {
 	if len(dav.Puts) != 2 {
 		t.Fatalf("approvals wrote %d events, want 2", len(dav.Puts))
 	}
-	for id, source := range map[string]string{viaHTML: "ui", viaAPI: "api"} {
+	for id, source := range map[string]string{viaHTML: "api", viaAPI: "api"} {
 		var resolution, audited string
 		if err := d.Read.QueryRow("SELECT source FROM effect_resolutions WHERE proposal_id = ? AND outcome = 'approved'", id).Scan(&resolution); err != nil {
 			t.Fatal(err)
@@ -699,19 +666,11 @@ func TestDraftDiscardMissingIsHandled(t *testing.T) {
 	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	base := startServeIn(t, dir)
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	fetch(t, client, http.MethodGet, base+"/review", nil)
-	if code, _, _ := fetch(t, client, http.MethodPost, base+"/drafts/999999/discard", url.Values{}); code != http.StatusConflict {
-		t.Fatalf("missing full-page discard = %d", code)
-	}
-	if code, _ := hxFetch(t, client, http.MethodPost, base+"/drafts/999999/discard", url.Values{}); code != http.StatusNotFound {
-		t.Fatalf("missing partial discard = %d", code)
-	}
+	expectAPI(t, localWebG1(t, base).do(http.MethodPost, "/web/v1/drafts/999999/discard", nil), http.StatusNotFound, "not_found")
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
 	var count int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation='mail.draft-discard' AND target='999999' AND outcome='not_found' AND source='ui'").Scan(&count); err != nil || count != 2 {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation='mail.draft-discard' AND target='999999' AND outcome='not_found' AND source='api'").Scan(&count); err != nil || count != 1 {
 		t.Fatalf("missing discard audits: %d %v", count, err)
 	}
 }

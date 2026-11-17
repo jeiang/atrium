@@ -8,6 +8,8 @@ export interface InboxScenario {
   empty?: boolean;
   fail?: boolean;
   mix?: boolean;
+  pageDelay?: number;
+  pageSize?: number;
   readDelay?: number;
   stuck?: boolean;
   unconfigured?: boolean;
@@ -459,14 +461,24 @@ function resolveCommand(request: Request, apply: () => Response | undefined, bod
 export const inboxHandlers = [
   http.get(`*${API_BASE}/queue`, async ({ request }) => {
     const state = scenario();
+    const params = new URL(request.url).searchParams;
+    const offset = Number(params.get('cursor') ?? 0);
     if (state.readDelay) await delay(state.readDelay);
+    if (offset > 0 && state.pageDelay) await delay(state.pageDelay);
     if (state.fail) return refusal(500, 'internal', 'The review store did not answer.');
     const all = queue();
-    const kind = new URL(request.url).searchParams.get('kind');
+    const kind = params.get('kind');
     const counts = { ask: 0, proposal: 0, draft: 0, attention: 0 };
     for (const item of all) counts[item.kind] += 1;
+    const matching = kind ? all.filter((item) => item.kind === kind) : all;
+    const end = state.pageSize ? offset + state.pageSize : matching.length;
     return HttpResponse.json({
-      data: { items: kind ? all.filter((item) => item.kind === kind) : all, total: all.length, counts },
+      data: {
+        items: matching.slice(offset, end),
+        total: all.length,
+        counts,
+        next_cursor: end < matching.length ? String(end) : undefined,
+      },
       revision: 1,
     });
   }),

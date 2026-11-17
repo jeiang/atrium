@@ -36,7 +36,7 @@ function cachedAppsAt(page: Page): Promise<number | undefined> {
 }
 
 test.describe('an out-of-date cached app list', () => {
-  test.use({ viewport: { width: 1440, height: 900 } });
+  test.use({ viewport: { width: 1440, height: 900 }, allowStatus: [404] });
 
   for (const { app, path } of pages) {
     test(`${path} does not show Not found while the fresh list loads`, async ({ page }) => {

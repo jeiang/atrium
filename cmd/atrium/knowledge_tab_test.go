@@ -38,6 +38,11 @@ func knowledgeMarks(t *testing.T, d *db.DB, id int64) (marks int64, confirmed, r
 	return marks, confirmedAt != nil, retractedAt != nil
 }
 
+func knowledgeCreateG1(t *testing.T, c *webClient, fields map[string]any) int64 {
+	t.Helper()
+	return number(t, apiData(t, c.do(http.MethodPost, "/web/v1/knowledge", fields), http.StatusCreated)["id"])
+}
+
 func TestKnowledgeTabConfirmRetractAndPurge(t *testing.T) {
 	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
@@ -48,31 +53,24 @@ func TestKnowledgeTabConfirmRetractAndPurge(t *testing.T) {
 	defer func() { _ = d.Close() }()
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
-	w := asstBrowse(t, base)
-	if code, body, _ := w.get("/library/knowledge/new", false); code != http.StatusOK {
-		t.Fatalf("new record page = %d: %.300s", code, body)
-	}
+	w := localWebG1(t, base)
 
-	// A marked thread cannot call kb_write on this base, so the marked record is
-	// created through the operator form's mark checkboxes.
-	first := knowledgeCreate(t, w, url.Values{
-		"title": {"Boiler code"}, "body": {"The boiler code is 4417."}, "scope": {"work"},
-		"untrusted": {"1"}, "pii": {"1"},
+	first := knowledgeCreateG1(t, w, map[string]any{
+		"title": "Boiler code", "body": "The boiler code is 4417.", "scope": "work",
+		"marks": []string{"untrusted", "pii"},
 	})
-	sibling := knowledgeCreate(t, w, url.Values{
-		"title": {"Boiler service"}, "body": {"Serviced by Chen in March."}, "scope": {"work"},
-		"untrusted": {"1"},
+	sibling := knowledgeCreateG1(t, w, map[string]any{
+		"title": "Boiler service", "body": "Serviced by Chen in March.", "scope": "work",
+		"marks": []string{"untrusted"},
 	})
 	if _, err := d.Write.Exec("UPDATE kb_records SET source_run_id = 42 WHERE id IN (?, ?)", first, sibling); err != nil {
 		t.Fatal(err)
 	}
-	if code, body, _ := w.get(fmt.Sprintf("/library/knowledge/%d", first), false); code != http.StatusOK || !strings.Contains(body, "Boiler code") {
-		t.Fatalf("record page = %d: %.300s", code, body)
+	if record, _ := apiData(t, w.do(http.MethodGet, fmt.Sprintf("/web/v1/knowledge/%d", first), nil), http.StatusOK)["record"].(map[string]any); record["title"] != "Boiler code" {
+		t.Fatalf("record read: %v", record)
 	}
 
-	if code, body, _ := w.post(fmt.Sprintf("/library/knowledge/%d/confirm", first), url.Values{}, false); code != http.StatusSeeOther {
-		t.Fatalf("confirm = %d: %s", code, body)
-	}
+	apiData(t, w.do(http.MethodPost, fmt.Sprintf("/web/v1/knowledge/%d/confirm", first), nil), http.StatusOK)
 	marks, confirmed, retracted := knowledgeMarks(t, d, first)
 	if !confirmed || retracted || marks != 2 {
 		t.Fatalf("after confirm marks = %d confirmed %v retracted %v, want pii and confirmed", marks, confirmed, retracted)
@@ -91,21 +89,15 @@ func TestKnowledgeTabConfirmRetractAndPurge(t *testing.T) {
 		t.Errorf("agent retract of a confirmed record = %q, want a refusal", refusal)
 	}
 
-	if code, body, _ := w.post(fmt.Sprintf("/library/knowledge/%d/retract", first), url.Values{}, true); code != http.StatusOK {
-		t.Fatalf("retract = %d: %.500s", code, body)
-	}
+	apiData(t, w.do(http.MethodPost, fmt.Sprintf("/web/v1/knowledge/%d/retract", first), nil), http.StatusOK)
 	if _, _, retracted := knowledgeMarks(t, d, first); !retracted {
 		t.Fatal("record is not retracted")
 	}
-	if code, body, _ := w.post("/library/knowledge/runs/42/retract", url.Values{}, false); code != http.StatusSeeOther {
-		t.Fatalf("run retract = %d: %s", code, body)
-	}
+	apiData(t, w.do(http.MethodPost, "/web/v1/knowledge/retract-run", map[string]any{"run_id": 42}), http.StatusOK)
 	if _, _, retracted := knowledgeMarks(t, d, sibling); !retracted {
 		t.Fatal("sibling is not retracted after the run retract")
 	}
-	if code, body, _ := w.post(fmt.Sprintf("/library/knowledge/%d/restore", first), url.Values{}, false); code != http.StatusSeeOther {
-		t.Fatalf("restore = %d: %s", code, body)
-	}
+	apiData(t, w.do(http.MethodPost, fmt.Sprintf("/web/v1/knowledge/%d/restore", first), nil), http.StatusOK)
 	if _, _, retracted := knowledgeMarks(t, d, first); retracted {
 		t.Fatal("record is still retracted after restore")
 	}
@@ -120,19 +112,26 @@ func TestKnowledgePurgeRunsForTheOperator(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, target, action_json, before_json, after_json, undo_json, state, settled_at) VALUES (1, 1, 'legacy-test', 'local', 'kb_write', 'legacy-test', 'forward', ?, '{}', '{\"body\":\"secret text\"}', '{\"body\":\"secret text\"}', '{\"op\":\"kb_restore\"}', 'done', 1)", "kb:"+strconv.FormatInt(id, 10))
+	path := fmt.Sprintf("/web/v1/knowledge/%d", id)
 
-	anon := s.browser()
-	wimExpect(t, anon.post(fmt.Sprintf("/library/knowledge/%d/purge", id), nil), http.StatusSeeOther)
+	anon := newWebClient(t, s.base, nil)
+	if got := anon.do(http.MethodDelete, path, nil); got.status != http.StatusUnauthorized && got.status != http.StatusForbidden {
+		t.Fatalf("anonymous purge = %d: %.300s", got.status, got.body)
+	}
 	if n := s.count("SELECT COUNT(*) FROM kb_records WHERE id = ?", id); n != 1 {
 		t.Fatalf("an anonymous purge removed the record")
 	}
 
-	operator := s.browser()
-	operator.mustSignIn("member")
-	wimExpect(t, operator.get(fmt.Sprintf("/library/knowledge/%d", id)), http.StatusOK, "Old note")
-	reply := operator.post(fmt.Sprintf("/library/knowledge/%d/purge", id), nil)
-	if reply.status != http.StatusSeeOther {
-		t.Fatalf("operator purge = %d: %.300s", reply.status, reply.body)
+	browser := s.browser()
+	browser.mustSignIn("member")
+	operator := newWebClient(t, s.base, nil)
+	operator.http = browser.http
+	operator.session("oidc")
+	if record, _ := apiData(t, operator.do(http.MethodGet, path, nil), http.StatusOK)["record"].(map[string]any); record["title"] != "Old note" {
+		t.Fatalf("record read: %v", record)
+	}
+	if got := operator.do(http.MethodDelete, path, nil); got.status != http.StatusNoContent {
+		t.Fatalf("operator purge = %d: %.300s", got.status, got.body)
 	}
 	if n := s.count("SELECT COUNT(*) FROM kb_records WHERE id = ?", id); n != 0 {
 		t.Fatal("purge left the record")
@@ -143,9 +142,10 @@ func TestKnowledgePurgeRunsForTheOperator(t *testing.T) {
 	if n := s.count("SELECT COUNT(*) FROM effects WHERE operation = 'kb_purge' AND target = ?", "kb:"+strconv.FormatInt(id, 10)); n != 1 {
 		t.Fatalf("purge rows = %d, want one contentless kb_purge row", n)
 	}
-	activity := operator.get("/activity")
-	if strings.Contains(activity.body, "secret text") {
-		t.Error("activity still shows the purged text")
+	for _, read := range []string{"/web/v1/activity", "/web/v1/effects"} {
+		if got := operator.do(http.MethodGet, read, nil); got.status != http.StatusOK || strings.Contains(got.body, "secret text") {
+			t.Errorf("%s after the purge = %d, still shows the purged text or fails: %.300s", read, got.status, got.body)
+		}
 	}
 }
 
@@ -159,20 +159,27 @@ func TestPinnedConfirmedFactReachesThePrompt(t *testing.T) {
 	defer func() { _ = d.Close() }()
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
-	w := asstBrowse(t, base)
+	w := localWebG1(t, base)
 
-	if code, body, _ := w.post("/library/knowledge/profile", url.Values{
-		"title": {"Dentist"}, "body": {"Dr Ng at the Main St clinic; prefers mornings."},
-	}, false); code != http.StatusSeeOther {
-		t.Fatalf("add fact = %d: %s", code, body)
-	}
-	knowledgeCreate(t, w, url.Values{
-		"title": {"Rumour"}, "body": {"The clinic moved to Elm St."}, "scope": {"personal"},
-		"pinned": {"1"}, "untrusted": {"1"},
+	knowledgeCreateG1(t, w, map[string]any{"title": "Dentist", "body": "Dr Ng at the Main St clinic; prefers mornings.", "scope": "personal", "pinned": true})
+	knowledgeCreateG1(t, w, map[string]any{
+		"title": "Rumour", "body": "The clinic moved to Elm St.", "scope": "personal",
+		"pinned": true, "marks": []string{"untrusted"},
 	})
-	if code, body, _ := w.get("/library/knowledge/profile", false); code != http.StatusOK ||
-		!strings.Contains(body, "In prompt") || !strings.Contains(body, "marked") {
-		t.Fatalf("profile page = %d, want In prompt and marked: %.400s", code, body)
+	profile := apiData(t, w.do(http.MethodGet, "/web/v1/knowledge/profile", nil), http.StatusOK)
+	entries, _ := profile["entries"].([]any)
+	inPrompt := map[string]bool{}
+	var rumourReason string
+	for _, e := range entries {
+		entry := e.(map[string]any)
+		title, _ := entry["title"].(string)
+		inPrompt[title] = entry["in_prompt"] == true
+		if title == "Rumour" {
+			rumourReason, _ = entry["reason"].(string)
+		}
+	}
+	if !inPrompt["Dentist"] || inPrompt["Rumour"] || !strings.Contains(rumourReason, "marked") {
+		t.Fatalf("profile = %v, want Dentist in the prompt and Rumour kept out as marked", profile)
 	}
 
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))

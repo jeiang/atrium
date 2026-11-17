@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -174,43 +172,51 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 	if got := runApp(t, "live", "resolve", id(correctKept), "--outcome", "not-undone"); got.code != cli.ExitOK {
 		t.Fatalf("live resolve not-undone = %d %q", got.code, got.stderr)
 	}
-	base := startServeIn(t, dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
+	web := localWebG1(t, startServeIn(t, dir))
+	blockedWrite := func(proposal string) bool {
+		t.Helper()
+		pending := webOKG1(t, web.do(http.MethodGet, "/web/v1/pending", nil))
+		blocked, _ := pending["blocked"].([]any)
+		for _, item := range blocked {
+			a := item.(map[string]any)
+			if strconv.FormatInt(number(t, a["id"]), 10) == proposal {
+				return a["blocked_effect"] == true
+			}
+		}
+		return false
 	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, body, _ := fetch(t, client, "GET", base+"/review", nil); status != http.StatusOK || !strings.Contains(body, "/proposals/"+id(viaWeb)+"/resolve") {
-		t.Fatalf("GET /review = %d, want the resolve action on the blocked write: %.400s", status, body)
+	if !blockedWrite(id(viaWeb)) {
+		t.Fatalf("pending does not offer the resolve action on the blocked write")
 	}
 	if got := runApp(t, "proposals", "resolve", id(undoHeld), "--outcome", "not-undone"); got.code != cli.ExitOK {
 		t.Fatalf("proposals resolve of a blocked undo = %d %q", got.code, got.stderr)
 	}
-	if status, body, _ := fetch(t, client, "GET", base+"/activity", nil); status != http.StatusOK || !strings.Contains(body, "/activity/mail/"+id(undoWeb)+"/resolve") {
-		t.Fatalf("GET /activity = %d, want the resolve button for the blocked undo: %.400s", status, body)
+	if got := webOKG1(t, web.do(http.MethodGet, "/web/v1/effects/"+id(undoWeb), nil)); got["undo_blocked"] != true {
+		t.Fatalf("the auto action does not show its blocked undo: %v", got)
 	}
-	bareJar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
+	expectAPI(t, web.do(http.MethodPost, "/web/v1/approvals/"+id(viaWeb)+"/resolve", map[string]any{"outcome": "applied"}, "X-CSRF-Token", ""), http.StatusForbidden, "csrf_failed")
+	undoRecord := func() string {
+		t.Helper()
+		check, err := db.Connect(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = check.Close() }()
+		var undo int64
+		if err := check.Read.QueryRow("SELECT id FROM effects WHERE undo_of = ?", undoWeb).Scan(&undo); err != nil {
+			t.Fatal(err)
+		}
+		return id(undo)
+	}()
+	expectAPI(t, web.do(http.MethodPost, "/web/v1/effects/"+undoRecord+"/resolve", map[string]any{"outcome": "undone"}, "X-CSRF-Token", ""), http.StatusForbidden, "csrf_failed")
+	webOKG1(t, web.do(http.MethodPost, "/web/v1/approvals/"+id(viaWeb)+"/resolve", map[string]any{"outcome": "applied"}))
+	webOKG1(t, web.do(http.MethodPost, "/web/v1/effects/"+undoRecord+"/resolve", map[string]any{"outcome": "undone"}))
+	expectAPI(t, web.do(http.MethodPost, "/web/v1/effects/"+undoRecord+"/resolve", map[string]any{"outcome": "undone"}), http.StatusConflict, "not_resolved")
+	if got := webOKG1(t, web.do(http.MethodGet, "/web/v1/effects/"+id(undoWeb), nil)); got["undo_blocked"] == true {
+		t.Errorf("the resolved undo still shows as blocked: %v", got)
 	}
-	bare := &http.Client{Jar: bareJar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, bare, "POST", base+"/proposals/"+id(viaWeb)+"/resolve", url.Values{}); status != http.StatusForbidden {
-		t.Errorf("POST resolve without a CSRF token = %d, want 403", status)
-	}
-	if status, _, _ := fetch(t, bare, "POST", base+"/activity/mail/"+id(undoWeb)+"/resolve", url.Values{"outcome": {"undone"}}); status != http.StatusForbidden {
-		t.Errorf("POST activity resolve without a CSRF token = %d, want 403", status)
-	}
-	if status, body, _ := fetch(t, client, "POST", base+"/proposals/"+id(viaWeb)+"/resolve", url.Values{"outcome": {"applied"}}); status != http.StatusOK {
-		t.Fatalf("POST proposal resolve = %d: %.400s", status, body)
-	}
-	if status, body, header := fetch(t, client, "POST", base+"/activity/mail/"+id(undoWeb)+"/resolve", url.Values{"outcome": {"undone"}}); status != http.StatusSeeOther || header.Get("Location") != "/activity" {
-		t.Fatalf("POST activity resolve = %d %q: %.400s", status, header.Get("Location"), body)
-	}
-	if status, body, _ := fetch(t, client, "POST", base+"/activity/mail/"+id(undoWeb)+"/resolve", url.Values{"outcome": {"undone"}}); status != http.StatusConflict {
-		t.Errorf("second activity resolve = %d, want 409: %.400s", status, body)
-	}
-	if status, body, _ := fetch(t, client, "GET", base+"/review", nil); status != http.StatusOK || strings.Contains(body, "/proposals/"+id(viaWeb)+"/resolve") {
-		t.Errorf("settled proposal still offers resolve (status %d)", status)
+	if blockedWrite(id(viaWeb)) {
+		t.Errorf("settled proposal still offers resolve")
 	}
 
 	check, err := db.Connect(path)
@@ -236,7 +242,7 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 		}
 	}
 	want := []string{
-		"operator/cli/move/applied", "operator/cli/move_back/not-undone", "operator/ui/move/applied",
+		"operator/cli/move/applied", "operator/cli/move_back/not-undone", "operator/api/move/applied",
 	}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("effect_resolutions = %v, want %v", got, want)
@@ -305,18 +311,18 @@ func TestBlockedProposalWithoutErrorTextShowsOutcomeUnknownAndResolves(t *testin
 	}
 	id := strconv.FormatInt(pid, 10)
 
-	base := startServeIn(t, dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
+	web := localWebG1(t, startServeIn(t, dir))
+	pending := webOKG1(t, web.do(http.MethodGet, "/web/v1/pending", nil))
+	found := false
+	for _, item := range pending["blocked"].([]any) {
+		a := item.(map[string]any)
+		found = found || (number(t, a["id"]) == pid && a["blocked_effect"] == true)
 	}
-	client := &http.Client{Jar: jar}
-	if status, body, _ := fetch(t, client, http.MethodGet, base+"/review", nil); status != http.StatusOK ||
-		!strings.Contains(body, "/proposals/"+id+"/resolve") || !strings.Contains(body, "Outcome unknown") {
-		t.Fatalf("GET /review = %d, want the blocked proposal with Outcome unknown: %.600s", status, body)
+	if !found {
+		t.Fatalf("pending lacks the blocked proposal with an unknown outcome: %v", pending)
 	}
-	if status, body, _ := fetch(t, client, http.MethodPost, base+"/proposals/"+id+"/resolve", url.Values{"outcome": {"applied"}}); status != http.StatusOK || !strings.Contains(body, "Write recorded as done") {
-		t.Fatalf("POST resolve of a blocked write without error text = %d: %.600s", status, body)
+	if got := webOKG1(t, web.do(http.MethodPost, "/web/v1/approvals/"+id+"/resolve", map[string]any{"outcome": "applied"})); got["approval"] == nil {
+		t.Fatalf("resolve of a blocked write without error text: %v", got)
 	}
 
 	check, err := db.Connect(path)

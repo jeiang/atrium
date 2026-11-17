@@ -2,8 +2,6 @@ package main
 
 import (
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -39,28 +37,9 @@ func TestCoreSettingsRejectBadValuesAndDriveTheWebLayer(t *testing.T) {
 		t.Fatalf("set tz: exit %d %q", got.code, got.stderr)
 	}
 
-	base := startServeIn(t, dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
-		t.Fatalf("GET /chat = %d", status)
-	}
-	post := func(note string) int {
-		form := url.Values{"note": {note}}
-		req, err := http.NewRequest("POST", base+"/chat", strings.NewReader(form.Encode()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_ = resp.Body.Close()
-		return resp.StatusCode
+	c := webG4(t, startServeIn(t, dir))
+	post := func(text string) int {
+		return c.do(http.MethodPost, "/web/v1/threads", map[string]any{"text": text}).status
 	}
 	if status := post(strings.Repeat("a", 4096)); status == http.StatusRequestEntityTooLarge {
 		t.Errorf("POST below the 1 MiB body cap = %d, want it past the size check", status)

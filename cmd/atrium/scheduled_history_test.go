@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -90,9 +89,20 @@ func TestScheduledHistoryKeepsRunThreadsAndTheDigestReportsTheNightlyOutcome(t *
 	}
 
 	base, _, stop := startServeStoppable(t, dir)
-	w := asstBrowse(t, base)
-	code, page, _ := w.get("/scheduled", false)
-	w.want(code, http.StatusOK, page, fmt.Sprintf("href=\"/chat/%d\"", thread), "worker lost")
+	runs := localWebG1(t, base).do(http.MethodGet, "/web/v1/schedules/runs?limit=100", nil)
+	linked, lost := false, false
+	for _, raw := range apiReplyItems(t, runs) {
+		item, _ := raw.(map[string]any)
+		if item["thread_id"] != nil && number(t, item["thread_id"]) == thread {
+			linked = true
+		}
+		if item["error"] == "worker lost" {
+			lost = true
+		}
+	}
+	if runs.status != http.StatusOK || !linked || !lost {
+		t.Errorf("schedule runs lack the run thread %d or the worker lost error: %d %.600s", thread, runs.status, runs.body)
+	}
 	stop()
 
 	scheduledOnce(t, f, d, "daily-nudges")
