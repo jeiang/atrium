@@ -1,10 +1,17 @@
 <script lang="ts">
   import { formatDayTime } from '../../shared/assistant/format';
+  import Button from '../../shared/ui/Button.svelte';
   import { p } from '../../shell/router';
   import { agreementWords, type Decision, outcomeOf, stageWords } from './manage';
   import RuleLink from './RuleLink.svelte';
 
-  let { decision }: { decision: Decision } = $props();
+  interface Props {
+    decision: Decision;
+    blocked?: boolean;
+    oncorrect?: (decision: Decision) => void;
+  }
+
+  let { decision, blocked = false, oncorrect }: Props = $props();
 
   const href = $derived(p('/apps/mail/message/:id', { params: { id: String(decision.message_id) } }));
   const outcome = $derived(outcomeOf(decision.action, decision.dest));
@@ -37,6 +44,18 @@
         <RuleLink rule={decision.rule} />
       {/if}
       <span class="mail-item__where">{decision.account}</span>
+      {#if oncorrect}
+        <span class="mail-item__action">
+          <Button
+            size="sm"
+            variant="quiet"
+            label="Correct {decision.subject || 'No subject'}"
+            disabled={blocked}
+            onclick={() => oncorrect(decision)}
+            >Correct</Button
+          >
+        </span>
+      {/if}
     </footer>
   </article>
 </li>

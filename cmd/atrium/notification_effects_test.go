@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -31,6 +32,7 @@ type notifyPush struct {
 	drop     bool
 	block    bool
 	received int
+	bodies   [][]byte
 	arrived  chan struct{}
 }
 
@@ -38,9 +40,10 @@ func newNotifyPush(t *testing.T) *notifyPush {
 	t.Helper()
 	p := &notifyPush{status: http.StatusCreated, arrived: make(chan struct{}, 16)}
 	p.Server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.Copy(io.Discard, r.Body)
+		body, _ := io.ReadAll(r.Body)
 		p.mu.Lock()
 		p.received++
+		p.bodies = append(p.bodies, body)
 		status, drop, block := p.status, p.drop, p.block
 		p.mu.Unlock()
 		select {
@@ -75,6 +78,21 @@ func (p *notifyPush) count() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.received
+}
+
+func (p *notifyPush) about(t *testing.T, b pushBrowser, text string) (n int, titles []string) {
+	t.Helper()
+	p.mu.Lock()
+	bodies := slices.Clone(p.bodies)
+	p.mu.Unlock()
+	for _, body := range bodies {
+		got := b.decrypt(t, body)
+		titles = append(titles, fmt.Sprint(got["title"]))
+		if strings.Contains(fmt.Sprint(got["title"], " ", got["body"]), text) {
+			n++
+		}
+	}
+	return n, titles
 }
 
 func notifyPushRig(t *testing.T, dir string) (*notifyPush, pushBrowser) {
@@ -158,13 +176,16 @@ func TestNotificationInboxEffectIsDurableAndDeduped(t *testing.T) {
 	if _, err := d.Write.Exec("UPDATE tasks SET reminded_ts = NULL"); err != nil {
 		t.Fatal(err)
 	}
-	pushes := push.count()
+	pushes, titles := push.about(t, browser, "Pay the rent")
+	if pushes != 1 {
+		t.Fatalf("the failed reminder push was sent %d times, pushes %q", pushes, titles)
+	}
 	runJob(t, f, d, "task-reminders")
 	if notifications, effects = notifyCounts(t, d); notifications != 1 || effects != 1 {
 		t.Fatalf("repeating the reminder occurrence: %d notifications, %d effects; want one of each", notifications, effects)
 	}
-	if push.count() != pushes {
-		t.Fatalf("a duplicate occurrence pushed again: %d requests", push.count()-pushes)
+	if again, titles := push.about(t, browser, "Pay the rent"); again != pushes {
+		t.Fatalf("a duplicate occurrence pushed again: %d reminder pushes, all pushes %q", again-pushes, titles)
 	}
 
 	push.answer(http.StatusCreated, false, false)
@@ -187,8 +208,8 @@ func TestNotificationInboxEffectIsDurableAndDeduped(t *testing.T) {
 	if notifications, effects = notifyCounts(t, d); notifications != 1 || effects != 1 {
 		t.Fatalf("resend created a second inbox effect: %d notifications, %d effects", notifications, effects)
 	}
-	if push.count() != pushes+1 {
-		t.Fatalf("resend pushed %d times, want once", push.count()-pushes)
+	if resent, titles := push.about(t, browser, "Pay the rent"); resent != pushes+1 {
+		t.Fatalf("resend pushed the reminder %d times, want once; all pushes %q", resent-pushes, titles)
 	}
 }
 

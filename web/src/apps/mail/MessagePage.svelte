@@ -15,8 +15,10 @@
   import NotFound from '../../shell/NotFound.svelte';
   import { p, route } from '../../shell/router';
   import Compose, { type Start } from './Compose.svelte';
+  import CorrectDialog from './CorrectDialog.svelte';
   import MailNav from './MailNav.svelte';
   import {
+    type Corrected,
     type Done,
     effectOf,
     handleArchive,
@@ -67,6 +69,24 @@
   let archived = $state(false);
   let composing = $state(false);
   let start = $state<Start>({ kind: 'new' });
+  let correcting = $state(false);
+  let unsure = $state(false);
+
+  function onCorrected(corrected: Corrected): void {
+    const effect = corrected.effect;
+    toast(corrected.text, {
+      tone: corrected.settled ? 'neutral' : 'error',
+      ...(effect === undefined
+        ? {}
+        : { action: { label: 'Undo', run: () => void onUndo(effect, 'correct', 'Moved back to where it was.') } }),
+    });
+    refreshMail(client);
+  }
+
+  async function onCheck(): Promise<void> {
+    await message.refetch();
+    unsure = false;
+  }
 
   function saidOf(action: Exclude<Action, 'reply'>, on: boolean): { done: string; undone: string } {
     if (action === 'archive') return { done: 'Archived.', undone: 'Moved back to the inbox.' };
@@ -102,7 +122,7 @@
     }
   }
 
-  async function onUndo(effect: number, action: Exclude<Action, 'reply'>, undone: string): Promise<void> {
+  async function onUndo(effect: number, action: Exclude<Action, 'reply'> | 'correct', undone: string): Promise<void> {
     if (!device.online) {
       toast('Cannot reach atrium. Nothing was undone.', { tone: 'error' });
       return;
@@ -234,12 +254,30 @@
             onclick={() => void act('flag', !mail.flagged, () => handleFlag(mail.id, !mail.flagged))}
             >{mail.flagged ? 'Remove flag' : 'Flag'}</Button
           >
+          <Button
+            variant="secondary"
+            disabled={offline || stuck !== undefined || unsure}
+            reason={offReason}
+            onclick={() => (correcting = true)}
+            >Correct</Button
+          >
           {#if queued.data}
             <a class="btn btn--quiet" href={inboxPath('loop', queued.data.replace(/^loop:/, ''))}>Open in Inbox</a>
           {/if}
         </div>
         {#if problem}
           <Notice tone={problem.tone} title={problem.title}>{problem.text}</Notice>
+        {/if}
+        {#if unsure}
+          <Notice tone="warn" title="The correction's outcome is unknown">
+            The connection failed before atrium answered, and atrium did not try again. Check the message before you
+            correct it again.
+            {#snippet action()}
+              <Button variant="secondary" disabled={offline} reason={offReason} onclick={() => void onCheck()}
+                >Check the message</Button
+              >
+            {/snippet}
+          </Notice>
         {/if}
         {#if stuck}
           <Unresolved
@@ -270,6 +308,15 @@
           </Section>
         {/if}
       </article>
+      <CorrectDialog
+        bind:open={correcting}
+        message={mail.id}
+        account={mail.account}
+        subject={mail.subject}
+        current={mail.corrected_to}
+        ondone={onCorrected}
+        onunknown={() => (unsure = true)}
+      />
     {/if}
   </Page>
   <Compose bind:open={composing} {start} accounts={[]} onchanged={() => refreshMail(client)} />
