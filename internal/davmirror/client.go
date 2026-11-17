@@ -110,12 +110,22 @@ const (
 	maxRedirects    = 3
 )
 
+const (
+	HostConfigured  = "the configured host"
+	HostPartition   = "the partition host"
+	HostSibling     = "a sibling host"
+	partitionHeader = "X-Apple-User-Partition"
+)
+
 var log = logx.Logger("davmirror")
 
 type StatusError struct {
 	Method, URL string
 	Status      int
 	Step        string
+	Host        string
+	Challenge   bool
+	Also        []*StatusError
 	location    *url.URL
 }
 
@@ -125,6 +135,14 @@ func (e *StatusError) Error() string {
 
 func (e *StatusError) Refused() bool {
 	return e.Status == http.StatusUnauthorized || e.Status == http.StatusForbidden
+}
+
+func (e *StatusError) Refusal() string {
+	challenge := "no WWW-Authenticate challenge"
+	if e.Challenge {
+		challenge = "with a WWW-Authenticate challenge"
+	}
+	return fmt.Sprintf("the %s request on %s (HTTP %d, %s)", e.Step, e.Host, e.Status, challenge)
 }
 
 type UntrustedError struct {
@@ -187,8 +205,10 @@ type ObjectRef struct {
 }
 
 type Client struct {
-	http *http.Client
-	base *url.URL
+	http      *http.Client
+	base      *url.URL
+	partition string
+	refused   []*StatusError
 }
 
 func New(httpClient *http.Client, endpoint string) (*Client, error) {
@@ -206,14 +226,77 @@ func New(httpClient *http.Client, endpoint string) (*Client, error) {
 	return &Client{http: &guarded, base: base}, nil
 }
 
-func do(ctx context.Context, client *http.Client, step, method string, target *url.URL, depth, body string) ([]response, error) {
-	req, err := http.NewRequestWithContext(ctx, method, target.String(), strings.NewReader(`<?xml version="1.0" encoding="utf-8"?>`+body))
+func (c *Client) partitionHost() string {
+	home := strings.ToLower(c.base.Hostname())
+	if c.partition == "" || net.ParseIP(home) != nil || isPartition(home) {
+		return ""
+	}
+	return "p" + c.partition + "-" + home
+}
+
+func isPartition(host string) bool {
+	label, _, _ := strings.Cut(host, "-")
+	return len(label) > 1 && label[0] == 'p' && digits(label[1:])
+}
+
+func digits(s string) bool {
+	if s == "" || len(s) > 4 {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func (c *Client) hostClass(u *url.URL) string {
+	switch host := strings.ToLower(u.Hostname()); {
+	case host == strings.ToLower(c.base.Hostname()):
+		return HostConfigured
+	case host != "" && host == c.partitionHost():
+		return HostPartition
+	}
+	return HostSibling
+}
+
+func (c *Client) onPartition(err error, target *url.URL) *url.URL {
+	status, ok := errors.AsType[*StatusError](err)
+	host := c.partitionHost()
+	if !ok || !status.Refused() || host == "" || strings.EqualFold(target.Hostname(), host) {
+		return nil
+	}
+	moved := *target
+	moved.Host = host
+	if port := target.Port(); port != "" {
+		moved.Host = net.JoinHostPort(host, port)
+	}
+	return &moved
+}
+
+func (c *Client) explain(err error) error {
+	status, ok := errors.AsType[*StatusError](err)
+	if !ok || !status.Refused() {
+		return err
+	}
+	status.Also = nil
+	for _, other := range c.refused {
+		if other != status {
+			status.Also = append(status.Also, other)
+		}
+	}
+	return status
+}
+
+func (c *Client) do(ctx context.Context, step, method string, target *url.URL, depth, body string) ([]response, error) {
+	req, err := http.NewRequestWithContext(context.WithValue(ctx, stepKey{}, step), method, target.String(), strings.NewReader(`<?xml version="1.0" encoding="utf-8"?>`+body))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/xml; charset=utf-8")
 	req.Header.Set("Depth", depth)
-	resp, err := client.Do(req)
+	resp, err := c.http.Do(req)
 	if untrusted, ok := errors.AsType[*UntrustedError](err); ok {
 		untrusted.Step = step
 		log.Warn("dav request refused", "step", step, "host", untrusted.Host)
@@ -228,12 +311,19 @@ func do(ctx context.Context, client *http.Client, step, method string, target *u
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusMultiStatus {
-		log.Warn("dav request failed", "step", step, "method", method, "status", resp.StatusCode)
-		status := &StatusError{Method: method, URL: target.Redacted(), Status: resp.StatusCode, Step: step}
+		status := &StatusError{Method: method, URL: target.Redacted(), Status: resp.StatusCode, Step: step,
+			Host: c.hostClass(target), Challenge: resp.Header.Get("WWW-Authenticate") != ""}
+		log.Warn("dav request failed", "step", step, "method", method, "status", resp.StatusCode, "host", status.Host, "challenge", status.Challenge)
 		if location := resp.Header.Get("Location"); location != "" {
 			status.location, _ = resolve(target, location)
 		}
+		if status.Refused() {
+			c.refused = append(c.refused, status)
+		}
 		return nil, status
+	}
+	if partition := strings.TrimSpace(resp.Header.Get(partitionHeader)); (step == StepRoot || step == StepWellKnown) && digits(partition) {
+		c.partition = partition
 	}
 	var ms struct {
 		Responses []response `xml:"DAV: response"`
@@ -260,7 +350,7 @@ func (k Kind) homeOf(p prop) string {
 }
 
 func (c *Client) discover(ctx context.Context, k Kind, step string, target *url.URL) (principal, home *url.URL, err error) {
-	found, err := do(ctx, c.http, step, "PROPFIND", target, "0", `<D:propfind `+k.namespaces+`><D:prop><D:current-user-principal/>`+k.homeProp+`</D:prop></D:propfind>`)
+	found, err := c.do(ctx, step, "PROPFIND", target, "0", `<D:propfind `+k.namespaces+`><D:prop><D:current-user-principal/>`+k.homeProp+`</D:prop></D:propfind>`)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -286,7 +376,15 @@ func (c *Client) discover(ctx context.Context, k Kind, step string, target *url.
 }
 
 func (c *Client) homeSet(ctx context.Context, k Kind, principal *url.URL) (*url.URL, error) {
-	found, err := do(ctx, c.http, StepPrincipal, "PROPFIND", principal, "0", `<D:propfind `+k.namespaces+`><D:prop>`+k.homeProp+`</D:prop></D:propfind>`)
+	home, err := c.principalHome(ctx, k, principal)
+	if moved := c.onPartition(err, principal); moved != nil {
+		return c.principalHome(ctx, k, moved)
+	}
+	return home, err
+}
+
+func (c *Client) principalHome(ctx context.Context, k Kind, principal *url.URL) (*url.URL, error) {
+	found, err := c.do(ctx, StepPrincipal, "PROPFIND", principal, "0", `<D:propfind `+k.namespaces+`><D:prop>`+k.homeProp+`</D:prop></D:propfind>`)
 	if err != nil {
 		return nil, err
 	}
@@ -337,11 +435,22 @@ func (c *Client) home(ctx context.Context, k Kind) (*url.URL, error) {
 }
 
 func (c *Client) Collections(ctx context.Context, k Kind) ([]CollectionRef, error) {
+	c.partition, c.refused = "", nil
+	refs, err := c.collections(ctx, k)
+	return refs, c.explain(err)
+}
+
+func (c *Client) collections(ctx context.Context, k Kind) ([]CollectionRef, error) {
 	home, err := c.home(ctx, k)
 	if err != nil {
 		return nil, err
 	}
-	found, err := do(ctx, c.http, StepCollections, "PROPFIND", home, "1", `<D:propfind `+k.namespaces+`><D:prop><D:resourcetype/><D:displayname/>`+k.collect+`</D:prop></D:propfind>`)
+	body := `<D:propfind ` + k.namespaces + `><D:prop><D:resourcetype/><D:displayname/>` + k.collect + `</D:prop></D:propfind>`
+	found, err := c.do(ctx, StepCollections, "PROPFIND", home, "1", body)
+	if moved := c.onPartition(err, home); moved != nil {
+		home = moved
+		found, err = c.do(ctx, StepCollections, "PROPFIND", home, "1", body)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +485,7 @@ func (c *Client) Fetch(ctx context.Context, k Kind) ([]Collection, error) {
 	}
 	var out []Collection
 	for _, ref := range refs {
-		objects, err := do(ctx, c.http, StepObjects, "REPORT", ref.URL, "1", k.report)
+		objects, err := c.do(ctx, StepObjects, "REPORT", ref.URL, "1", k.report)
 		if err != nil {
 			return nil, err
 		}
@@ -396,7 +505,7 @@ func (c *Client) Query(ctx context.Context, collection *url.URL, k Kind, uid str
 	if k.query != nil {
 		body = k.query(uid)
 	}
-	found, err := do(ctx, c.http, StepObjects, "REPORT", collection, "1", body)
+	found, err := c.do(ctx, StepObjects, "REPORT", collection, "1", body)
 	if err != nil {
 		return nil, err
 	}
@@ -444,7 +553,8 @@ func (c *Client) expect(req *http.Request, method string, target *url.URL) error
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode/100 != 2 {
-		return &StatusError{Method: method, URL: target.Redacted(), Status: resp.StatusCode}
+		return &StatusError{Method: method, URL: target.Redacted(), Status: resp.StatusCode, Step: strings.ToLower(method), Host: c.hostClass(target),
+			Challenge: resp.Header.Get("WWW-Authenticate") != ""}
 	}
 	return nil
 }

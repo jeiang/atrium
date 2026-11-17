@@ -67,10 +67,16 @@ type SearchHit struct {
 	Subject string `json:"subject"`
 	Snippet string `json:"snippet"`
 }
+type HitState struct {
+	Seen     bool
+	Flagged  bool
+	Attached bool
+}
 type SearchResult struct {
-	Semantic bool        `json:"semantic"`
-	Results  []SearchHit `json:"results"`
-	Marks    tool.Marks  `json:"-"`
+	Semantic bool               `json:"semantic"`
+	Results  []SearchHit        `json:"results"`
+	States   map[int64]HitState `json:"-"`
+	Marks    tool.Marks         `json:"-"`
 }
 
 func DescribeMessage() application.Definition {
@@ -97,23 +103,26 @@ func iso(ts float64) string {
 	return time.Unix(sec, 0).UTC().Format("2006-01-02T15:04:05-07:00")
 }
 
-func recipients(ctx context.Context, q db.Querier, ids []int64) (map[int64]any, error) {
-	raw, err := mail.Recipients(ctx, q, ids)
+func hitDetails(ctx context.Context, q db.Querier, ids []int64) (map[int64]any, map[int64]HitState, error) {
+	raw, err := mail.HitDetails(ctx, q, ids)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	out := make(map[int64]any, len(raw))
-	for id, text := range raw {
+	to := make(map[int64]any, len(raw))
+	states := make(map[int64]HitState, len(raw))
+	for id, d := range raw {
+		text := d.To
 		if text == "" {
 			text = "[]"
 		}
 		var v any
 		if err := json.Unmarshal([]byte(text), &v); err != nil {
-			return nil, tool.Error("invalid recipients JSON")
+			return nil, nil, tool.Error("invalid recipients JSON")
 		}
-		out[id] = v
+		to[id] = v
+		states[id] = HitState{Seen: d.Seen, Flagged: d.Flagged, Attached: d.Attached}
 	}
-	return out, nil
+	return to, states, nil
 }
 
 func (s *Service) Search(ctx context.Context, in SearchInput) (application.Read[SearchResult], error) {
@@ -125,7 +134,7 @@ func (s *Service) Search(ctx context.Context, in SearchInput) (application.Read[
 	for i, h := range found.Hits {
 		ids[i] = h.ID
 	}
-	to, err := recipients(ctx, s.db.Read, ids)
+	to, states, err := hitDetails(ctx, s.db.Read, ids)
 	if err != nil {
 		return application.Read[SearchResult]{}, err
 	}
@@ -149,7 +158,7 @@ func (s *Service) Search(ctx context.Context, in SearchInput) (application.Read[
 		results[i] = SearchHit{h.ID, h.Account, h.Folder, iso(h.DateTS), from, recips, h.Subject, tool.Clip(h.Snippet, assistant.TuningAgentMailSnippetChars)}
 	}
 	rev, err := s.snapshot(ctx, SearchName, []any{in.Query, in.Filters, in.Limit, in.Offset}, func(db.Querier) error { return nil })
-	return application.Read[SearchResult]{Revision: rev, Data: SearchResult{found.Semantic, results, marks}}, err
+	return application.Read[SearchResult]{Revision: rev, Data: SearchResult{found.Semantic, results, states, marks}}, err
 }
 
 func (s *Service) Message(ctx context.Context, in MessageInput) (application.Read[MessageResult], error) {

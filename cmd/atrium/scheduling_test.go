@@ -19,6 +19,11 @@ import (
 
 func toolResult(t *testing.T, name string, input map[string]any) string {
 	t.Helper()
+	return toolResultKind(t, "chat", name, input)
+}
+
+func toolResultKind(t *testing.T, kind, name string, input map[string]any) string {
+	t.Helper()
 	api := &modelLog{Server: anthropictest.New(t,
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", name, input)),
 		anthropictest.Reply("end_turn", anthropictest.Text("done")),
@@ -29,7 +34,7 @@ func toolResult(t *testing.T, name string, input map[string]any) string {
 		api.seen = append(api.seen, r)
 	})
 	setEnv(t, anthropic.BaseURLEnv, api.URL)
-	if ran := runApp(t, "agent", "run", "--text", "please", "--kind", "chat"); ran.code != cli.ExitOK {
+	if ran := runApp(t, "agent", "run", "--text", "please", "--kind", kind); ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
 	}
 	requests := api.Requests()

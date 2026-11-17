@@ -49,16 +49,31 @@ func (s *service) list(a *cli.Args) cli.Handler {
 func (s *service) test(a *cli.Args) cli.Handler {
 	id := a.OptionalArg("id", cli.Opt{Help: "connection id"})
 	all := a.Bool("all", cli.Opt{Help: "check every configured connection without test side effects instead of testing one"})
+	trace := a.String("trace", "", cli.Opt{Help: "print every request and response of one capability's check, with ids, user names and addresses masked, and save nothing"})
 	jsonOut := a.Bool("json", cli.Opt{Help: "print JSON"})
 	return func(e *cli.Env) int {
 		if (*id == "") == !*all {
 			return e.UsageError("give a connection id or --all")
+		}
+		if *trace != "" && (*all || *jsonOut) {
+			return e.UsageError("--trace takes one connection id and prints text")
 		}
 		svc, closeDB, err := s.open(e.Ctx)
 		if err != nil {
 			return cli.Fail(e, err)
 		}
 		defer closeDB()
+		if *trace != "" {
+			result, err := svc.Trace(e.Ctx, connectionsapp.TraceInput{ID: connectionsapp.ID(*id), Capability: *trace, Out: e.Stdout})
+			if err != nil {
+				return cli.Fail(e, err)
+			}
+			_, _ = fmt.Fprintf(e.Stdout, "result: %s %s %s\n", result.Capability, result.State, reasonOr(result.Reason, "-"))
+			if result.State == "failing" || result.State == "needs_reauth" {
+				return cli.ExitError
+			}
+			return cli.ExitOK
+		}
 		change, err := svc.Test(e.Ctx, connectionsapp.TestInput{ID: connectionsapp.ID(*id), All: *all})
 		if err != nil {
 			return cli.Fail(e, err)

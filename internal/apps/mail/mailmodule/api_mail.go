@@ -83,14 +83,17 @@ type MailSearchRequest struct {
 	Limit         api.Limit  `query:"limit" json:"-"`
 }
 type MailSearchHit struct {
-	ID      int64           `json:"message_id"`
-	Account string          `json:"account"`
-	Folder  string          `json:"folder"`
-	Date    string          `json:"date"`
-	From    string          `json:"from"`
-	To      json.RawMessage `json:"to"`
-	Subject string          `json:"subject"`
-	Snippet string          `json:"snippet"`
+	ID            int64           `json:"message_id"`
+	Account       string          `json:"account"`
+	Folder        string          `json:"folder"`
+	Date          string          `json:"date"`
+	From          string          `json:"from"`
+	To            json.RawMessage `json:"to"`
+	Subject       string          `json:"subject"`
+	Snippet       string          `json:"snippet"`
+	Seen          bool            `json:"seen"`
+	Flagged       bool            `json:"flagged"`
+	HasAttachment bool            `json:"has_attachment"`
 }
 type MailSearchPage struct {
 	Items      []MailSearchHit `json:"items"`
@@ -348,6 +351,10 @@ func (m Module) mailAPIRoutes(d *web.Deps) []application.Binding {
 				r.Data.Results = r.Data.Results[:in.Limit]
 			}
 			page.Items, err = mailWire[[]MailSearchHit](r.Data.Results)
+			for i := range page.Items {
+				state := r.Data.States[page.Items[i].ID]
+				page.Items[i].Seen, page.Items[i].Flagged, page.Items[i].HasAttachment = state.Seen, state.Flagged, state.Attached
+			}
 			return application.Read[MailSearchPage]{Revision: r.Revision, Data: page}, err
 		}),
 		api.Query(d, mailapp.DescribeRules(), application.APIShape{Area: area}, "GET /mail/rules", func(ctx context.Context, in MailListRequest) (application.Read[MailRulesPage], error) {

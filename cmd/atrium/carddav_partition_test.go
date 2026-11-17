@@ -34,11 +34,22 @@ const (
 
 type partitionedDAV struct {
 	*httptest.Server
-	port       string
-	mu         sync.Mutex
-	redirectTo string
-	seen       map[string]int
-	authorized map[string]int
+	port             string
+	mu               sync.Mutex
+	redirectTo       string
+	partition        string
+	rootHome         bool
+	partitionRefuses bool
+	seen             map[string]int
+	authorized       map[string]int
+}
+
+const davChallenge = `X-MobileMe-AuthToken realm="Newcastle", Basic realm="Newcastle"`
+
+func (p *partitionedDAV) set(change func(*partitionedDAV)) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	change(p)
 }
 
 func (p *partitionedDAV) origin(host string) string { return "https://" + host + ":" + p.port }
@@ -68,20 +79,33 @@ func (p *partitionedDAV) serve(w http.ResponseWriter, r *http.Request) {
 	if good {
 		p.authorized[host]++
 	}
-	redirect := p.redirectTo
+	redirect, partition, rootHome, partitionRefuses := p.redirectTo, p.partition, p.rootHome, p.partitionRefuses
 	p.mu.Unlock()
 	if !good {
-		w.Header().Set("WWW-Authenticate", `Basic realm="dav"`)
+		w.Header().Set("WWW-Authenticate", davChallenge)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 	switch {
 	case host == frontHost && r.URL.Path == "/":
-		p.multistatus(w, davResponse("/", `<D:current-user-principal><D:href>/42/principal/</D:href></D:current-user-principal>`))
+		if partition != "" {
+			w.Header().Set("X-Apple-User-Partition", partition)
+		}
+		w.Header().Set("Set-Cookie", `X-APPLE-WEBAUTH-USER="v=1:s=0:d=1234567890"; Path=/`)
+		prop := `<D:current-user-principal><D:href>/42/principal/</D:href></D:current-user-principal>`
+		if rootHome {
+			prop += `<CR:addressbook-home-set><D:href>/42/carddavhome/</D:href></CR:addressbook-home-set>`
+		}
+		p.multistatus(w, davResponse("/", prop))
 	case host == frontHost && r.URL.Path == "/.well-known/carddav":
 		w.Header().Set("Location", p.origin(redirect)+"/42/principal/")
 		w.WriteHeader(http.StatusMovedPermanently)
 	case host == frontHost:
+		w.Header().Set("X-Apple-User-Partition", "3")
+		w.Header().Set("WWW-Authenticate", davChallenge)
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = io.WriteString(w, "<html><body>account 1234567890 for operator@icloud.invalid</body></html>")
+	case host == partitionHost && partitionRefuses:
 		w.WriteHeader(http.StatusUnauthorized)
 	case r.URL.Path == "/42/principal/":
 		p.multistatus(w, davResponse(r.URL.Path, `<CR:addressbook-home-set><D:href>`+p.origin(host)+`/42/carddavhome/</D:href></CR:addressbook-home-set>`))
@@ -116,7 +140,7 @@ func partitionedDAVServer(t *testing.T, dir string) (*partitionedDAV, string) {
 	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	p := &partitionedDAV{redirectTo: partitionHost, seen: map[string]int{}, authorized: map[string]int{}}
+	p := &partitionedDAV{redirectTo: partitionHost, partition: "7", rootHome: true, seen: map[string]int{}, authorized: map[string]int{}}
 	p.Server = httptest.NewUnstartedServer(http.HandlerFunc(p.serve))
 	p.TLS = &tls.Config{Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}}}
 	p.StartTLS()
@@ -156,7 +180,8 @@ func connectProxy(t *testing.T, target string) string {
 	return proxy.URL
 }
 
-func TestCardDAVFindsAPartitionedAddressBookAndNeverSendsTheCredentialToAForeignHost(t *testing.T) {
+func partitionedICloud(t *testing.T) (string, *partitionedDAV) {
+	t.Helper()
 	requireCipher(t)
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	dir, cal := davFixture(t)
@@ -181,6 +206,11 @@ transport = { ca_file = %q, proxy = %q }
 	setEnv(t, davmirror.CardDAVEnv, front)
 	t.Setenv(davmirror.CardDAVEnv, front)
 	t.Setenv(davmirror.CalDAVEnv, cal.URL+"/")
+	return dir, dav
+}
+
+func TestCardDAVFindsAPartitionedAddressBookAndNeverSendsTheCredentialToAForeignHost(t *testing.T) {
+	dir, dav := partitionedICloud(t)
 
 	carddav := func(view icloudTest) (state, reason string) {
 		for _, r := range view.Results {
@@ -193,10 +223,10 @@ transport = { ca_file = %q, proxy = %q }
 
 	view := testICloudConnection(t)
 	if state, reason := carddav(view); state != "ok" || reason != "1 collection" {
-		t.Fatalf("carddav behind a refused principal = %s %q, want ok with 1 collection (%+v)", state, reason, view)
+		t.Fatalf("carddav with a home set on the refusing front host = %s %q, want ok with 1 collection (%+v)", state, reason, view)
 	}
 	if got := runApp(t, "contacts", "sync"); got.code != cli.ExitOK || !strings.Contains(got.stdout, `"written":1`) {
-		t.Fatalf("contacts sync behind a refused principal: %d %q %q", got.code, got.stdout, got.stderr)
+		t.Fatalf("contacts sync with a home set on the refusing front host: %d %q %q", got.code, got.stdout, got.stderr)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "contacts", "card", "alice.vcf")); err != nil {
 		t.Fatalf("the partitioned address book was not mirrored: %v", err)
@@ -205,9 +235,25 @@ transport = { ca_file = %q, proxy = %q }
 		t.Fatal("the partition host received no authenticated request")
 	}
 
-	dav.mu.Lock()
-	dav.redirectTo = foreignHost
-	dav.mu.Unlock()
+	dav.set(func(p *partitionedDAV) { p.rootHome = false })
+	view = testICloudConnection(t)
+	if state, reason := carddav(view); state != "ok" || reason != "1 collection" {
+		t.Fatalf("carddav behind a refused principal = %s %q, want ok with 1 collection (%+v)", state, reason, view)
+	}
+
+	dav.set(func(p *partitionedDAV) { p.partitionRefuses = true })
+	view = testICloudConnection(t)
+	want := "iCloud accepted the app password but refused the principal request on the partition host (HTTP 401, no WWW-Authenticate challenge); " +
+		"also refused the principal request on the configured host (HTTP 401, with a WWW-Authenticate challenge) " +
+		"and the well-known request on the partition host (HTTP 401, no WWW-Authenticate challenge)"
+	if state, reason := carddav(view); state != "failing" || reason != want {
+		t.Errorf("carddav refused on every host = %s %q, want failing %q", state, reason, want)
+	}
+	if got := runApp(t, "contacts", "sync"); got.code == cli.ExitOK {
+		t.Errorf("contacts sync refused on every host succeeded: %q", got.stdout)
+	}
+
+	dav.set(func(p *partitionedDAV) { p.partitionRefuses, p.partition, p.redirectTo = false, "", foreignHost })
 	view = testICloudConnection(t)
 	if state, reason := carddav(view); state != "failing" || !strings.Contains(reason, "well-known") || !strings.Contains(reason, foreignHost) {
 		t.Errorf("carddav redirected to a foreign host = %s %q, want failing naming the well-known step and the host", state, reason)

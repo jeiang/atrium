@@ -13,6 +13,7 @@ export const screens: Readonly<Record<string, string>> = {
 };
 
 export const appScreens: Readonly<Record<string, readonly AppScreen[]>> = {
+  mail: [{ key: 'messages', label: 'Messages', path: '/apps/mail' }],
   calendar: [
     { key: 'agenda', label: 'Agenda', path: '/apps/calendar' },
     { key: 'week', label: 'Week', path: '/apps/calendar/week', wide: true },

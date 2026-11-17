@@ -47,11 +47,12 @@ func TestAppSubNavigationFollowsTheModuleFlag(t *testing.T) {
 	}
 
 	sec := mailSection()
-	if sec == nil || sec.Label != "Mail" || sec.URL != "/triage" || len(sec.Tabs) != 2 ||
-		sec.Tabs[0].Label != "Decisions" || sec.Tabs[0].URL != "/triage" || sec.Tabs[1].Label != "Rules" || sec.Tabs[1].URL != "/rules" {
-		t.Fatalf("Mail section = %+v, want one Mail entry with Decisions and Rules", sec)
+	if sec == nil || sec.Label != "Mail" || sec.URL != "/triage" || len(sec.Tabs) != 3 ||
+		sec.Tabs[0].Label != "Decisions" || sec.Tabs[0].URL != "/triage" || sec.Tabs[1].Label != "Rules" || sec.Tabs[1].URL != "/rules" ||
+		sec.Tabs[2].Label != "Status" || sec.Tabs[2].URL != "/live" {
+		t.Fatalf("Mail section = %+v, want one Mail entry with Decisions, Rules and Status", sec)
 	}
-	for _, path := range []string{"/triage", "/rules"} {
+	for _, path := range []string{"/triage", "/rules", "/live"} {
 		status, body, _ := fetch(t, client, http.MethodGet, base+path, nil)
 		if status != http.StatusOK || !strings.Contains(body, `aria-label="Sections"`) || !strings.Contains(body, `href="/triage" class="hub-tab"`) || !strings.Contains(body, `href="/rules" class="hub-tab"`) {
 			t.Fatalf("GET %s = %d without the Mail sub-navigation: %.400s", path, status, body)

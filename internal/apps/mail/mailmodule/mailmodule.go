@@ -136,9 +136,13 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	passOps, passBindings := mailPassOperations()
 	operations = append(operations, passOps...)
 	bindings = append(bindings, passBindings...)
+	statusOps, statusBindings := mailStatusOperations()
+	operations = append(operations, statusOps...)
+	bindings = append(bindings, statusBindings...)
 	bindings = append(bindings, m.mailAPIRoutes(nil)...)
 	bindings = append(bindings, mailWorkRoutes(nil, m)...)
 	bindings = append(bindings, mailPassRoutes(nil, m)...)
+	bindings = append(bindings, mailStatusRoutes(nil, m)...)
 	bindings = append(bindings, mailDraftRoutes(nil, m)...)
 	return module.Declaration{
 		Name:  unit.Mail,
@@ -164,7 +168,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Host:            mail.HostSettings(),
 		Attention:       AttentionSources(),
 		Search:          SearchSources(),
-		Jobs:            []scheduler.Definition{m.syncJob(mc.Env), m.scanJob(mc.Env)},
+		Jobs:            []scheduler.Definition{m.syncJob(mc.Env), m.scanJob(mc.Env), m.replayJob(mc.Env)},
 		ServiceSets:     m.watchServices(mc.Env),
 		ServiceSetName:  "mail/watch",
 		Requires:        Requirements(),
@@ -173,6 +177,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				m.mailAPIRoutes(d)
 				mailWorkRoutes(d, m)
 				mailPassRoutes(d, m)
+				mailStatusRoutes(d, m)
 				mailDraftRoutes(d, m)
 			}},
 			{Module: pages.Module(m.pageEffects), Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
@@ -182,6 +187,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Label: "Mail", URL: "/settings/mail", Page: "mail", Settings: true, Primary: true, Order: 15},
 			}},
 			{Module: pages.PauseModule(mailPageService)},
+			{Module: pages.StatusModule(func(d *web.Deps) pages.StatusOps { return newStatusOps(d, m) }), Nav: []web.NavItem{
+				{Section: "mail_app", Label: "Status", URL: "/live", Icon: "lock", Page: "mail_status", Order: 30},
+			}},
 			{Module: reviewpages.MailModule(reviewpages.Options{Compose: m.reviewServices(mc.Tools)}), Templates: reviewpages.Templates()},
 			{Module: accountpages.Module(mailPageService, mailSettingsService), Templates: accountpages.Templates()},
 		},

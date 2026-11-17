@@ -163,6 +163,30 @@ test.describe('hold to send on a touch layout', () => {
 test.describe('approval cards on a desktop', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
+  test('a card taller than the screen arms as soon as it fills half of it', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 300 });
+    await gotoGallery(page);
+    const card = page.locator('[data-approval="a-move"]');
+    const row = card.locator('.approval__row');
+    const geometry = await card.evaluate((element) => ({
+      top: element.getBoundingClientRect().top + scrollY,
+      height: element.getBoundingClientRect().height,
+      root: document.documentElement.clientHeight,
+    }));
+    expect(geometry.height).toBeGreaterThan(geometry.root);
+    const need = 0.5 * geometry.root;
+    for (let shown = Math.floor(need) - 6; shown <= Math.ceil(need) + 6; shown++) {
+      const y = Math.round(geometry.top - geometry.root + shown);
+      await page.evaluate((top) => scrollTo({ top, behavior: 'instant' }), y);
+      const seen = await card.evaluate(
+        (element, half) => document.documentElement.clientHeight - element.getBoundingClientRect().top >= half - 1,
+        need,
+      );
+      if (seen) await expect(row).not.toHaveAttribute('data-away', { timeout: 2000 });
+      else await expect(row).toHaveAttribute('data-away', 'true', { timeout: 2000 });
+    }
+  });
+
   test('the action row is inert away from the screen and re-arms after a moment', async ({ page }) => {
     await gotoGallery(page);
     const card = await showCard(page, 'a-move');
