@@ -18,6 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/endpoint"
@@ -78,7 +79,7 @@ func SettingGroups() []settings.Group {
 	return []settings.Group{
 		{Name: "safety", Title: "Safety", Keys: []string{mail.KeyWriteCap}},
 		{Name: "loops", Title: "Open loops", Keys: []string{
-			config.KeyLoopsWaitingAfterDays, config.KeyLoopsRemindAheadDays, config.KeyLoopsSnoozeDefaultDays, config.KeySnoozeChoices,
+			config.KeyLoopsWaitingAfterDays, config.KeyLoopsRemindAheadDays, config.KeyLoopsRemindHour, config.KeyLoopsSnoozeDefaultDays,
 		}},
 		{Name: "packages", Title: "Packages", Keys: []string{tracking.KeyDestinationCountry, tracking.KeyDestinationPostcode}},
 	}
@@ -143,7 +144,18 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	bindings = append(bindings, mailPassRoutes(nil, m)...)
 	bindings = append(bindings, mailDraftRoutes(nil, m)...)
 	return module.Declaration{
-		Name:            unit.Mail,
+		Name:  unit.Mail,
+		Title: "Mail",
+		App:   true,
+		Needs: []module.Need{
+			{Kind: connections.Kind(endpoint.KindEmbedding), Capability: "embeddings", Features: []string{"mail search"}},
+			{Kind: mailconn.Kind, Soft: true, Capability: mailconn.CapabilityIMAP, Features: []string{"mail sync"}},
+			{Kind: mailconn.Kind, Soft: true, Capability: mailconn.CapabilitySMTP, Features: []string{"mail sending"}},
+			{Kind: tracking.KindShip24, Soft: true, Capability: "api", Features: []string{"package tracking"}},
+		},
+		Packages: []string{"internal/apps/mail", "internal/assistant/tools/mail", "internal/mail"},
+		Tables: []string{"accounts", "corrections", "decisions", "drafts", "events", "flag_decisions", "live_baseline", "live_state",
+			"mail_scans", "mailboxes", "message_fts", "messages", "package_events", "packages", "rules", "watch_dismissed"},
 		Operations:      operations,
 		Bindings:        append(bindings, finalBindings()...),
 		Recover:         recoverDrafts,

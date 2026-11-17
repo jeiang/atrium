@@ -21,6 +21,7 @@ const (
 func Connections() []connections.Definition {
 	return []connections.Definition{{
 		Kind:            KindShip24,
+		Offers:          []string{"api"},
 		CredentialSlots: []string{"api_key"},
 		Defaults:        map[string]string{"url": DefaultURL},
 		Validate:        validateConnection,

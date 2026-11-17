@@ -106,6 +106,21 @@ var Retired = []RetiredKey{
 	{Module: "assistant", Key: "prompt_subagent"},
 	{Module: "assistant", Key: "agent_subagent_description_chars"},
 	{Module: "assistant", Key: "agent_subagent_prompt_chars"},
+	{Module: "assistant", Key: "cache_ttl_chat"},
+	{Module: "mail", Key: "mail_ship24_monthly_quota"},
+	{Module: "mail", Key: "watches_carrier_domains"},
+	{Module: "memory", Key: "memory_effort"},
+	{Module: "memory", Key: "memory_model"},
+	{Module: "memory", Key: "memory_verbatim_tokens"},
+	{Module: "notify", Key: "notify_nightly_cap"},
+	{Module: "notify", Key: "notify_per_run_cap"},
+	{Module: "web", Key: "snooze_choices"},
+	{Module: "tools", Key: "tool_media_downloads_enabled"},
+	{Module: "tools", Key: "tool_media_add_magnet_enabled"},
+	{Module: "tools", Key: "tool_media_library_search_enabled"},
+	{Module: "tools", Key: "tool_media_channels_enabled"},
+	{Module: "tools", Key: "tool_media_channel_add_enabled"},
+	{Module: "tools", Key: "tool_media_channel_remove_enabled"},
 }
 
 func RetiredAt(module, key string) (RetiredKey, bool) {

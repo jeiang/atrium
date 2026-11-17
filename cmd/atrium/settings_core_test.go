@@ -23,7 +23,6 @@ func TestCoreSettingsRejectBadValuesAndDriveTheWebLayer(t *testing.T) {
 		code             int
 	}{
 		{"tz", "Mars/Olympus", "must be an IANA time zone", cli.ExitUsage},
-		{"snooze_choices", "1,x", "must be comma-separated", cli.ExitUsage},
 		{"media_qbittorrent_url", "http://127.0.0.1:8081", `use connections."service/qbittorrent".config.url`, cli.ExitError},
 	} {
 		got := runSettings(t, "set", tc.key, tc.value)

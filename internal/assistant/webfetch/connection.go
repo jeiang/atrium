@@ -20,6 +20,7 @@ type connectionConfig struct {
 func Connections() []connections.Definition {
 	return []connections.Definition{{
 		Kind:     KindWebfetch,
+		Offers:   []string{"egress"},
 		Validate: validateConnection,
 		Test:     testConnection,
 	}}

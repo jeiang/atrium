@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/homecard"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -29,6 +30,7 @@ import (
 type Context struct {
 	Current  func() *Snapshot
 	Evaluate func(context.Context, db.Querier) (*Snapshot, error)
+	Follow   func(context.Context, db.Querier) (bool, error)
 	Catalog  func() *Catalog
 	Env      config.Env
 }
@@ -48,8 +50,14 @@ func (c Context) Tools() (*registry.Registry, error) {
 
 type Declaration struct {
 	Name                  string
+	Title                 string
 	Core                  bool
-	Needs                 []string
+	App                   bool
+	Depends               []string
+	Inherits              string
+	Needs                 []Need
+	Packages              []string
+	Tables                []string
 	Requires              []Requirement
 	Settings              []settings.Def
 	Host                  []settings.HostDef
@@ -68,6 +76,7 @@ type Declaration struct {
 	Channels              []string
 	Refs                  []RefKind
 	Day                   DayProvider
+	HomeWeather           homecard.WeatherCard
 	Communications        communications.Provider
 	CommunicationsRefresh Refresher
 	Attachments           []Attachment
@@ -91,6 +100,13 @@ type Declaration struct {
 	Checks                []ops.Check
 	Operations            []application.Definition
 	Bindings              []application.Binding
+}
+
+type Need struct {
+	Kind       connections.Kind
+	Soft       bool
+	Capability string
+	Features   []string
 }
 
 type SetService struct {

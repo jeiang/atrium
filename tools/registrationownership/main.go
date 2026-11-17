@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"go/ast"
+	"go/constant"
 	"go/importer"
 	"go/parser"
 	"go/token"
@@ -20,6 +21,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/jeiang/atrium/tools/internal/units"
 )
 
 const module = "github.com/jeiang/atrium"
@@ -83,6 +86,7 @@ type checker struct {
 	inits   map[string]bool
 	loaded  map[string]bool
 	defined map[string]bool
+	units   units.Set
 }
 
 func main() {
@@ -91,6 +95,9 @@ func main() {
 		fail(err)
 	}
 	c := &checker{root: root, fset: token.NewFileSet(), inits: map[string]bool{}, loaded: map[string]bool{}, defined: map[string]bool{}}
+	if c.units, err = units.Load(); err != nil {
+		fail(err)
+	}
 	pkgs, err := c.load()
 	if err != nil {
 		fail(err)
@@ -312,6 +319,7 @@ func (c *checker) check(p *pkg) {
 				}
 			}
 		}
+		c.checkDeclarations(p, f)
 		for _, decl := range f.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
 			if ok && fn.Recv == nil && fn.Name.Name == "init" && fn.Body != nil {
@@ -388,6 +396,47 @@ func (c *checker) checkRegistries(p *pkg, decl ast.Decl, enclosing string) {
 						c.checkField(p, kv.Pos(), fieldKey(named, f))
 					}
 				}
+			}
+		}
+		return true
+	})
+}
+
+func (c *checker) checkDeclarations(p *pkg, f *ast.File) {
+	ast.Inspect(f, func(n ast.Node) bool {
+		lit, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+		named := namedOf(p.info.Types[lit].Type)
+		if named == nil || named.Obj().Pkg() == nil || named.Obj().Pkg().Path() != module+"/internal/module" || named.Obj().Name() != "Declaration" {
+			return true
+		}
+		for _, elt := range lit.Elts {
+			kv, ok := elt.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+			if key, isIdent := kv.Key.(*ast.Ident); !isIdent || key.Name != "Name" {
+				continue
+			}
+			value := p.info.Types[kv.Value].Value
+			if value == nil || value.Kind() != constant.String {
+				c.report(kv.Pos(), "module declaration name is not a string constant")
+				continue
+			}
+			name := constant.StringVal(value)
+			declared, ok := c.units.Get(name)
+			if !ok {
+				c.report(kv.Pos(), "module declaration %s is not in the catalog", name)
+				continue
+			}
+			owner, _, inUnit := c.units.Of(p.path)
+			switch {
+			case len(declared.Packages) == 0 && inUnit:
+				c.report(kv.Pos(), "platform declaration %s sits in %s, a package of %s", name, p.path, owner.Name)
+			case len(declared.Packages) > 0 && (!inUnit || owner.Name != name):
+				c.report(kv.Pos(), "declaration of %s sits in %s, outside the packages it claims", name, p.path)
 			}
 		}
 		return true

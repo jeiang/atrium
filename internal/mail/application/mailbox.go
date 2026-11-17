@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/executors"
 	"github.com/jeiang/atrium/internal/mail/mailops"
+	"github.com/jeiang/atrium/internal/pause"
 	"github.com/jeiang/atrium/internal/safety"
 )
 
@@ -110,7 +111,7 @@ func writeCap(ctx context.Context, q db.Querier) (int, error) {
 }
 
 func (s *Service) mailWritesPaused() bool {
-	return safety.IsPaused(s.cfg.PausePath())
+	return pause.Paused(s.cfg.PausePath())
 }
 
 func (s *Service) mailboxAudit(ctx context.Context, name application.Name, target string, err error, effects []int64) int64 {

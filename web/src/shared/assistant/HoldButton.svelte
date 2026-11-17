@@ -87,7 +87,6 @@
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    note = '';
     phase = 'holding';
     const ms = duration();
     const started = performance.now();

@@ -115,6 +115,17 @@ administrator role or remote emergency bypass.
   comes from `/web/v1`, which keeps the rules above. Host validation applies.
   Responses under `/next/` carry a stricter CSP with Trusted Types; the
   server-rendered pages keep their CSP unchanged.
+- The `/next/` client keeps its shell and the last data it read for 7 days,
+  so it opens without a connection and shows that data with its age and a
+  notice that nothing can be sent. It never sends or queues a change while
+  offline. Signing out or a lapsed session deletes the stored data. The
+  account menu item "Don't keep data on this device" deletes it at once and
+  stops keeping it on that browser.
+- The `/next/` Connections screen under Settings is never kept on the
+  device. A stored credential is never shown or sent back; a new value
+  replaces it. Disconnect asks first, then deletes the stored credentials and
+  turns the connection off, and only applies to connections the operator set
+  up. Fields and credentials the host owns are read-only there.
 
 Public requests are limited in process by token buckets owned by each listener:
 10 sign-in requests a minute per client address, 120 `/api/v1` or `/web/v1`
@@ -195,17 +206,23 @@ failed backup creation does not prune archives. v2 archives named
 archive needs another name or location. Off-host copying belongs to the host.
 
 `atrium backup list` (with `--json`) and the API's `GET /maintenance/backups`
-show up to 100 of the newest `atrium-*.backup` archives in the backup directory,
-with the total count, each archive's size and modification time, and the
-facts its unencrypted header states (format, creation time, schema,
-encryption and key id, file count) or why that header cannot be read. The
-header is not checked for tampering; `POST /maintenance/backups/verify` with a
-listed name, or `atrium restore --verify`, checks the whole archive. Verify
-results are not stored. Symlinks, subdirectories and other names in the
-directory are not listed. Without `backup.directory` (host key
-`core.backup_directory`), the list reports that no directory is configured; a
-configured directory that does not exist yet is reported as missing. To write
-an archive named `list` in the current directory, run `atrium backup ./list`.
+show up to 100 of the newest atrium archives in the backup directory, with the
+total count, each archive's size and modification time, whether pruning may
+delete it, and the facts its unencrypted header states (format, creation time,
+schema, encryption and key id, file count) or that its format is too old or
+too new. Both the scheduled `atrium-*.backup` archives and named archives
+written there with `atrium backup PATH` (for example a pre-deploy
+`pre-<deploy>-<stamp>.archive`) are listed; named archives are never pruned
+and do not count toward the kept number. Any file whose header is not an
+atrium archive header is ignored, as are symlinks, subdirectories and names
+starting with a dot. Only the newest 1000 files in the directory are examined;
+the list reports how many older files were not. The header is not checked for
+tampering; `POST /maintenance/backups/verify` with a listed name, or
+`atrium restore --verify`, checks the whole archive. Verify results are not
+stored. Without `backup.directory` (host key `core.backup_directory`), the list
+reports that no directory is configured; a configured directory that does not
+exist yet is reported as missing. To write an archive named `list` in the
+current directory, run `atrium backup ./list`.
 
 Restore replaces database and uploaded state and requires resident users of the
 database to be stopped. `atrium restore --verify ARCHIVE` checks an archive
@@ -241,7 +258,10 @@ The Connections page shows configuration, credential presence, and observed
 health. Credentials are write-only. Database credentials require encryption;
 host file credentials stay files. Host-declared connections cannot be edited as
 operator-owned rows. Mail accounts have stable ids; account creation tests
-before saving, and deployment-pinned accounts cannot be removed.
+before saving, and deployment-pinned accounts cannot be removed. A host file
+credential replaces a value entered in the UI for the same slot at the next
+process start. A deployment-pinned mail account declared without a password
+file takes its password from the UI, and that value stays.
 
 A stored credential never follows a connection to a different endpoint. A
 URL/host change must replace every retained credential in that request, or the
@@ -277,7 +297,54 @@ enables it as `untested` with its earlier results cleared, so the next check
 tests it. A host connection the operator disconnected stays disconnected:
 removing it from the host file or declaring it again does not enable or
 announce it. Connection notices open the Connections settings page,
-`/settings/connections`.
+`/settings/connections`. A failing or needs-reauth notice ends with
+`; affects <features>` when features of an enabled module depend on that
+connection and no other connection serves them; the title is unchanged, and
+recovery sends the same single notice as before.
+
+A built-in connection that atrium creates itself (Open-Meteo, Web fetch, TMDB,
+EZTV, Embedding) follows the apps that need it while it is still
+operator-owned. When every app that needs it is off, it is disabled with the
+reason `its app is off`; when one of those apps is turned on again, it is
+enabled as `untested` with its results cleared and tested on the next pass. A
+connection the operator or the host file created is never written this way.
+While no app that is on needs it, its view shows `idle: "its app is off"` and it
+gets no scheduled test, no state-change notice, and no repair; it keeps its
+enabled flag, credentials, and last state, and normal checks resume when an app
+that needs it is on. Neither path deletes a row or a credential, and neither
+sends a notice. An app counts as on when its switch is on, even while it waits
+for a setting or a failing connection, so that connection keeps being checked
+and reported.
+
+`POST /api/v1/connections/{kind}/{name}/disable` (`connections.disable`) turns
+an operator-owned connection off with the reason `turned off by the operator`;
+`.../enable` (`connections.enable`) turns it back on as `untested`, or
+`unconfigured` when it was never configured. Both are operator-only, take no
+body, return the connection view, and succeed without a change when the row is
+already in that state. A host-declared connection, a connection whose kind
+this version does not support, and a built-in connection that is off because
+its apps are off are refused (`409 refused`). No assistant tool can turn a
+connection on or off.
+
+The assistant has two connection tools. `dependencies_status` (every run kind)
+lists each app need with its connection, state, failure class, features and
+repair, each open repair with its severity and fix link, and credential expiry
+dates; it never returns credentials, configuration or provider error text.
+`dependency_recheck` (chat and scheduled runs only) runs the operator's Test
+for one connection and returns its new state. It is refused for a disabled
+connection, for one no app that is on needs, for one in needs-reauth whose
+credential has not changed since the last check, and more than once per
+connection every 5 minutes.
+
+Every enabled connection row is owned by exactly one side: the host file owns
+the connections it declares, and the Connections page owns the rest. The ops
+listener's `/readyz` runs a non-critical `connection owners` check that
+reports `degraded` and names any row whose owner disagrees with the host file.
+
+When a connection a job needs is unavailable and the run did no work,
+package tracking and media channels record `skipped_dependency` (shown as
+"Skipped (connection unavailable)"), with an error that names the repair, for
+example `repair connection:service/eztv:unreachable at /settings/connections`.
 
 qBittorrent and the embedding endpoint ride out short outages: a failure that
 follows an `ok` or `expiring` state starts a 6-hour grace window. The stored
@@ -328,12 +395,35 @@ failing, disabled or needs reauth; the module's settings header names the
 connection and its state, and the line clears once a check passes. A failed
 Test does not hold mail.
 
-Module flags are restart-only. Change `<name>_enabled` through `atrium settings
-set` or host configuration, then restart serve. Settings pages show module
-state and a restart notice when the stored flag differs; they do not toggle
-flags. The settings API returns 409 for a flag because it is not an offered
-setting. Saving a working connection or completing OAuth consent does not turn
-its module flag on.
+Apps are the units with a flag the operator switches: mail, calendar, media
+and Grafana ("Server ops"). `GET /apps` (both `/api/v1` and `/web/v1`,
+operator only) lists each app with its flag, module state and reason, pin
+source, the units it depends on and the unmet ones, the units that depend on
+it, its connection needs, its nav entries and the settings revision.
+`PUT /apps/{id}/enabled` with `{"enabled": true|false}` and an optional
+`If-Match` revision writes `<name>_enabled` through the settings write, so the
+settings audit row is written and the change applies live: routes, tools,
+jobs, nav and the connection rows only that app needs follow without a
+restart. It refuses with 409 and a reason: `core_unit` for the assistant,
+contacts and notifications, `pinned` for a host-declared flag,
+`dependency_off` when turning on an app whose dependency is off,
+`dependent_on` when turning off an app another enabled unit needs, and
+`needs_settings` or `unavailable` from the module guard. An unknown id is 404
+and a stale `If-Match` is 412 with the current `revision`. No assistant tool
+switches an app; the system prompt names the apps that are off.
+`atrium settings set <name>_enabled` still works and a running serve picks it
+up within a few seconds. The settings API keeps refusing flags with 409
+because they are not offered settings. Saving a working connection or
+completing OAuth consent does not turn its module flag on.
+
+Weather is its own app, switched by `weather_enabled`. The first start of a
+version with the Weather app turns it on once when the assistant is on and
+`weather_enabled` has never been set or pinned, so an upgraded system keeps
+its weather; a fresh database leaves it off. With Weather off, the `weather`
+tool is not offered, the Home weather card shows `off`, no forecast is
+fetched, and the built-in weather connection is disabled with the reason "its
+app is off" (the row, its settings and the three location keys stay).
+Turning Weather on again re-enables that connection as untested.
 
 A settings save in the running serve re-checks module requirements after
 commit. That can change route/service availability without a restart if
@@ -343,6 +433,35 @@ Ordinary disabled module pages return 404. Owned API commands and binary relays
 return 409 `module_disabled` before starting their work. Review and Activity keep
 historical proposals and effects visible; owning-module checks still apply to
 approval, undo, and other mutations.
+
+## Automation pause
+
+One pause stops all unattended work. The operator sets it with
+`atrium live pause` or `POST /api/v1/automation/pause` (optional `reason`) and
+clears it with `atrium live resume` or `POST /api/v1/automation/resume`;
+`GET /api/v1/automation/pause` and the `pause` field of `GET /api/v1/shell`
+show whether it is on, who set it, from where, since when and why. The older
+`POST /api/v1/mail/live/pause` and `/resume` act on the same pause. Agents
+cannot pause or resume.
+
+The pause is a `pause` file beside the database, so a pause set from a
+separate CLI process reaches a running serve: each automatic mail write and
+each run-now request checks it at once, and the scheduler applies it at its
+next tick (30 seconds). While paused:
+
+- Scheduled jobs are skipped and recorded as `skipped_pause`, except backups,
+  the CalDAV and CardDAV mirrors, and the mail sync and scan passes. Those
+  passes still read mail, but make no automatic mailbox writes.
+- A run-now request for any other job (package tracking, the media sweep,
+  calendar candidates) is refused.
+- Assistant jobs, schedules and the Grafana sampler do not run; chat stays
+  available, and the assistant's direct mailbox writes are refused.
+- Operator sends, operator calendar event writes and approved proposals still
+  work: pause blocks automatic work, not consent.
+
+Resume releases everything at once. A write skipped while paused is done once
+on the next pass, and a write with an unknown outcome stays blocked until the
+operator resolves it.
 
 ## Mail modes and safety
 
@@ -409,6 +528,16 @@ permission to repeat the write. Review shows pending and blocked proposals;
 Activity shows recorded effects and available undo. Undo is a new guarded
 effect, not deletion of history, and can itself fail or become unknown.
 
+Operator calendar event writes (create, edit and delete on iCloud or Google,
+through the API or the web client) are each one effect with undo: undoing a
+create deletes the event, undoing an edit puts the old fields back, and
+undoing a delete puts the event back. Undo of an edit is refused when the
+event changed again after the edit. An edit needs the event's current
+revision in `If-Match`, so a change made elsewhere since the read is not
+overwritten. A write with an unknown outcome blocks further writes to that
+event until it is resolved; it is never retried. The Birthdays calendar is
+read-only.
+
 Check the external mailbox, calendar, or media state before resolving an
 unknown or partial result. The effect detail and `atrium effects` commands
 expose its evidence. `atrium effects resolve ID --outcome
@@ -456,9 +585,12 @@ waiting on, permission requests, pending proposals and those with an unknown
 outcome, drafts to send or resolve, and overdue, due-soon or needs-decision
 items such as commitments, tasks and open loops. Items of a module that is off
 are not counted. Clients list the same items, in the same order, from
-`GET /api/v1/queue`. The Needs you page still lists only proposals and drafts;
-with mail off it and `GET /api/v1/pending` list no drafts, and Activity keeps
-showing past mail actions.
+`GET /api/v1/queue`, and `GET /api/v1/home` returns the count and the first
+three of them as `needs_you`. The Needs you page still lists only proposals and
+drafts; with mail off it and `GET /api/v1/pending` list no drafts, and Activity
+keeps showing past mail actions. A task or commitment can be snoozed until a
+later time with `POST /api/v1/commitments/{ref}/snooze`; it leaves Needs you
+until then, and the snooze can be undone.
 
 Tasks can be created, edited, completed, reopened, dismissed and deleted from
 `/api/v1/tasks`. Each of these can be undone: the response names one effect,
@@ -549,7 +681,8 @@ previous text, and undo restores the previous text. Its text follows the
 compiled base prompt in chat, cron and nightly requests. It is not part of the
 profile or retrieval, the assistant cannot change it, and it cannot be purged.
 A custom system prompt stored by an earlier version is carried into the page
-once. Subagent roles are fixed in code; the `/subagents` routes and the
+once. Subagent roles are fixed in code and readable at
+`GET /api/v1/assistant/subagent-roles`; the `/subagents` routes and the
 `agent subagents` commands are gone.
 
 The knowledge export is one-way and writes one Markdown folder, set by the
@@ -597,8 +730,8 @@ so the same request can be tried later. A disabled owner at admission returns
 creates proposals. Rule preview and unpaid replay are read-only POST routes
 without command/idempotency admission; paid replay is not offered by the API.
 
-Reads expose ETags where supported. The nine mail resource projections for
-message, rules, rules export, accounts, loops, commitments, packages, birthdays,
+Reads expose ETags where supported. The eight mail resource projections for
+message, rules, rules export, accounts, loops, commitments, packages,
 and single draft track the actual served payload. Draft PATCH and send accept
 that draft's ETag in `If-Match`; revision compare-and-swap still protects the
 write. Knowledge PATCH does not support `If-Match`.
@@ -631,12 +764,13 @@ reserve a 256 MiB free-space floor plus a bounded envelope; insufficient space
 returns 503. Keyed multipart requests fingerprint parsed fields and bytes,
 not the MIME boundary.
 
-## Media and the standalone agent
+## Library and the standalone agent
 
-Media is at `/apps/media`. The application reads the library and files media
-only through `service/media-agent`. With the local NixOS agent, the main
-application and `atrium-run` cannot access the media parent. Only the agent has
-that filesystem access and the library group.
+Library (shown as "Library"; its app id, flag and setting keys stay `media`,
+`media_enabled` and `media_*`) is at `/apps/media`. The application reads the
+library and files media only through `service/media-agent`. With the local
+NixOS agent, the main application and `atrium-run` cannot access the media
+parent. Only the agent has that filesystem access and the library group.
 
 The agent control listener checks bearer and Host. The module binds control to
 loopback. Its optional TLS VPN listener instead checks peer CIDRs at accept
@@ -645,9 +779,44 @@ and exact Host, has no bearer, and serves only GET/HEAD under
 `media.media_vpn_base_url`; `media_root`, `media_movies_url`, and `media_tv_url`
 are refused inputs.
 
-- Only media-tagged torrents are changed. Adds take one magnet or one torrent
+- Adds take one magnet or one torrent
   file, not both. A v1 info hash is required; v2-only torrents are refused, and
   hybrid torrents with v1 pieces are accepted.
+- Torrents (`/apps/media/torrents`, the qBittorrent connection, the tools
+  `downloads`, `download_add` and `download_control`) is its own app; Library
+  depends on it. Every write goes through one gate. The operator may change any
+  torrent. Agents and jobs change only torrents tagged `atrium` (stamped on
+  every new add) or `media`, and never remove a tag. A job removes only a
+  torrent Library has tagged `filed` and qBittorrent has stopped. Undo of an
+  add is refused once the torrent is filed. The first start of this release
+  turns Torrents on when Library is on and Torrents has no stored choice and
+  no pin; otherwise Torrents stays off until enabled.
+  Library depends on Torrents: the app switch refuses to turn Torrents off
+  while Library is on (`dependent_on`) and to turn Library on while Torrents
+  is off (`dependency_off`). When Torrents is unavailable, `/settings/media`
+  shows Library as unavailable with "Torrents is unavailable:" and its reason.
+- Tool renames: `media_downloads` is now `downloads` and `media_add_magnet` is
+  now `download_add`; `download_control` (pause, resume, remove) is new. The
+  old `tools.tool_media_downloads_enabled` and
+  `tools.tool_media_add_magnet_enabled` keys are retired: an environment pin is
+  ignored with a warning, as for any retired key.
+- Library tool renames: `media_library_search` is now `library_search`,
+  `media_channels` is `library_following`, `media_channel_add` is
+  `library_follow` and `media_channel_remove` is `library_unfollow`. Their
+  `tools.tool_<old name>_enabled` keys are retired. Ledger operations,
+  undo kinds, job keys and the notification channel keep their `media`
+  names, so earlier history stays listed (Activity category `library`),
+  attributed and undoable. A pending proposal made under an old tool name
+  before this release has no executor; ask again.
+- The notification channel `media` keeps its key and stored choices and is
+  shown as "Library". The followed-show poll (`media-channels`) records
+  `skipped_unconfigured` with "no show is followed" and calls nothing while
+  no show is followed. With Torrents off, `/api/v1/apps` and
+  `/settings/media` show Library as needing Torrents and its jobs record
+  `skipped_module`; Torrents keeps working with Library off.
+- A successful add on `/apps/media/add` shows the Downloads page with an
+  "Added" notice when Library is on, and the add page with the notice when it
+  is off.
 - Filing prepares without writing. Durable receipt-keyed steps then hardlink
   downloads or rename imports without overwriting destinations or copying
   across devices. A repeated receipt returns its prior result, including

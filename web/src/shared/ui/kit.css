@@ -1,5 +1,7 @@
 @import "../../tokens/gen/media.css";
 
+@layer reset, tokens, base, shell, components, utilities;
+
 @layer components {
   .icon {
     inline-size: 1.25em;

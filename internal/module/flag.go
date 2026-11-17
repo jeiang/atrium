@@ -34,7 +34,7 @@ func (s *Set) unmet(ctx context.Context, p Probe, r Declaration, states map[stri
 	if err != nil {
 		return nil, err
 	}
-	for _, dep := range r.Needs {
+	for _, dep := range r.Depends {
 		if states[dep] != Enabled {
 			out = append(out, Unmet{Name: dep, Reason: "needs " + dep + " (" + string(states[dep]) + ")"})
 		}
@@ -76,6 +76,9 @@ func seeded(ctx context.Context, q db.Querier) (bool, error) {
 }
 
 func (s *Set) Seed(ctx context.Context, d *db.DB) error {
+	if err := s.inherit(ctx, d); err != nil {
+		return err
+	}
 	if done, err := seeded(ctx, d.Read); err != nil {
 		return err
 	} else if done {
@@ -99,6 +102,38 @@ func (s *Set) Seed(ctx context.Context, d *db.DB) error {
 		}
 		return audit.Record(ctx, tx, audit.Entry{Key: seedKey, New: &next})
 	})
+}
+
+func (s *Set) inherit(ctx context.Context, d *db.DB) error {
+	for _, r := range s.decls {
+		if r.Inherits == "" || r.Core {
+			continue
+		}
+		n, err := audit.CountForKey(ctx, d.Read, FlagKey(r.Name))
+		if err != nil {
+			return err
+		}
+		_, pinned, err := s.reg.Pinned(FlagKey(r.Name))
+		if err != nil {
+			return err
+		}
+		if n > 0 || pinned {
+			continue
+		}
+		from, err := s.reg.Resolve(ctx, d.Read, FlagKey(r.Inherits))
+		if err != nil {
+			return err
+		}
+		if from.Value != "true" {
+			continue
+		}
+		ctx := audit.With(ctx, seedActor, audit.Migration)
+		if err := d.WithTx(ctx, func(tx *sql.Tx) error { return s.reg.Set(ctx, tx, FlagKey(r.Name), "true") }); err != nil {
+			return err
+		}
+		log.Info("module enabled by migration", logx.Module, r.Name, logx.State, "inherited from "+r.Inherits)
+	}
+	return nil
 }
 
 func (s *Set) hasOperatorData(ctx context.Context, q db.Querier) (bool, error) {

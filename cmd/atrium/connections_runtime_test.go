@@ -19,9 +19,9 @@ import (
 
 	"github.com/jeiang/atrium/internal/apps/mail"
 	"github.com/jeiang/atrium/internal/apps/mail/imapclient"
-	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 )
 
@@ -143,8 +143,8 @@ credential_files = { "mail/icloud/password" = %q }
 		t.Fatal(err)
 	}
 	setEnv(t, "ATRIUM_HOST_CONFIG", host)
-	t.Setenv(calendar.CalDAVEnv, srv.URL+"/")
-	t.Setenv(calendar.CardDAVEnv, srv.URL+"/")
+	t.Setenv(davmirror.CalDAVEnv, srv.URL+"/")
+	t.Setenv(davmirror.CardDAVEnv, srv.URL+"/")
 	fake := mailtest.NewFakeClient()
 	fake.AddBox("INBOX", mailtest.NewBox(1))
 	strictIMAPRig(t, map[string]string{"operator@icloud.invalid": davPassword}, map[string]*mailtest.FakeClient{"icloud": fake})

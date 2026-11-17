@@ -746,6 +746,13 @@ func (s *Store) fill(ctx context.Context, v *View) error {
 		return err
 	}
 	v.Credentials = creds
+	v.Dependents = []Dependent{}
+	if s.reg != nil {
+		v.Dependents = s.reg.dependents(*v)
+	}
+	if v.Enabled && s.reg != nil && s.reg.idle(v.Dependents) {
+		v.Idle = ReasonUnitOff
+	}
 	return nil
 }
 

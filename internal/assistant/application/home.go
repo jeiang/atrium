@@ -18,6 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/day"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/homecard"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/module"
 )
@@ -306,4 +307,8 @@ func (s *Service) TodayEnsure(ctx context.Context, _ TodayInput) (application.Ch
 		return application.Change[TodayResult]{}, err
 	}
 	return application.Change[TodayResult]{Data: TodayResult{ThreadID: id}, AuditID: auditID}, nil
+}
+
+func (s *Service) HomeWeather(ctx context.Context) homecard.Weather {
+	return module.HomeWeather(ctx, s.db, s.clock())
 }

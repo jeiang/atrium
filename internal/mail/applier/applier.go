@@ -24,6 +24,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/numx"
+	"github.com/jeiang/atrium/internal/pause"
 	"github.com/jeiang/atrium/internal/safety"
 	"golang.org/x/text/cases"
 )
@@ -1025,8 +1026,8 @@ func (a *Applier) runPass(ctx context.Context, account string, build builder, la
 	if mode != config.Live {
 		return out, nil
 	}
-	pause := a.Live.Cfg.PausePath()
-	if safety.IsPaused(pause) {
+	pausePath := a.Live.Cfg.PausePath()
+	if pause.Paused(pausePath) {
 		log.Info(account + ": paused, automatic writes skipped")
 		return out, nil
 	}
@@ -1040,7 +1041,7 @@ func (a *Applier) runPass(ctx context.Context, account string, build builder, la
 		return out, err
 	}
 	budget := &Budget{Left: writeCap}
-	auto := safety.AutomaticWrites(ctx, pause)
+	auto := safety.AutomaticWrites(ctx, pausePath)
 	if _, err := a.Live.Recover(auto); err != nil {
 		return out, err
 	}

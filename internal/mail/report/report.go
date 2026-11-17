@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/apps/mail/rules"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	mailaccounts "github.com/jeiang/atrium/internal/mail/accounts"
 	"github.com/jeiang/atrium/internal/ordmap"
 	"github.com/jeiang/atrium/internal/timex"
 )
@@ -266,7 +267,7 @@ func Build(ctx context.Context, q Querier, env config.Env, since *string, at tim
 	if err != nil {
 		return "", err
 	}
-	accounts, err := config.ExistingAccounts(ctx, q)
+	accounts, err := mailaccounts.Existing(ctx, q)
 	if err != nil {
 		return "", err
 	}

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/calendar"
+	"github.com/jeiang/atrium/internal/davmirror"
 )
 
 type settingsFieldCase struct {
@@ -32,7 +32,7 @@ func startSettingsServe(t *testing.T, values map[string]string) string {
 
 func TestSettingsFieldsSaveFromTheirTabs(t *testing.T) {
 	t.Parallel()
-	unsetEnv(t, settingEnv(calendar.AppleIDKey))
+	unsetEnv(t, settingEnv(davmirror.AppleIDKey))
 	base := startSettingsServe(t, nil)
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -73,7 +73,7 @@ func TestSettingsFieldsSaveFromTheirTabs(t *testing.T) {
 
 func TestSettingsFieldsRefuseInvalidValues(t *testing.T) {
 	t.Parallel()
-	unsetEnv(t, settingEnv(calendar.AppleIDKey))
+	unsetEnv(t, settingEnv(davmirror.AppleIDKey))
 	base := startSettingsServe(t, nil)
 	jar, err := cookiejar.New(nil)
 	if err != nil {

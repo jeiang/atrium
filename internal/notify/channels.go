@@ -27,6 +27,7 @@ const (
 
 type Channel struct {
 	Name      string `json:"name"`
+	Title     string `json:"title"`
 	Content   string `json:"content"`
 	ShowsText bool   `json:"full_text"`
 }
@@ -54,13 +55,22 @@ func EnsureChannels(ctx context.Context, q db.Querier) error {
 }
 
 func GetChannel(ctx context.Context, q db.Querier, name string) (Channel, error) {
-	c := Channel{Name: name, Content: Auto}
+	c := Channel{Name: name, Title: channelTitle(ctx, name), Content: Auto}
 	err := q.QueryRowContext(ctx, "SELECT content FROM ntfy_channels WHERE name = ?", name).Scan(&c.Content)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return Channel{}, err
 	}
 	c.ShowsText = c.FullText()
 	return c, nil
+}
+
+func channelTitle(ctx context.Context, name string) string {
+	if set := modules.SetFrom(ctx); set != nil {
+		if title := set.Catalog().ChannelTitle(name); title != "" {
+			return title
+		}
+	}
+	return name
 }
 
 func ListChannels(ctx context.Context, q db.Querier) ([]Channel, error) {

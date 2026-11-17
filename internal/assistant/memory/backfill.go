@@ -36,11 +36,7 @@ func EstimateBackfill(ctx context.Context, q db.Querier) (Estimate, error) {
 	}
 	out.Nodes = int(messages * 2)
 	nodeBytes := TuningMemoryNodeBytes
-	model, err := Model(ctx, q)
-	if err != nil {
-		return out, err
-	}
-	perNode, err := pricing.CostUSD(model, pricing.Tokens{Input: int64(nodeBytes / 4), Output: int64(nodeBytes / 4)}, 0)
+	perNode, err := pricing.CostUSD(TuningMemoryModel, pricing.Tokens{Input: int64(nodeBytes / 4), Output: int64(nodeBytes / 4)}, 0)
 	if err != nil {
 		return out, err
 	}

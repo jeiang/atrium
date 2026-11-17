@@ -196,7 +196,8 @@ export interface Approval {
 }
 
 export interface DecidedElsewhere {
-  where: string;
+  outcome?: string;
+  where?: string;
   at: string;
 }
 
@@ -229,36 +230,4 @@ export interface DigestLine {
   url?: string;
 }
 
-export interface HomeWeather {
-  location: string;
-  timezone: string;
-  current: {
-    time: string;
-    temperature_c: number;
-    apparent_c: number;
-    humidity: number;
-    precipitation_mm: number;
-    weather_code: number;
-    condition: string;
-    wind_kmh: number;
-    wind_direction: number;
-    is_day: boolean;
-  };
-  hours: {
-    time: string;
-    temperature_c: number;
-    precipitation_probability: number;
-    weather_code: number;
-    condition: string;
-  }[];
-  today?: {
-    date: string;
-    high_c: number;
-    low_c: number;
-    precipitation_probability: number;
-    weather_code: number;
-    condition: string;
-    sunrise?: string;
-    sunset?: string;
-  } | null;
-}
+export type { HomeWeather } from '../../contract';

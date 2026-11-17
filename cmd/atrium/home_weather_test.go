@@ -12,9 +12,10 @@ import (
 	"testing"
 	"time"
 
-	asstapp "github.com/jeiang/atrium/internal/assistant/application"
+	"github.com/jeiang/atrium/internal/apps/weather"
+	weatherapp "github.com/jeiang/atrium/internal/apps/weather/application"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/weather"
+	"github.com/jeiang/atrium/internal/homecard"
 )
 
 type weatherService struct {
@@ -55,13 +56,13 @@ capabilities = [%s]
 	return ws
 }
 
-func homeWeather(t *testing.T, s *apiSite) (asstapp.HomeWeather, time.Duration) {
+func homeWeather(t *testing.T, s *apiSite) (homecard.Weather, time.Duration) {
 	t.Helper()
 	started := time.Now()
 	got := s.do(http.MethodGet, "/api/v1/home", s.token("owner"), nil)
 	took := time.Since(started)
 	var home struct {
-		Weather asstapp.HomeWeather `json:"weather"`
+		Weather homecard.Weather `json:"weather"`
 	}
 	if got.status != http.StatusOK {
 		t.Fatalf("GET /home: %d %.600s", got.status, got.body)
@@ -72,7 +73,7 @@ func homeWeather(t *testing.T, s *apiSite) (asstapp.HomeWeather, time.Duration) 
 	return home.Weather, took
 }
 
-func awaitWeather(t *testing.T, s *apiSite, want weather.State) asstapp.HomeWeather {
+func awaitWeather(t *testing.T, s *apiSite, want homecard.State) homecard.Weather {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -139,16 +140,16 @@ func TestHomeWeatherRefreshesInTheBackground(t *testing.T) {
 	startWeatherService(t, dir, `"forecast", "geocoding"`)
 	s := startAPISite(t, dir, api)
 
-	if w, _ := homeWeather(t, s); w.State != weather.StateUnconfigured || w.Current != nil || w.FetchedAt != nil {
+	if w, _ := homeWeather(t, s); w.State != homecard.StateUnconfigured || w.Current != nil || w.FetchedAt != nil {
 		t.Fatalf("weather without a location: %+v", w)
 	}
 
 	before := assistantRevision(t, s)
 	setLocation(t, map[string]string{weather.KeyLatitude: "1.25", weather.KeyLongitude: "2.5", weather.KeyLocationName: "Lowmarsh"})
-	if w, _ := homeWeather(t, s); w.State != weather.StateLoading || w.Current != nil {
+	if w, _ := homeWeather(t, s); w.State != homecard.StateLoading || w.Current != nil {
 		t.Fatalf("weather before the first reading: %+v", w)
 	}
-	w := awaitWeather(t, s, weather.StateOK)
+	w := awaitWeather(t, s, homecard.StateOK)
 	if w.Location == nil || *w.Location != "Lowmarsh" || w.Current == nil || w.Current.Temperature != 31.5 || w.Today == nil || w.Today.High != 33 || len(w.Hours) != 2 || w.FetchedAt == nil || w.Failure != nil {
 		t.Fatalf("weather reading: %+v", w)
 	}
@@ -156,10 +157,10 @@ func TestHomeWeatherRefreshesInTheBackground(t *testing.T) {
 		t.Fatalf("assistant topic not published for the reading: %d then %d", before, after)
 	}
 	setLocation(t, map[string]string{weather.KeyLocationName: "Highfen", weather.KeyLatitude: "3.5"})
-	if w, _ := homeWeather(t, s); w.State != weather.StateLoading || w.Current != nil {
+	if w, _ := homeWeather(t, s); w.State != homecard.StateLoading || w.Current != nil {
 		t.Fatalf("weather after a location change: %+v", w)
 	}
-	w = awaitWeather(t, s, weather.StateOK)
+	w = awaitWeather(t, s, homecard.StateOK)
 	if w.Location == nil || *w.Location != "Highfen" {
 		t.Fatalf("weather after a location change: %+v", w)
 	}
@@ -173,7 +174,7 @@ func TestHomeWeatherNeverWaitsForTheService(t *testing.T) {
 	s := startAPISite(t, dir, api)
 	for range 3 {
 		w, took := homeWeather(t, s)
-		if w.State != weather.StateLoading {
+		if w.State != homecard.StateLoading {
 			t.Fatalf("weather while the service hangs: %+v", w)
 		}
 		if took > time.Second {
@@ -189,8 +190,8 @@ func TestHomeWeatherFailedAndOff(t *testing.T) {
 		ws.mode.Store("fail")
 		seedSettings(t, map[string]string{weather.KeyLatitude: "1.25", weather.KeyLongitude: "2.5"})
 		s := startAPISite(t, dir, api)
-		w := awaitWeather(t, s, weather.StateFailed)
-		if w.Failure == nil || *w.Failure != asstapp.WeatherBadReply || w.Current != nil || w.FetchedAt != nil {
+		w := awaitWeather(t, s, homecard.StateFailed)
+		if w.Failure == nil || *w.Failure != weatherapp.BadReply || w.Current != nil || w.FetchedAt != nil {
 			t.Fatalf("failed weather: %+v", w)
 		}
 	})
@@ -199,7 +200,7 @@ func TestHomeWeatherFailedAndOff(t *testing.T) {
 		startWeatherService(t, dir, `"geocoding"`)
 		seedSettings(t, map[string]string{weather.KeyLatitude: "1.25", weather.KeyLongitude: "2.5"})
 		s := startAPISite(t, dir, api)
-		if w, _ := homeWeather(t, s); w.State != weather.StateOff || w.Current != nil {
+		if w, _ := homeWeather(t, s); w.State != homecard.StateOff || w.Current != nil {
 			t.Fatalf("weather with the forecast capability off: %+v", w)
 		}
 	})

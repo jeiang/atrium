@@ -20,7 +20,7 @@ func (loops) Items(ctx context.Context, q db.Querier, now float64) ([]attention.
 	}
 	items := make([]attention.Item, 0, len(found))
 	for _, l := range found {
-		item := attention.Item{Kind: "loop", SourceID: l.ThreadKey, Title: l.Subject, Detail: l.Counterpart, Created: l.Since}
+		item := attention.Item{Kind: "loop", SourceID: l.ThreadKey, LoopID: l.ID, Title: l.Subject, Detail: l.Counterpart, Created: l.Since}
 		if l.State == "waiting_on_them" {
 			item.Group = attention.Waiting
 		} else {

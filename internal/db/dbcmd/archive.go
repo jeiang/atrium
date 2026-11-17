@@ -154,8 +154,15 @@ func listBackups(e *cli.Env, svc *maintenanceapp.Service, asJSON bool) int {
 		if h := b.Header; h != nil {
 			detail = fmt.Sprintf("schema %04d, %s, %d files", h.Schema, encryption(h.Encryption), h.Files)
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%d\t%s\t%s\n", b.Name, b.SizeBytes, b.ModifiedAt, detail)
+		kind := "named, never pruned"
+		if b.Prunable {
+			kind = "prunable"
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\n", b.Name, b.SizeBytes, b.ModifiedAt, kind, detail)
 	}
 	_, _ = fmt.Fprintf(w, "%d of %d archives\n", len(list.Items), list.Total)
+	if list.Unexamined > 0 {
+		_, _ = fmt.Fprintf(w, "%d older files beyond the newest %d were not examined\n", list.Unexamined, maintenanceapp.ListBackupsExamineMax)
+	}
 	return cli.ExitOK
 }

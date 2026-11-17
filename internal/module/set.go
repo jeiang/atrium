@@ -77,33 +77,59 @@ func IsEnabled(ctx context.Context, name string) bool {
 }
 
 func NewSet(cat *Catalog, reg *settings.Registry, env config.Env, open Opener) (*Set, error) {
-	ordered, err := byNeeds(cat.Declarations())
+	ordered, err := byDepends(cat.Declarations())
 	if err != nil {
 		return nil, err
 	}
-	return &Set{cat: cat, reg: reg, env: env, decls: ordered, opener: open, transitions: map[int]Transition{}}, nil
+	s := &Set{cat: cat, reg: reg, env: env, decls: ordered, opener: open, transitions: map[int]Transition{}}
+	if cat.conns != nil {
+		cat.conns.Activate(func(name string) bool {
+			snap := s.Current()
+			return snap == nil || snap.Enabled(name)
+		}, func(name string) bool {
+			snap := s.Current()
+			return snap == nil || snap.TurnedOn(name)
+		})
+	}
+	return s, nil
 }
 
-func byNeeds(decls []Declaration) ([]Declaration, error) {
+func byDepends(decls []Declaration) ([]Declaration, error) {
 	placed := map[string]bool{}
 	var out []Declaration
 	remaining := slices.Clone(decls)
 	for len(remaining) > 0 {
 		i := slices.IndexFunc(remaining, func(d Declaration) bool {
-			return !slices.ContainsFunc(d.Needs, func(dep string) bool { return !placed[dep] })
+			return !slices.ContainsFunc(d.Depends, func(dep string) bool { return !placed[dep] })
 		})
 		if i < 0 {
-			names := make([]string, len(remaining))
-			for j, d := range remaining {
-				names[j] = d.Name
-			}
-			return nil, &DependencyCycle{Modules: names}
+			return nil, &DependencyCycle{Modules: cycle(remaining, placed)}
 		}
 		placed[remaining[i].Name] = true
 		out = append(out, remaining[i])
 		remaining = slices.Delete(remaining, i, i+1)
 	}
 	return out, nil
+}
+
+func cycle(remaining []Declaration, placed map[string]bool) []string {
+	byName := map[string]Declaration{}
+	for _, d := range remaining {
+		byName[d.Name] = d
+	}
+	seen := map[string]int{}
+	var path []string
+	cur, ok := remaining[0], true
+	for ok {
+		if at, again := seen[cur.Name]; again {
+			return append(path[at:], cur.Name)
+		}
+		seen[cur.Name] = len(path)
+		path = append(path, cur.Name)
+		next := cur.Depends[slices.IndexFunc(cur.Depends, func(dep string) bool { return !placed[dep] })]
+		cur, ok = byName[next]
+	}
+	return path
 }
 
 type Snapshot struct {
@@ -148,6 +174,7 @@ func (s *Set) store(snap *Snapshot) {
 		}
 	}
 	s.cur.Store(snap)
+	s.cat.conns.TouchUnits()
 	s.hooks.Lock()
 	s.halted = nil
 	s.hooks.Unlock()
@@ -244,9 +271,10 @@ func evaluate(ctx context.Context, decls []Declaration, fn check) ([]Status, map
 	states := map[string]State{}
 	statuses := make([]Status, 0, len(decls))
 	for _, r := range decls {
-		st := Status{Name: r.Name, State: Enabled}
+		st := Status{Name: r.Name, State: Enabled, On: true}
 		if !r.Core {
 			unmet, on, err := fn(ctx, r, states)
+			st.On = on
 			var broken *requirementError
 			switch {
 			case errors.As(err, &broken):
@@ -328,6 +356,11 @@ func (n *Snapshot) Visible(name string) bool {
 func (n *Snapshot) Enabled(name string) bool {
 	st, ok := n.Status(name)
 	return ok && st.State == Enabled
+}
+
+func (n *Snapshot) TurnedOn(name string) bool {
+	st, ok := n.Status(name)
+	return ok && (st.On || st.State == Unavailable)
 }
 
 func (n *Snapshot) ServicesOf(owner string) []runtime.ServiceDefinition {

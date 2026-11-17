@@ -1,0 +1,441 @@
+package library
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"regexp"
+
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
+	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/notify"
+)
+
+const (
+	DownloadsPage = "/apps/media/downloads"
+	NotifyChannel = "media"
+	Import        = "import"
+
+	stateKey = "channels"
+)
+
+var log = logx.Logger("atrium.media")
+
+type ChannelError string
+
+func (e ChannelError) Error() string { return string(e) }
+
+type Channel struct {
+	ID            int64   `json:"id"`
+	Name          string  `json:"name"`
+	IMDB          string  `json:"imdb"`
+	TMDBID        *int64  `json:"tmdb_id"`
+	Pattern       string  `json:"pattern"`
+	CaseSensitive bool    `json:"case_sensitive"`
+	Primed        bool    `json:"primed"`
+	Created       float64 `json:"created"`
+}
+
+type Status struct {
+	LastCheck *float64 `json:"last_check"`
+	Errors    []string `json:"errors"`
+}
+
+type channelState struct {
+	LastCheck float64  `json:"last_check"`
+	Errors    []string `json:"errors"`
+}
+
+type Added struct {
+	Channel   string
+	Title     string
+	Hash      string
+	SizeBytes int64
+}
+
+type PollResult struct {
+	Added  []Added
+	Errors []string
+	Unmet  *connections.Unmet `json:"-"`
+}
+
+type PollOptions struct {
+	Now   func() float64
+	Only  *int64
+	Force bool
+}
+
+func Now() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
+
+func (t Tuning) CompilePattern(pattern string, caseSensitive bool) (*regexp.Regexp, error) {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return nil, ChannelError("pattern is empty")
+	}
+	if utf8.RuneCountInString(pattern) > t.PatternChars {
+		return nil, ChannelError(fmt.Sprintf("pattern is longer than %d characters", t.PatternChars))
+	}
+	expr := pattern
+	if !caseSensitive {
+		expr = "(?i)" + expr
+	}
+	re, err := regexp.Compile(expr)
+	if err != nil {
+		return nil, ChannelError(fmt.Sprintf("pattern %q: %v", pattern, err))
+	}
+	return re, nil
+}
+
+const channelColumns = "id, name, imdb, tmdb_id, pattern, case_sensitive, primed, created"
+
+func scanChannel(row interface{ Scan(...any) error }) (Channel, error) {
+	var c Channel
+	var tmdb sql.NullInt64
+	var caseSensitive, primed int64
+	if err := row.Scan(&c.ID, &c.Name, &c.IMDB, &tmdb, &c.Pattern, &caseSensitive, &primed, &c.Created); err != nil {
+		return Channel{}, err
+	}
+	if tmdb.Valid {
+		c.TMDBID = &tmdb.Int64
+	}
+	c.CaseSensitive, c.Primed = caseSensitive != 0, primed != 0
+	return c, nil
+}
+
+func ListChannels(ctx context.Context, q db.Querier) ([]Channel, error) {
+	rows, err := q.QueryContext(ctx, "SELECT "+channelColumns+" FROM media_channels ORDER BY id")
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (Channel, error) { return scanChannel(r) })
+}
+
+func GetChannel(ctx context.Context, q db.Querier, id int64) (*Channel, error) {
+	c, err := scanChannel(q.QueryRowContext(ctx, "SELECT "+channelColumns+" FROM media_channels WHERE id = ?", id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+func flag(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+func (t Tuning) AddChannel(ctx context.Context, q db.Querier, name, imdb, pattern string, caseSensitive bool, tmdbID *int64) (*Channel, error) {
+	name = strings.Join(strings.Fields(name), " ")
+	if runes := []rune(name); len(runes) > t.NameChars {
+		name = string(runes[:t.NameChars])
+	}
+	digits, ok := IMDBDigits(imdb)
+	if name == "" {
+		return nil, ChannelError("name is empty")
+	}
+	if !ok {
+		return nil, ChannelError(fmt.Sprintf("IMDb ID %q is not tt followed by 7 to 9 digits", imdb))
+	}
+	if _, err := t.CompilePattern(pattern, caseSensitive); err != nil {
+		return nil, err
+	}
+	var tmdb any
+	if tmdbID != nil {
+		tmdb = *tmdbID
+	}
+	res, err := q.ExecContext(ctx,
+		"INSERT INTO media_channels (name, imdb, tmdb_id, pattern, case_sensitive, primed, created) VALUES (?, ?, ?, ?, ?, 0, ?)",
+		name, digits, tmdb, strings.TrimSpace(pattern), flag(caseSensitive), Now())
+	if err != nil {
+		return nil, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	return GetChannel(ctx, q, id)
+}
+
+func DeleteChannel(ctx context.Context, q db.Querier, id int64) (Channel, error) {
+	row, err := GetChannel(ctx, q, id)
+	if err != nil {
+		return Channel{}, err
+	}
+	if row == nil {
+		return Channel{}, ChannelError(fmt.Sprintf("channel %d does not exist", id))
+	}
+	if _, err := q.ExecContext(ctx, "DELETE FROM media_channels WHERE id = ?", id); err != nil {
+		return Channel{}, err
+	}
+	return *row, nil
+}
+
+func RestoreChannel(ctx context.Context, q db.Querier, row Channel) (*Channel, error) {
+	existing, err := GetChannel(ctx, q, row.ID)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return nil, ChannelError(fmt.Sprintf("channel %d exists again", row.ID))
+	}
+	var tmdb any
+	if row.TMDBID != nil {
+		tmdb = *row.TMDBID
+	}
+	if _, err := q.ExecContext(ctx,
+		"INSERT INTO media_channels (id, name, imdb, tmdb_id, pattern, case_sensitive, primed, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		row.ID, row.Name, row.IMDB, tmdb, row.Pattern, flag(row.CaseSensitive), flag(row.Primed), row.Created); err != nil {
+		return nil, err
+	}
+	return GetChannel(ctx, q, row.ID)
+}
+
+type PreviewRow struct {
+	Release
+	Match bool
+}
+
+func (t Tuning) Preview(releases []Release, pattern string, caseSensitive bool) ([]PreviewRow, error) {
+	re, err := t.CompilePattern(pattern, caseSensitive)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PreviewRow, 0, len(releases))
+	for _, r := range releases {
+		out = append(out, PreviewRow{Release: r, Match: re.MatchString(r.Title)})
+	}
+	return out, nil
+}
+
+func isSeen(ctx context.Context, q db.Querier, hash string) (bool, error) {
+	var one int
+	err := q.QueryRowContext(ctx, "SELECT 1 FROM media_seen WHERE hash = ?", hash).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func markSeen(ctx context.Context, q db.Querier, hash string, ts float64) error {
+	_, err := q.ExecContext(ctx, "INSERT OR REPLACE INTO media_seen (hash, ts) VALUES (?, ?)", hash, ts)
+	return err
+}
+
+func (t Tuning) expireSeen(ctx context.Context, q db.Querier, now float64) error {
+	_, err := q.ExecContext(ctx, "DELETE FROM media_seen WHERE ts < ?", now-t.SeenTTL)
+	return err
+}
+
+func saveChannelState(ctx context.Context, q db.Querier, state channelState) error {
+	body, err := json.Marshal(state)
+	if err != nil {
+		return err
+	}
+	_, err = q.ExecContext(ctx, "INSERT OR REPLACE INTO media_state (key, value) VALUES (?, ?)", stateKey, string(body))
+	return err
+}
+
+func ChannelStatus(ctx context.Context, q db.Querier) (Status, error) {
+	out := Status{Errors: []string{}}
+	var body string
+	err := q.QueryRowContext(ctx, "SELECT value FROM media_state WHERE key = ?", stateKey).Scan(&body)
+	if errors.Is(err, sql.ErrNoRows) {
+		return out, nil
+	}
+	if err != nil {
+		return Status{}, err
+	}
+	var state channelState
+	if err := json.Unmarshal([]byte(body), &state); err != nil {
+		return Status{}, err
+	}
+	out.LastCheck = &state.LastCheck
+	out.Errors = append(out.Errors, state.Errors...)
+	return out, nil
+}
+
+func gb(size int64) string {
+	if size <= 0 {
+		return ""
+	}
+	return " (" + strconv.FormatFloat(float64(size)/1e9, 'f', 1, 64) + " GB)"
+}
+
+type addedView struct {
+	Channel   string `json:"channel"`
+	Title     string `json:"title"`
+	Hash      string `json:"hash"`
+	SizeBytes int64  `json:"size_bytes"`
+}
+
+type pollView struct {
+	Added  []addedView `json:"added"`
+	Errors []string    `json:"errors"`
+}
+
+func (r PollResult) Dict() pollView {
+	added := make([]addedView, len(r.Added))
+	for i, a := range r.Added {
+		added[i] = addedView(a)
+	}
+	errors := r.Errors
+	if errors == nil {
+		errors = []string{}
+	}
+	return pollView{Added: added, Errors: errors}
+}
+
+func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, settings Settings, opts PollOptions) (PollResult, error) {
+	now := opts.Now
+	if now == nil {
+		now = Now
+	}
+	stamp := now()
+	result := PollResult{Added: []Added{}, Errors: []string{}}
+	request := ledger.NewKey()
+	if err := settings.Intake.Ready(ctx); err != nil {
+		return result, err
+	}
+	q := d.Write
+	channels, err := ListChannels(ctx, q)
+	if err != nil {
+		return result, err
+	}
+	var polled, feedFailed, addFailed int
+	var feedErr, addErr error
+	for _, rule := range channels {
+		if opts.Only != nil && rule.ID != *opts.Only {
+			continue
+		}
+		regex, err := settings.CompilePattern(rule.Pattern, rule.CaseSensitive)
+		var releases []Release
+		if err == nil {
+			polled++
+			releases, err = settings.FetchReleases(ctx, rule.IMDB)
+			if errors.As(err, new(EztvError)) {
+				feedFailed++
+				feedErr = err
+			}
+		}
+		if err != nil {
+			var channelErr ChannelError
+			var eztvErr EztvError
+			if !errors.As(err, &channelErr) && !errors.As(err, &eztvErr) {
+				return result, err
+			}
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", rule.Name, err))
+			continue
+		}
+		for _, t := range releases {
+			if !regex.MatchString(t.Title) {
+				continue
+			}
+			seen, err := isSeen(ctx, q, t.Hash)
+			if err != nil {
+				return result, err
+			}
+			if seen && !opts.Force {
+				continue
+			}
+			if rule.Primed || opts.Force {
+				_, err := settings.Intake.Add(ctx, contract.AddRequest{
+					Magnet: t.MagnetURL, Label: TagMedia, Scope: contract.Scope{Actor: contract.Job},
+					OperationKey: "media:channel:" + strconv.FormatInt(rule.ID, 10) + ":" + t.Hash + ":" + request,
+					Done: func(ctx context.Context, tx *sql.Tx) error {
+						return markSeen(ctx, tx, t.Hash, stamp)
+					},
+				})
+				if err != nil {
+					var conflict *ledger.Conflict
+					if errors.As(err, &conflict) {
+						result.Errors = append(result.Errors, fmt.Sprintf("%s: %s: an earlier add is unresolved", rule.Name, t.Title))
+						continue
+					}
+					var invalid contract.Invalid
+					if errors.As(err, &invalid) {
+						result.Errors = append(result.Errors, fmt.Sprintf("%s: %s: %v", rule.Name, t.Title, err))
+						continue
+					}
+					if !contract.IsQbit(err) {
+						return result, err
+					}
+					result.Errors = append(result.Errors, fmt.Sprintf("%s: %s: %v", rule.Name, t.Title, err))
+					addFailed++
+					addErr = err
+					continue
+				}
+				result.Added = append(result.Added, Added{Channel: rule.Name, Title: t.Title, Hash: t.Hash, SizeBytes: t.SizeBytes})
+				continue
+			}
+			if err := markSeen(ctx, q, t.Hash, stamp); err != nil {
+				return result, err
+			}
+		}
+		if _, err := q.ExecContext(ctx, "UPDATE media_channels SET primed = 1 WHERE id = ?", rule.ID); err != nil {
+			return result, err
+		}
+	}
+	if err := settings.expireSeen(ctx, q, stamp); err != nil {
+		return result, err
+	}
+	if len(result.Added) > 0 {
+		lines := make([]string, len(result.Added))
+		for i, a := range result.Added {
+			lines[i] = a.Channel + ": " + a.Title + gb(a.SizeBytes)
+		}
+		title := "Added " + result.Added[0].Channel
+		if len(result.Added) != 1 {
+			title = fmt.Sprintf("Added %d releases", len(result.Added))
+		}
+		if notify.Enabled(ctx) {
+			hashes := make([]string, len(result.Added))
+			for i, a := range result.Added {
+				hashes[i] = a.Hash
+			}
+			message := notify.Message{Title: title, Body: strings.Join(lines, "\n"), Now: func() float64 { return stamp }, Channel: NotifyChannel,
+				Occurrence: "media-added:" + strings.Join(hashes, ",")}
+			if settings.PublicURL != "" {
+				message.Click = settings.PublicURL + DownloadsPage
+			}
+			sent, err := notify.Send(ctx, d, message)
+			if err != nil {
+				result.Errors = append(result.Errors, "notify: "+err.Error())
+			} else if !sent.Duplicate && !sent.Delivered && sent.Error != notify.NoDevices {
+				result.Errors = append(result.Errors, "notify: "+sent.Error)
+			}
+		}
+		if _, err := settings.SelectFiles(ctx, settings, contract.Scope{Actor: contract.Job}, nil); err != nil {
+			return result, err
+		}
+	}
+	if opts.Only == nil {
+		if err := saveChannelState(ctx, q, channelState{LastCheck: stamp, Errors: result.Errors}); err != nil {
+			return result, err
+		}
+	}
+	for _, line := range result.Errors {
+		log.Warn("channels: " + line)
+	}
+	switch {
+	case polled > 0 && feedFailed == polled:
+		result.Unmet = connections.Unavailable(ctx, d.Read, connections.ID(KindEZTV), "indexer", fmt.Errorf("every channel feed failed: %w", feedErr))
+	case addFailed > 0 && len(result.Added) == 0:
+		result.Unmet = connections.Unavailable(ctx, d.Read, connections.ID(contract.Kind), "api", fmt.Errorf("every add failed: %w", addErr))
+	}
+	return result, nil
+}

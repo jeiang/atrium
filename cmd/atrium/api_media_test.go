@@ -16,10 +16,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/apps/library"
+	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/media"
 )
 
 func TestMediaDownloadsAPI(t *testing.T) {
@@ -60,7 +61,7 @@ func TestMediaDownloadsAPI(t *testing.T) {
 	if qb.count("add") != 1 {
 		t.Fatalf("adds: %d", qb.count("add"))
 	}
-	mediaEffectID(t, d, media.OpAddMagnet, hash, "done")
+	mediaEffectID(t, d, contract.OpAddMagnet, hash, "done")
 	changed := s.do(http.MethodGet, "/api/v1/media/torrents", token, nil, "If-None-Match", before.header.Get("ETag"))
 	expectAPI(t, changed, 200, "")
 	if changed.header.Get("ETag") == before.header.Get("ETag") || !strings.Contains(changed.body, hash) {
@@ -71,7 +72,7 @@ func TestMediaDownloadsAPI(t *testing.T) {
 	if qb.count("torrents/filePrio") != writes {
 		t.Fatal("untagged priority write")
 	}
-	qb.put(mnpTorrent{hash: hash, name: "Lanterns", tags: []string{media.TagMedia}, files: []mnpFile{{0, "Lanterns.mkv", 1}}})
+	qb.put(mnpTorrent{hash: hash, name: "Lanterns", tags: []string{library.TagMedia}, files: []mnpFile{{0, "Lanterns.mkv", 1}}})
 	files := get("/media/torrents/" + hash + "/files")
 	expectAPI(t, files, 200, "")
 	writes = qb.count("torrents/filePrio")
@@ -108,7 +109,7 @@ func TestMediaDownloadsAPI(t *testing.T) {
 		t.Fatalf("deleted channel still visible: %s", removed.body)
 	}
 	for i := range 105 {
-		qb.put(mnpTorrent{hash: fmt.Sprintf("%040x", i+1), name: fmt.Sprint("Paged", i), tags: []string{media.TagMedia}})
+		qb.put(mnpTorrent{hash: fmt.Sprintf("%040x", i+1), name: fmt.Sprint("Paged", i), tags: []string{library.TagMedia}})
 	}
 	page := get("/media/torrents?limit=100")
 	expectAPI(t, page, 200, "")
@@ -126,7 +127,7 @@ func TestMediaDownloadsAPI(t *testing.T) {
 	expectAPI(t, get("/media/channels?limit=101"), 422, "invalid")
 	pair := []string{strings.Repeat("c", 40), strings.Repeat("e", 40)}
 	for _, h := range pair {
-		qb.put(mnpTorrent{hash: h, name: "Pair " + h[:4], tags: []string{media.TagMedia}, files: []mnpFile{{0, "a.mkv", 1}, {1, "b.mkv", 1}}})
+		qb.put(mnpTorrent{hash: h, name: "Pair " + h[:4], tags: []string{library.TagMedia}, files: []mnpFile{{0, "a.mkv", 1}, {1, "b.mkv", 1}}})
 	}
 	onePage := get("/media/torrents/" + pair[0] + "/files?limit=1")
 	expectAPI(t, onePage, 200, "")
@@ -163,15 +164,15 @@ func TestMediaLibraryAPILinksAndFiling(t *testing.T) {
 	mnpWrite(t, filepath.Join(root, "downloads", "secret.mkv"), []byte("do not serve"))
 	content := filepath.Join(root, "downloads", "Arrival.2016.1080p.WEB")
 	mnpWrite(t, filepath.Join(content, "Arrival.2016.mkv"), []byte("arrival"))
-	qb.put(mnpTorrent{hash: hash, name: "Arrival.2016.1080p.WEB", tags: []string{media.TagMedia}, state: media.StoppedUP, progress: 1, content: content})
+	qb.put(mnpTorrent{hash: hash, name: "Arrival.2016.1080p.WEB", tags: []string{library.TagMedia}, state: contract.StoppedUP, progress: 1, content: content})
 	heat := filepath.Join(root, "downloads", "Heat.1995.1080p.WEB")
 	mnpWrite(t, filepath.Join(heat, "Heat.1995.mkv"), []byte("heat"))
-	qb.put(mnpTorrent{hash: skipped, name: "Heat.1995.1080p.WEB", tags: []string{media.TagMedia}, state: media.StoppedUP, progress: 1, content: heat})
-	qb.put(mnpTorrent{hash: untagged, name: "Heat.1995.1080p.WEB", state: media.StoppedUP, progress: 1, content: heat})
+	qb.put(mnpTorrent{hash: skipped, name: "Heat.1995.1080p.WEB", tags: []string{library.TagMedia}, state: contract.StoppedUP, progress: 1, content: heat})
+	qb.put(mnpTorrent{hash: untagged, name: "Heat.1995.1080p.WEB", state: contract.StoppedUP, progress: 1, content: heat})
 	setEnv(t, settingEnv(config.KeyPublicURL), "https://atrium.test")
-	setEnv(t, settingEnv(media.KeyVPNBaseURL), "https://artemis.vpn:8443")
+	setEnv(t, settingEnv(library.KeyVPNBaseURL), "https://artemis.vpn:8443")
 	seedAllFlagsIn(t, dir)
-	if got := runApp(t, "settings", "set", media.KeyLinkTTL, "60"); got.code != cli.ExitOK {
+	if got := runApp(t, "settings", "set", library.KeyLinkTTL, "60"); got.code != cli.ExitOK {
 		t.Fatalf("link ttl: %s", got.stderr)
 	}
 	token := mediaAPIToken(t)
@@ -233,7 +234,7 @@ func TestMediaLibraryAPILinksAndFiling(t *testing.T) {
 	expectAPI(t, link, 200, "")
 	public, _ := link.json["public"].(string)
 	vpn, _ := link.json["vpn"].(string)
-	if !strings.HasPrefix(public, "https://atrium.test"+media.FilePrefix) || vpn != "https://artemis.vpn:8443/library/movies/Dune%20%282021%29/Dune%20%282021%29.mkv" || link.json["ttl_seconds"] != float64(60) {
+	if !strings.HasPrefix(public, "https://atrium.test"+library.FilePrefix) || vpn != "https://artemis.vpn:8443/library/movies/Dune%20%282021%29/Dune%20%282021%29.mkv" || link.json["ttl_seconds"] != float64(60) {
 		t.Fatalf("link: %s", link.body)
 	}
 	signed := strings.TrimPrefix(public, "https://atrium.test")
@@ -331,7 +332,7 @@ func TestMediaLibraryAPILinksAndFiling(t *testing.T) {
 	} {
 		refused := fileIt(bad.body)
 		expectAPI(t, refused, 422, "invalid")
-		if !strings.Contains(refused.body, `"`+bad.field) || mediaEffectCount(t, d, media.OpFile, hash) != 0 {
+		if !strings.Contains(refused.body, `"`+bad.field) || mediaEffectCount(t, d, library.OpFile, hash) != 0 {
 			t.Fatalf("filing without a valid %s: %s", bad.field, refused.body)
 		}
 	}
@@ -349,7 +350,7 @@ func TestMediaLibraryAPILinksAndFiling(t *testing.T) {
 	}
 	expectAPI(t, fileIt(plan), 404, "not_found")
 	expectAPI(t, get(arrival), 404, "not_found")
-	if n := mediaEffectCount(t, d, media.OpFile, hash); n != 1 {
+	if n := mediaEffectCount(t, d, library.OpFile, hash); n != 1 {
 		t.Fatalf("filing effects = %d", n)
 	}
 	if _, err := os.Stat(filepath.Join(root, "movies", "Arrival (2016)", "Arrival (2016).mkv")); err != nil {

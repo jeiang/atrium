@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/mediaagent/protocol"
+	"github.com/jeiang/atrium/internal/apps/library/mediaagent/protocol"
 )
 
 func libraryPages(t *testing.T, a *mediaAgent) []protocol.Node {

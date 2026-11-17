@@ -11,32 +11,42 @@ import (
 	"time"
 )
 
+const ExamineMax = 1000
+
 type Listed struct {
 	Name     string
 	Size     int64
 	Modified time.Time
+	Prunable bool
 	Header   Header
 	Problem  error
 }
 
-func List(dir string, limit int) ([]Listed, int, error) {
+type Listing struct {
+	Archives   []Listed
+	Total      int
+	Unexamined int
+}
+
+func List(dir string, limit int) (Listing, error) {
 	root, err := os.OpenRoot(dir)
 	if err != nil {
-		return nil, 0, err
+		return Listing{}, err
 	}
 	defer func() { _ = root.Close() }()
 	d, err := root.Open(".")
 	if err != nil {
-		return nil, 0, err
+		return Listing{}, err
 	}
 	entries, err := d.ReadDir(-1)
 	_ = d.Close()
 	if err != nil {
-		return nil, 0, err
+		return Listing{}, err
 	}
-	var found []Listed
+	var candidates []Listed
 	for _, e := range entries {
-		if matched, _ := filepath.Match(archivePattern, e.Name()); !matched || !e.Type().IsRegular() {
+		name := e.Name()
+		if !e.Type().IsRegular() || strings.HasPrefix(name, ".") || strings.Contains(name, `\`) {
 			continue
 		}
 		info, err := e.Info()
@@ -44,21 +54,30 @@ func List(dir string, limit int) ([]Listed, int, error) {
 			continue
 		}
 		if err != nil {
-			return nil, 0, err
+			return Listing{}, err
 		}
-		found = append(found, Listed{Name: e.Name(), Size: info.Size(), Modified: info.ModTime()})
+		prunable, _ := filepath.Match(archivePattern, name)
+		candidates = append(candidates, Listed{Name: name, Size: info.Size(), Modified: info.ModTime(), Prunable: prunable})
 	}
-	slices.SortFunc(found, func(a, b Listed) int {
+	slices.SortFunc(candidates, func(a, b Listed) int {
 		if c := b.Modified.Compare(a.Modified); c != 0 {
 			return c
 		}
 		return strings.Compare(b.Name, a.Name)
 	})
-	page := found[:min(max(limit, 0), len(found))]
-	for i := range page {
-		page[i].Header, page[i].Problem = peek(root, page[i].Name)
+	out := Listing{Unexamined: max(len(candidates)-ExamineMax, 0)}
+	for _, c := range candidates[:min(len(candidates), ExamineMax)] {
+		h, err := peek(root, c.Name)
+		if errors.Is(err, ErrNotArchive) {
+			continue
+		}
+		out.Total++
+		if len(out.Archives) < limit {
+			c.Header, c.Problem = h, err
+			out.Archives = append(out.Archives, c)
+		}
 	}
-	return page, len(found), nil
+	return out, nil
 }
 
 func peek(root *os.Root, name string) (Header, error) {

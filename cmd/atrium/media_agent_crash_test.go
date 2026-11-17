@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeiang/atrium/internal/mediaagent/protocol"
+	"github.com/jeiang/atrium/internal/apps/library/mediaagent/protocol"
 )
 
 func TestMediaAgentCrashNeverResumes(t *testing.T) {

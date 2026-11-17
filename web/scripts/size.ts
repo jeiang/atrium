@@ -63,11 +63,14 @@ function files(keys: Iterable<string>, pick: (chunk: Chunk) => string[]): string
 const sum = (list: string[], size: (file: string) => number = brotli): number =>
   list.reduce((total, file) => total + size(file), 0);
 
-const entries = Object.keys(manifest).filter((key) => manifest[key]?.isEntry);
-if (entries.length !== 1) throw new Error(`${dist}/.vite/manifest.json has ${entries.length} entry chunks, expected 1`);
 const shell = readFileSync(join(dist, 'index.html'), 'utf8');
-const entryFile = manifest[entries[0] as string]?.file as string;
-if (!shell.includes(`/${entryFile}"`)) throw new Error(`${dist}/index.html does not load the entry chunk ${entryFile}`);
+const entryFile = /<script type="module"[^>]*src="[^"]*?\/(assets\/[^"]+\.js)"/.exec(shell)?.[1];
+const entries = Object.keys(manifest).filter((key) => manifest[key]?.file === entryFile);
+if (entries.length !== 1) {
+  throw new Error(
+    `${dist}/index.html loads ${entryFile ?? 'no module script'}, expected one chunk in .vite/manifest.json`,
+  );
+}
 
 const firstLoad = closure(entries);
 const jsOf = (chunk: Chunk): string[] => [chunk.file];

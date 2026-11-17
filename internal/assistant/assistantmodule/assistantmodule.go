@@ -18,8 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/dreaming"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/loop"
-	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
@@ -33,6 +31,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/tools/askoperator"
 	attentiontool "github.com/jeiang/atrium/internal/assistant/tools/attention"
+	dependencytools "github.com/jeiang/atrium/internal/assistant/tools/dependencies"
 	filetools "github.com/jeiang/atrium/internal/assistant/tools/files"
 	kbtools "github.com/jeiang/atrium/internal/assistant/tools/kb"
 	memorytools "github.com/jeiang/atrium/internal/assistant/tools/memory"
@@ -42,7 +41,6 @@ import (
 	recalltools "github.com/jeiang/atrium/internal/assistant/tools/recall"
 	scheduletools "github.com/jeiang/atrium/internal/assistant/tools/schedule"
 	taskstools "github.com/jeiang/atrium/internal/assistant/tools/tasks"
-	weathertools "github.com/jeiang/atrium/internal/assistant/tools/weather"
 	webfetchtools "github.com/jeiang/atrium/internal/assistant/tools/webfetch"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/attention"
@@ -56,6 +54,7 @@ import (
 	"github.com/jeiang/atrium/internal/kb"
 	kbembedding "github.com/jeiang/atrium/internal/kb/embedding"
 	"github.com/jeiang/atrium/internal/kb/export"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/ops"
@@ -71,7 +70,6 @@ import (
 	tasksapp "github.com/jeiang/atrium/internal/tasks/application"
 	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/unit"
-	"github.com/jeiang/atrium/internal/weather"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -96,7 +94,16 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	opsOps, opsBindings := opsOperations()
 	jobOps, jobBindings := jobOperations()
 	return module.Declaration{
-		Name:             unit.Assistant,
+		Name:  unit.Assistant,
+		Title: "Assistant",
+		Needs: []module.Need{
+			{Kind: anthropicconn.Kind, Soft: true, Capability: "models", Features: []string{"assistant chat", "scheduled runs", "web search"}},
+			{Kind: webfetch.KindWebfetch, Soft: true, Capability: "egress", Features: []string{"web fetch"}},
+		},
+		Packages: []string{"internal/assistant", "internal/attention/application", "internal/attention/sources", "internal/commitments", "internal/kb", "internal/tasks"},
+		Tables: []string{"context_ledger", "context_projections", "export_pages", "kb_fts", "kb_records", "memory_fts", "memory_jobs", "memory_nodes", "memory_state", "memory_views",
+			"projects", "record_links", "run_events", "run_streams", "runs", "skills", "subagents", "tasks", "thread_files", "thread_fts", "thread_messages", "thread_plans",
+			"thread_queue", "threads", "tool_calls", "tool_results"},
 		EffectOrigins:    []module.EffectOrigin{{Name: "export", Direct: true}, {Name: "agent", Direct: true}, {Name: "local", Direct: true}},
 		Channels:         []string{notify.Default},
 		EffectCategories: []review.Category{{Name: unit.Assistant}, {Name: "knowledge", Operations: []string{"kb"}}},
@@ -105,9 +112,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Requires:         []module.Requirement{module.ConnectionHealth(string(anthropicconn.Kind))},
 		Operations:       slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps, researchOps, attentionOps, opsOps, jobOps),
 		Bindings:         slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings, opsBindings, jobBindings, finalBindings()),
-		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
+		Settings: slices.Concat(assistant.Settings(), digest.Settings(),
 			registry.Settings(), asstapp.SearchWebSettings(), inference.Settings(),
-			export.Settings(), weather.SettingsDefs(), scheduler.Settings(unit.Assistant)),
+			export.Settings(), scheduler.Settings(unit.Assistant)),
 		Host: export.HostSettings(),
 		Recover: func(ctx context.Context, d *db.DB, _ config.Config) error {
 			return kb.EnsureInstructions(ctx, d, prompts.System, assistant.Now())
@@ -160,11 +167,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}
 			return module.Effects{
 				Proposals: slices.Concat(a.Proposals(), permissionProposals(d.Resume)),
-				Undo:      slices.Concat(asstapp.FileUndo(), kb.Undo(), tasksapp.Undo(), asstapp.ScheduleUndo(), serverops.Undo(), export.Undo(d.Ledger)),
+				Undo:      slices.Concat(asstapp.FileUndo(), kb.Undo(), tasksapp.Undo(), asstapp.ScheduleUndo(), serverops.Undo(), export.Undo(d.Ledger), []ledger.UndoDefinition{attention.SnoozeUndoDefinition(attention.UndoTaskSnooze, d.Now)}),
 				Resolve:   export.Resolve(d.Ledger),
 			}
 		},
-		Connections: slices.Concat(anthropicconn.Connections(), webfetch.Connections(), weather.Connections()),
+		Connections: slices.Concat(anthropicconn.Connections(), webfetch.Connections()),
 	}
 }
 
@@ -193,8 +200,8 @@ func SettingGroups() []settings.Group {
 		{Name: "spending", Title: "Spending", Keys: []string{inference.ThreadCapKey, inference.RunCapKey, assistant.KeySubagentMaxCostUSD, asstapp.KeySearchWebMaxCostUSD, assistant.KeyDreamingMaxCost, assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD}},
 		{Name: "background", Title: "Background work", Keys: []string{
 			assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, asstapp.KeySearchWebModel,
-			memory.ModelKey, memory.EffortKey,
 		}},
+		{Name: "schedules", Title: "Schedules", Keys: []string{digest.NotifyKey, scheduler.KeyMinInterval}},
 	}
 }
 
@@ -204,7 +211,8 @@ func ToolDefinitions() []module.ToolDefinition {
 		askoperator.Tools(memoryToolService), attentiontool.Tools(attentionToolService), filetools.Tools(fileToolService), memorytools.Tools(memoryToolService),
 		webfetchtools.Tools(memoryToolService), recalltools.Tools(memoryToolService), plantools.Tools(memoryToolService),
 		scheduletools.Tools(scheduleToolService), taskstools.Tools(taskToolService, commitmentToolService),
-		kbtools.Tools(knowledgeToolService), weathertools.Tools(memoryToolService), opstools.Tools(opsToolService),
+		kbtools.Tools(knowledgeToolService), opstools.Tools(opsToolService),
+		dependencytools.Tools(dependencyToolService),
 	} {
 		for _, t := range tools {
 			defs = append(defs, module.ToolDefinition{Tool: t})
