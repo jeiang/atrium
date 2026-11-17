@@ -42,7 +42,7 @@ func (Module) Declare(module.Context) module.Declaration {
 		},
 		Pages: []web.Page{{
 			Module: func(_ chi.Router, d *web.Deps) { apiRoutes(d, newService(d)) },
-			Nav:    []web.NavItem{{Section: "review", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 20}},
+			Nav:    []web.NavItem{{Section: "review", Label: "Loops", URL: "/plan/waiting", Icon: "list-checks", Page: "loops", Order: 20}},
 		}},
 	}
 }

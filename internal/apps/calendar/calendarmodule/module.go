@@ -75,7 +75,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		},
 		Operations: operations,
 		Bindings:   bindings,
-		Pages:      []web.Page{{Module: func(_ chi.Router, d *web.Deps) { m.calendarRoutes(d) }}},
+		Pages: []web.Page{{Module: func(_ chi.Router, d *web.Deps) { m.calendarRoutes(d) }, Nav: []web.NavItem{
+			{Label: "Calendar", URL: "/settings/calendar", Page: "calendar", Settings: true, Primary: true, Order: 45},
+		}}},
 	}
 }
 
