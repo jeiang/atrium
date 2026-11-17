@@ -1,5 +1,6 @@
 import { delay, HttpResponse, http, passthrough } from 'msw';
 import type {
+  HistoryLine,
   ListedThread,
   ProposalDetail,
   Run,
@@ -8,10 +9,12 @@ import type {
   Thread,
   Transcript,
   TranscriptItem,
+  Work,
 } from '../contract';
 import { API_BASE } from '../contract';
 import { configuration, models } from './assistant';
 import { G3_RUN, G3_THREAD, g3Events } from './g3';
+import { mockSpace } from './knowledge';
 import { extraRunScripts, type RunScript } from './runs';
 import { findRunScript, simulateRun } from './simulator';
 
@@ -377,16 +380,112 @@ function problem(status: number, code: string, message: string): Response {
 }
 
 function listed(value: MockThread): ListedThread {
+  const project = value.thread.project_id ? mockSpace(value.thread.project_id) : undefined;
   return {
     id: value.thread.id,
     title: value.thread.title,
-    archived: false,
-    pinned: false,
+    archived: value.thread.archived,
+    pinned: value.thread.pinned,
+    project_id: project?.id ?? null,
+    project_name: project?.name ?? null,
     cost_usd: value.cost,
     created_at: value.thread.created_at,
     updated_at: value.thread.updated_at,
     run_state: value.active?.state ?? 'done',
   };
+}
+
+function lastOperator(value: MockThread): TranscriptItem | undefined {
+  return value.items.findLast((entry) => entry.kind === 'user');
+}
+
+function rerun(value: MockThread, from: number, text: string): number {
+  const run = nextRun++;
+  extraRunScripts.push(replyScript(value.thread.id, run, text));
+  value.items = value.items.filter((entry) => entry.seq < from);
+  value.active = runOf(run, 'running');
+  value.thread.updated_at = BASE;
+  return run;
+}
+
+const SUMMARY_SPAN = 16;
+
+function summarized(value: MockThread): number {
+  const last = value.items.at(-1)?.seq ?? 0;
+  return Math.floor(last / SUMMARY_SPAN) * SUMMARY_SPAN;
+}
+
+function summaryLine(value: MockThread, from: number, n: number): HistoryLine {
+  const to = from + n - 1;
+  const opening = value.items.find((entry) => entry.seq >= from && entry.seq <= to && entry.kind === 'user');
+  const text = n === 1 ? (value.items.find((entry) => entry.seq === from)?.text ?? '') : (opening?.text ?? '');
+  return {
+    thread_id: value.thread.id,
+    text: `${n === 1 ? 'Message' : `Messages ${from} to ${to}`}: ${text.slice(0, 60)}`,
+    from,
+    to,
+    n,
+    state: n === 1 ? 'direct' : 'summary',
+    leaf: n === 1,
+  };
+}
+
+function workOf(value: MockThread): Work {
+  const empty: Work = { needs: [], plan: null, sources: [], subagents: [], files: [], drafts: [], code: [] };
+  if (value.thread.id !== 11) return empty;
+  return {
+    ...empty,
+    plan: {
+      items: [
+        { text: 'Look at the roof photos', done: true },
+        { text: 'Count the cracked sheets', done: true },
+        { text: 'Price two new sheets', done: false },
+      ],
+      run_id: 105,
+      updated_at: BASE - 300,
+    },
+    sources: [{ kind: 'web', key: 'roof-sheets', title: 'Roof sheet sizes', url: 'https://example.test/roof-sheets' }],
+    subagents: [
+      {
+        thread_id: 12,
+        run_id: 106,
+        parent_run_id: 105,
+        kind: 'subagent',
+        role: 'researcher',
+        title: 'Check the roof photos',
+        effort: 'low',
+        status: 'done',
+        steps: 3,
+        input: 1200,
+        output: 300,
+        cache_read: 0,
+        cache_write: 0,
+        cost: 0.004,
+      },
+    ],
+    files: [
+      {
+        id: 701,
+        name: 'roof-photo.jpg',
+        media_type: 'image/jpeg',
+        bytes: 204_800,
+        origin: 'upload',
+        created_at: BASE - 900,
+        tokens: 1500,
+        thread_id: 11,
+      },
+    ],
+    drafts: [{ id: 31, title: 'Ask the builder for a quote' }],
+  };
+}
+
+function runDetail(value: MockThread, id: number): Run | undefined {
+  if (value.active?.id === id) return value.active;
+  const entries = value.items.filter((entry) => entry.run_id === id);
+  if (entries.length === 0) return undefined;
+  const steps = entries.reduce((sum, entry) => sum + (entry.steps?.length ?? 0), 0);
+  const stopped = entries.some((entry) => entry.kind === 'assistant' && entry.text.endsWith('Stopped.'));
+  return { id, state: stopped ? 'stopped' : 'done', steps, started_at: BASE - 120, ended_at: BASE - 60, error: null };
 }
 
 function startReply(value: MockThread, text: string): number {
@@ -439,14 +538,135 @@ export const chatHandlers = [
     const state = scenario();
     if (state.listError) return problem(503, 'unavailable', 'The assistant is not answering.');
     const url = new URL(request.url);
+    const view = url.searchParams.get('view') ?? '';
+    if (view !== '' && view !== 'archived') return problem(422, 'invalid', 'unknown view');
     const limit = Number(url.searchParams.get('limit') ?? '50');
     const offset = Number(url.searchParams.get('cursor') ?? '0');
     const all = state.empty
       ? []
-      : [...threads.values()].sort((a, b) => b.thread.updated_at - a.thread.updated_at || b.thread.id - a.thread.id);
+      : [...threads.values()]
+          .filter((value) => value.thread.archived === (view === 'archived'))
+          .sort(
+            (a, b) =>
+              Number(b.thread.pinned) - Number(a.thread.pinned) ||
+              b.thread.updated_at - a.thread.updated_at ||
+              b.thread.id - a.thread.id,
+          );
     const page = all.slice(offset, offset + limit);
     const next = offset + limit < all.length ? String(offset + limit) : null;
     return HttpResponse.json({ items: page.map(listed), next_cursor: next });
+  }),
+  http.put(`*${API_BASE}/threads/:thread/pin`, async ({ request, params }) => {
+    const value = threads.get(Number(params.thread));
+    if (!value) return problem(404, 'not_found', 'unknown thread');
+    const body = (await request.json()) as { pinned?: boolean };
+    value.thread.pinned = body.pinned ?? false;
+    return HttpResponse.json({ thread_id: value.thread.id });
+  }),
+  http.put(`*${API_BASE}/threads/:thread/archive`, async ({ request, params }) => {
+    const value = threads.get(Number(params.thread));
+    if (!value) return problem(404, 'not_found', 'unknown thread');
+    const body = (await request.json()) as { archived: boolean };
+    value.thread.archived = body.archived;
+    return HttpResponse.json({ thread_id: value.thread.id });
+  }),
+  http.put(`*${API_BASE}/threads/:thread/project`, async ({ request, params }) => {
+    const value = threads.get(Number(params.thread));
+    if (!value) return problem(404, 'not_found', 'unknown chat thread');
+    const body = (await request.json()) as { project_id?: number };
+    const target = body.project_id ?? 0;
+    if (target !== 0) {
+      const space = mockSpace(target);
+      if (!space) return problem(404, 'not_found', 'unknown space');
+      if (space.archived)
+        return problem(409, 'conflict', `“${space.name}” is archived. Restore it to move chats into it.`);
+    }
+    value.thread.project_id = target === 0 ? null : target;
+    return HttpResponse.json({ thread_id: value.thread.id });
+  }),
+  http.delete(`*${API_BASE}/threads/:thread`, ({ params }) => {
+    const value = threads.get(Number(params.thread));
+    if (!value) return problem(404, 'not_found', `unknown thread ${String(params.thread)}`);
+    if (value.active) return problem(409, 'conflict', `thread ${value.thread.id} has a run in progress`);
+    threads.delete(value.thread.id);
+    return new HttpResponse(null, { status: 204 });
+  }),
+  http.post(`*${API_BASE}/threads/:thread/regenerate`, ({ params }) => {
+    const value = threads.get(Number(params.thread));
+    if (!value) return problem(404, 'not_found', 'unknown thread');
+    if (value.active) return problem(409, 'conflict', `thread ${value.thread.id} has a run in progress`);
+    const last = lastOperator(value);
+    if (!last) return problem(409, 'conflict', 'no operator message to answer again');
+    const run = rerun(value, last.seq + 1, last.text);
+    last.run_id = run;
+    return HttpResponse.json({ thread_id: value.thread.id, run_id: run }, { status: 202 });
+  }),
+  http.patch(`*${API_BASE}/threads/:thread/messages/latest`, async ({ request, params }) => {
+    const value = threads.get(Number(params.thread));
+    if (!value) return problem(404, 'not_found', 'unknown thread');
+    const { text } = (await request.json()) as { text?: string };
+    if (!text?.trim()) return problem(422, 'invalid', 'Write a message first.');
+    if (value.active) return problem(409, 'conflict', `thread ${value.thread.id} has a run in progress`);
+    const last = lastOperator(value);
+    if (!last) return problem(409, 'conflict', 'no operator message to edit');
+    const run = rerun(value, last.seq, text);
+    value.items.push(item(last.seq, 'user', text, { run_id: run }));
+    return HttpResponse.json({ run_id: run }, { status: 202 });
+  }),
+  http.post(`*${API_BASE}/threads/:thread/branch`, async ({ request, params }) => {
+    const value = threads.get(Number(params.thread));
+    if (!value) return problem(404, 'not_found', `unknown thread ${String(params.thread)}`);
+    const { seq } = (await request.json()) as { seq?: number };
+    if (!value.items.some((entry) => entry.seq === seq))
+      return problem(409, 'conflict', `no message ${seq ?? 0} to branch from`);
+    const id = nextThread++;
+    const copied: MockThread = {
+      thread: { ...value.thread, id, pinned: false, archived: false, branched_from_thread_id: value.thread.id },
+      items: value.items.filter((entry) => entry.seq <= (seq ?? 0)).map((entry) => ({ ...entry })),
+      active: null,
+      queued: [],
+      cost: 0,
+    };
+    copied.thread.created_at = BASE;
+    copied.thread.updated_at = BASE;
+    threads.set(id, copied);
+    return HttpResponse.json({ thread_id: id }, { status: 201 });
+  }),
+  http.get(`*${API_BASE}/threads/:thread/history`, ({ request, params }) => {
+    const value = threads.get(Number(params.thread));
+    if (!value) return problem(404, 'not_found', 'unknown thread');
+    const url = new URL(request.url);
+    const n = Number(url.searchParams.get('n') ?? '0');
+    const start = Number(url.searchParams.get('start') ?? '0');
+    const covered = summarized(value);
+    if (n === 0) {
+      const lines: HistoryLine[] = [];
+      for (let from = 1; from <= covered; from += SUMMARY_SPAN) lines.push(summaryLine(value, from, SUMMARY_SPAN));
+      return HttpResponse.json({ lines, leaf: null });
+    }
+    const valid = n & (n - 1) ? false : start >= 1 && (start - 1) % n === 0 && start + n - 1 <= covered;
+    if (!valid || n > SUMMARY_SPAN) return problem(404, 'not_found', 'unknown range');
+    if (n === 1) {
+      const leaf = value.items.find((entry) => entry.seq === start);
+      if (!leaf) return problem(404, 'not_found', 'unknown range');
+      return HttpResponse.json({ lines: [], leaf: leaf.text });
+    }
+    const half = n / 2;
+    return HttpResponse.json({
+      lines: [summaryLine(value, start, half), summaryLine(value, start + half, half)],
+      leaf: null,
+    });
+  }),
+  http.get(`*${API_BASE}/threads/:thread/work`, ({ params }) => {
+    const value = threads.get(Number(params.thread));
+    if (!value) return problem(404, 'not_found', 'unknown thread');
+    return HttpResponse.json(workOf(value));
+  }),
+  http.get(`*${API_BASE}/threads/:thread/runs/:run`, ({ params }) => {
+    const value = threads.get(Number(params.thread));
+    const run = value ? runDetail(value, Number(params.run)) : undefined;
+    if (!run) return problem(404, 'not_found', 'unknown run');
+    return HttpResponse.json(run);
   }),
   http.post(`*${API_BASE}/threads`, async ({ request }) => {
     const body = (await request.json()) as { text?: string; model?: string; effort?: string };
