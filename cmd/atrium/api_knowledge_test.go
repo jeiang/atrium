@@ -56,6 +56,16 @@ func expectConditional(t *testing.T, s *apiSite, token, path string) string {
 	return tag
 }
 
+func conditionalSettles(get func(headers ...string) apiReply) (string, bool) {
+	for range 5 {
+		tag := get().header.Get("ETag")
+		if tag != "" && get("If-None-Match", tag).status == http.StatusNotModified {
+			return tag, true
+		}
+	}
+	return "", false
+}
+
 func expectChanged(t *testing.T, s *apiSite, token, path, tag string) map[string]any {
 	t.Helper()
 	got := s.do(http.MethodGet, path, token, nil, "If-None-Match", tag)

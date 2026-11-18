@@ -67,7 +67,10 @@ func TestQueueListsEverythingThatNeedsTheOperatorWithOneCount(t *testing.T) {
 		if bearer.body != cookie.body {
 			t.Fatalf("queue%s differs between the surfaces: %.300s / %.300s", query, bearer.body, cookie.body)
 		}
-		if tag := bearer.header.Get("ETag"); tag == "" || s.do(http.MethodGet, "/api/v1/queue"+query, s.token, nil, "If-None-Match", tag).status != http.StatusNotModified {
+		get := func(headers ...string) apiReply {
+			return s.do(http.MethodGet, "/api/v1/queue"+query, s.token, nil, headers...)
+		}
+		if tag, ok := conditionalSettles(get); !ok {
 			t.Fatalf("queue%s is not conditional: ETag %q", query, tag)
 		}
 		return strictJSON[application.Read[coremodule.QueuePage]](t, "/queue"+query, bearer).Data

@@ -81,7 +81,10 @@ func TestCalendarListRowsCarryTheWriteTargetAndRevision(t *testing.T) {
 	if web := browser.do(http.MethodGet, "/web/v1/calendar/calendars", nil); web.status != http.StatusOK || web.json["data"].(map[string]any)["timezone"] != "America/New_York" {
 		t.Fatalf("web prefix calendars: %d %s", web.status, web.body)
 	}
-	if tag := read.header.Get("ETag"); tag == "" || s.do(http.MethodGet, "/api/v1/calendar/calendars", token, nil, "If-None-Match", tag).status != http.StatusNotModified {
+	get := func(headers ...string) apiReply {
+		return s.do(http.MethodGet, "/api/v1/calendar/calendars", token, nil, headers...)
+	}
+	if tag, ok := conditionalSettles(get); !ok {
 		t.Fatalf("calendars read is not conditional: ETag %q", tag)
 	}
 	if calendars["timezone"] != "America/New_York" || !today(calendars["today"]) {
