@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/assistant/projects"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb"
@@ -68,6 +69,7 @@ type Link struct {
 	RunID     *int64
 	CreatedAt float64
 	Retracted *float64
+	Cited     bool
 	Source    Endpoint
 	Target    Endpoint
 }
@@ -205,37 +207,79 @@ func (r *resolver) links(found []kb.Link) ([]Link, error) {
 	return out, nil
 }
 
-func linksOf(ctx context.Context, q db.Querier, id int64) (Links, error) {
+func recordEnd(r kb.Record) Endpoint {
+	return Endpoint{Kind: kb.TargetRecord, ID: strconv.FormatInt(r.ID, 10), Title: r.Title, RecordKind: kb.KindOf(r), State: EndLive,
+		Address: "/knowledge/" + strconv.FormatInt(r.ID, 10)}
+}
+
+func citedLink(from, to kb.Record) Link {
+	writer := kb.LinkerAssistant
+	if from.Writer == kb.WriterOperator {
+		writer = kb.LinkerOperator
+	}
+	return Link{Relation: kb.RelationSeeAlso, Writer: writer, CreatedAt: from.UpdatedAt, Cited: true, Source: recordEnd(from), Target: recordEnd(to)}
+}
+
+func linksOf(ctx context.Context, q db.Querier, rec kb.Record, origin string) (Links, error) {
 	r := &resolver{ctx: ctx, q: q}
-	from, err := kb.LinksFrom(ctx, q, id)
+	id := strconv.FormatInt(rec.ID, 10)
+	from, err := kb.LinksFrom(ctx, q, rec.ID)
 	if err != nil {
 		return Links{}, err
 	}
-	to, err := kb.LinksTo(ctx, q, kb.TargetRecord, strconv.FormatInt(id, 10))
+	to, err := kb.LinksTo(ctx, q, kb.TargetRecord, id)
 	if err != nil {
 		return Links{}, err
 	}
-	out := Links{Record: id}
+	cites, err := kb.CitedRecords(ctx, q, rec, origin)
+	if err != nil {
+		return Links{}, err
+	}
+	citing, err := kb.CitingRecords(ctx, q, rec, origin)
+	if err != nil {
+		return Links{}, err
+	}
+	out := Links{Record: rec.ID}
 	if out.Outgoing, err = r.links(from); err != nil {
 		return Links{}, err
 	}
 	if out.Incoming, err = r.links(to); err != nil {
 		return Links{}, err
 	}
+	stored := map[[2]string]bool{}
+	for _, l := range from {
+		if l.TargetKind == kb.TargetRecord {
+			stored[[2]string{id, l.TargetID}] = true
+		}
+	}
+	for _, l := range to {
+		stored[[2]string{strconv.FormatInt(l.RecordID, 10), id}] = true
+	}
+	for _, c := range cites {
+		if !stored[[2]string{id, strconv.FormatInt(c.ID, 10)}] {
+			out.Outgoing = append(out.Outgoing, citedLink(rec, c))
+		}
+	}
+	for _, c := range citing {
+		if !stored[[2]string{strconv.FormatInt(c.ID, 10), id}] {
+			out.Incoming = append(out.Incoming, citedLink(c, rec))
+		}
+	}
 	return out, nil
+}
+
+func origin(ctx context.Context) string {
+	return config.HostValueFrom(ctx, config.KeyPublicURL)
 }
 
 func (s *Service) Links(ctx context.Context, in LinksInput) (application.Read[Links], error) {
 	var out Links
 	rev, err := s.snapshot(ctx, string(LinksName), linkScopes, in, func(q db.Querier) error {
-		rec, err := kb.Get(ctx, q, in.ID)
+		rec, err := load(ctx, q, in.ID)
 		if err != nil {
 			return err
 		}
-		if rec == nil {
-			return notFound("unknown knowledge record")
-		}
-		out, err = linksOf(ctx, q, in.ID)
+		out, err = linksOf(ctx, q, rec, origin(ctx))
 		return err
 	})
 	if err != nil {

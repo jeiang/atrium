@@ -103,6 +103,16 @@ func LiveOpsFacts(ctx context.Context, q db.Querier, now float64) ([]string, err
 	})
 }
 
+func LiveOpsPages(ctx context.Context, q db.Querier, now float64, limit int) ([]Record, error) {
+	rows, err := q.QueryContext(ctx,
+		"SELECT "+columns+" FROM kb_records r WHERE r.scope = ? AND r.origin LIKE ? AND r.retracted_at IS NULL AND (r.expires_at IS NULL OR r.expires_at > ?) ORDER BY r.updated_at DESC, r.id DESC LIMIT ?",
+		ScopeOps, opsOrigin+"%", now, limit)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (Record, error) { return scan(r) })
+}
+
 func ExpireOpsPage(ctx context.Context, q db.Querier, fact string, now float64) error {
 	_, err := q.ExecContext(ctx,
 		"UPDATE kb_records SET expires_at = ?, updated_at = ? WHERE origin = ? AND scope = ? AND (expires_at IS NULL OR expires_at > ?)",

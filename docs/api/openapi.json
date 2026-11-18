@@ -6409,6 +6409,9 @@
       },
       "KnowledgeLink": {
         "properties": {
+          "cited": {
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "type": "string"
@@ -6456,6 +6459,7 @@
           "writer",
           "created_at",
           "removed",
+          "cited",
           "source",
           "target"
         ],
@@ -6859,6 +6863,9 @@
           "address": {
             "type": "string"
           },
+          "cited": {
+            "type": "boolean"
+          },
           "direction": {
             "enum": [
               "outgoing",
@@ -6917,6 +6924,7 @@
           "relation",
           "target_kind",
           "target_id",
+          "cited",
           "state",
           "address"
         ],
@@ -12903,6 +12911,21 @@
         ],
         "type": "object"
       },
+      "ReadServerOpsPage": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ServerOpsPage"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
       "ReadSettingsPage": {
         "properties": {
           "data": {
@@ -12967,6 +12990,21 @@
         "properties": {
           "data": {
             "$ref": "#/components/schemas/Tokens"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ReadWeatherPage": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/WeatherPage"
           },
           "revision": {
             "type": "string"
@@ -14882,6 +14920,157 @@
             "type": "integer"
           }
         },
+        "type": "object"
+      },
+      "ServerOpsFinding": {
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fact": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "critical"
+            ],
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "fact",
+          "severity",
+          "title",
+          "body",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "ServerOpsHost": {
+        "properties": {
+          "alerts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "cpu_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "disk_root_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failed_units": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "host": {
+            "type": "string"
+          },
+          "mem_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sampled_at": {
+            "type": "number"
+          },
+          "up": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "host",
+          "sampled_at",
+          "alerts"
+        ],
+        "type": "object"
+      },
+      "ServerOpsPage": {
+        "properties": {
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/ServerOpsFinding"
+            },
+            "type": "array"
+          },
+          "grafana_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hosts": {
+            "items": {
+              "$ref": "#/components/schemas/ServerOpsHost"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "hosts",
+          "findings"
+        ],
         "type": "object"
       },
       "Setting": {
@@ -17653,6 +17842,96 @@
           "subscription",
           "by_kind",
           "by_thread"
+        ],
+        "type": "object"
+      },
+      "WeatherPage": {
+        "properties": {
+          "current": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Current"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/Day"
+            },
+            "type": "array"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unreachable",
+                  "timeout",
+                  "no_match",
+                  "bad_reply",
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hours": {
+            "items": {
+              "$ref": "#/components/schemas/Hour"
+            },
+            "type": "array"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "off",
+              "unconfigured",
+              "loading",
+              "failed",
+              "stale",
+              "ok"
+            ],
+            "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "hours",
+          "days"
         ],
         "type": "object"
       },
@@ -47808,6 +48087,129 @@
         "x-atrium-module": "notifications"
       }
     },
+    "/ops": {
+      "get": {
+        "description": "Server health from the stored ops samples: the latest sample of each host with its firing alerts, the live ops findings, and the Grafana address when the connection has one. Read-only; it never calls Grafana.",
+        "operationId": "ops.overview",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadServerOpsPage"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "integrations"
+        ],
+        "x-atrium-area": "integrations",
+        "x-atrium-module": "grafana"
+      }
+    },
     "/packages": {
       "get": {
         "operationId": "packages.list",
@@ -59302,6 +59704,129 @@
         ],
         "x-atrium-area": "usage",
         "x-atrium-module": "assistant"
+      }
+    },
+    "/weather": {
+      "get": {
+        "description": "The forecast for the configured weather location: current conditions, the next hours and the coming days, in degrees Celsius and km/h. Read-only; served from the same cached reading as the Home weather card, refreshed in the background.",
+        "operationId": "weather.page",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadWeatherPage"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "integrations"
+        ],
+        "x-atrium-area": "integrations",
+        "x-atrium-module": "weather"
       }
     }
   },

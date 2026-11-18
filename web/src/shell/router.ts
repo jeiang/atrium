@@ -97,6 +97,14 @@ export const { p, navigate, isActive, route, preload } = createRouter(
         '/item/:kind/:id': () => import('../apps/library/ItemPage.svelte').catch(unavailable),
         meta: { title: 'Library' },
       },
+      '/weather': {
+        '/': () => import('../apps/weather/WeatherPage.svelte').catch(unavailable),
+        meta: { title: 'Weather' },
+      },
+      '/grafana': {
+        '/': () => import('../apps/serverops/ServerOpsPage.svelte').catch(unavailable),
+        meta: { title: 'Server ops' },
+      },
       '/:app': () => import('../features/apps/AppPage.svelte').catch(unavailable),
       meta: { title: 'Apps' },
     },

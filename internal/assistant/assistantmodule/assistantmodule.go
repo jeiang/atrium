@@ -175,7 +175,7 @@ func pageAssistant(runs func(context.Context) (*service.Service, error)) func(*w
 
 func AttentionSources(env config.Env) []attention.Source {
 	return []attention.Source{
-		attentionsources.Plans(), attentionsources.Questions(), tasks.AttentionSource(),
+		attentionsources.Questions(), tasks.AttentionSource(),
 		dreaming.Attention(env),
 	}
 }

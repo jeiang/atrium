@@ -23,7 +23,6 @@ var sourceScopes = map[string]string{
 	"commitments":           state.Mail,
 	"packages":              state.Mail,
 	"classification_budget": state.Assistant,
-	"plans":                 state.Assistant,
 	"questions":             state.Assistant,
 	"dreaming":              state.Assistant,
 	"tasks":                 state.Tasks,

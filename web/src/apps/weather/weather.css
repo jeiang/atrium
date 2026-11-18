@@ -1,0 +1,133 @@
+@import "../../tokens/gen/media.css";
+
+@layer components {
+  .wx-back {
+    justify-self: start;
+    min-inline-size: var(--target);
+  }
+
+  .wx-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+    gap: var(--s-4);
+    align-items: start;
+  }
+
+  .wx-now {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-2) var(--s-4);
+    align-items: baseline;
+    margin: 0;
+  }
+
+  .wx-now__temp {
+    font-size: var(--t-figure);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
+  .wx-facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+    gap: var(--s-3);
+    margin: 0;
+  }
+
+  .wx-facts dt,
+  .wx-hour__time,
+  .wx-hour__rain {
+    font-size: var(--t-xs);
+    color: var(--ink-3);
+  }
+
+  .wx-facts dd {
+    margin: 0;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .wx-hours {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(4.25rem, 1fr));
+    gap: var(--s-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .wx-hour {
+    display: grid;
+    justify-items: center;
+    gap: var(--s-1);
+    padding: var(--s-2);
+    border-radius: var(--r-sm);
+    background: var(--paper-2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .wx-hour__temp {
+    font-weight: 700;
+  }
+
+  .wx-days {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .wx-day {
+    display: grid;
+    grid-template-columns: minmax(7rem, 1fr) minmax(0, 2fr) 4rem 6rem;
+    gap: var(--s-3);
+    align-items: center;
+    min-block-size: var(--row);
+    padding-block: var(--s-2);
+    border-block-start: 1px solid var(--line);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .wx-day:first-child {
+    border-block-start: 0;
+  }
+
+  .wx-day__name {
+    font-weight: 700;
+  }
+
+  .wx-day__condition {
+    color: var(--ink-2);
+  }
+
+  .wx-day__rain,
+  .wx-day__range {
+    text-align: end;
+  }
+
+  @media (--phone) {
+    .wx-day {
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      grid-template-areas: "name rain range" "condition condition condition";
+      row-gap: 0;
+    }
+
+    .wx-day__name {
+      grid-area: name;
+    }
+
+    .wx-day__condition {
+      grid-area: condition;
+      font-size: var(--t-sm);
+    }
+
+    .wx-day__rain {
+      grid-area: rain;
+    }
+
+    .wx-day__range {
+      grid-area: range;
+    }
+  }
+}
