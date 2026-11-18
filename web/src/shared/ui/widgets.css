@@ -221,7 +221,7 @@
   }
 
   .tab[aria-selected="true"] {
-    font-weight: 800;
+    font-weight: 700;
     color: var(--ink);
   }
 
