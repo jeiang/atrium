@@ -262,12 +262,20 @@ func TestNotificationCancelledPushKeepsTheInboxEffect(t *testing.T) {
 	go func() {
 		done <- runAppContext(t, f, ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
 	}()
-	select {
-	case <-push.arrived:
-	case <-time.After(10 * time.Second):
-		cancel()
-		ran := <-done
-		t.Fatalf("no push was attempted: exit %d stderr %s", ran.code, ran.stderr)
+	for deadline := time.Now().Add(10 * time.Second); ; {
+		if n, _ := push.about(t, browser, "Call the plumber"); n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			cancel()
+			ran := <-done
+			_, titles := push.about(t, browser, "Call the plumber")
+			t.Fatalf("no reminder push was attempted: pushes %q exit %d stderr %s", titles, ran.code, ran.stderr)
+		}
+		select {
+		case <-push.arrived:
+		case <-time.After(100 * time.Millisecond):
+		}
 	}
 	cancel()
 	<-done
