@@ -105,7 +105,7 @@ func Composer(ctx context.Context, in ComposerState) ComposerView {
 			efforts = append(efforts, EffortOption{Value: e, Disabled: !m.ValidThinking(thinking, e)})
 		}
 		if limit == 0 {
-			limit = assistant.DefaultContextLimit
+			limit = m.DefaultContext
 		}
 		limit = threads.SnapContextLimit(m, limit)
 		cliff = m.ID == pricing.HaikuID && limit > pricing.TierThreshold
@@ -131,7 +131,7 @@ func (in ComposerInput) state() (ComposerState, error) {
 	out := ComposerState{Model: model.ID, Effort: in.Effort, Thinking: in.Thinking, WebSearch: in.WebSearch}
 	out.ContextLimit, _ = threads.CleanContextLimit(in.ContextLimit)
 	if in.Reset {
-		out.Effort, out.Thinking, out.ContextLimit = pricing.Medium, "", assistant.DefaultContextLimit
+		out.Effort, out.Thinking, out.ContextLimit = pricing.Medium, "", 0
 	}
 	if raw := strings.TrimSpace(in.CostCap); raw != "" {
 		if value, err := strconv.ParseFloat(raw, 64); err == nil {

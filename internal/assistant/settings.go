@@ -31,9 +31,33 @@ const (
 	KeyDreamingMonthly = "dreaming_monthly_usd"
 )
 
-const DefaultContextLimit = 90_000
-
 var ContextLimits = []int64{90_000, 200_000, 500_000, 1_000_000}
+
+type Triggers struct {
+	Limit        int64
+	Clear        int64
+	ClearAtLeast int64
+	Compact      int64
+}
+
+const KeepToolUses = 5
+
+var triggers = []Triggers{
+	{Limit: 90_000, Clear: 50_000, ClearAtLeast: 9_000, Compact: 80_000},
+	{Limit: 200_000, Clear: 100_000, ClearAtLeast: 20_000, Compact: 200_000},
+	{Limit: 500_000, Clear: 300_000, ClearAtLeast: 50_000, Compact: 400_000},
+	{Limit: 1_000_000, Clear: 600_000, ClearAtLeast: 100_000, Compact: 800_000},
+}
+
+func TriggersFor(limit int64) Triggers {
+	out := triggers[0]
+	for _, t := range triggers {
+		if t.Limit <= limit {
+			out = t
+		}
+	}
+	return out
+}
 
 func contextLimitChoices() []string {
 	out := make([]string, len(ContextLimits))
@@ -59,7 +83,7 @@ func Settings() []settings.Def {
 	chatModel.Choices = pricing.IDs()
 	chatEffort := def(KeyDefaultEffort, settings.Enum, settings.UI, pricing.XHigh, nil)
 	chatEffort.Choices = pricing.Efforts
-	contextLimit := def(KeyDefaultContextLimit, settings.Enum, settings.UI, strconv.FormatInt(DefaultContextLimit, 10), nil)
+	contextLimit := def(KeyDefaultContextLimit, settings.Enum, settings.UI, strconv.FormatInt(ContextLimits[0], 10), nil)
 	contextLimit.Choices = contextLimitChoices()
 	chat := adv(KeyBudgetChat, settings.Float, "1", settings.Within(0, 1))
 	chat.Peers = Ordered([]string{KeyBudgetUnattended}, nil)

@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/block"
+	"github.com/jeiang/atrium/internal/inference"
 )
 
 func textBlock(text string) json.RawMessage {
@@ -127,11 +129,52 @@ func (s *state) repeat(uses []ToolUse, results []json.RawMessage) error {
 		s.callsKey, s.repeats = key, 1
 	}
 	if s.repeats >= s.doomThreshold {
-		names := make([]string, len(uses))
-		for i, u := range uses {
-			names[i] = u.Name
+		names := strings.Join(toolNames(uses), ", ")
+		return halt{
+			limit: RunLimit(fmt.Sprintf("stopped: the same tool call (%s) repeated %d times with the same result", names, s.repeats)),
+			note:  fmt.Sprintf("The run stopped because it made the same tool call (%s) %d times in a row with the same result.", names, s.repeats),
 		}
-		return RunLimit(fmt.Sprintf("stopped: the same tool call (%s) repeated %d times with the same result", strings.Join(names, ", "), s.repeats))
 	}
 	return nil
+}
+
+func toolNames(uses []ToolUse) []string {
+	names := make([]string, len(uses))
+	for i, u := range uses {
+		names[i] = u.Name
+	}
+	return names
+}
+
+type halt struct {
+	limit RunLimit
+	note  string
+}
+
+func (h halt) Error() string { return string(h.limit) }
+
+func (h halt) Unwrap() error { return h.limit }
+
+func stopNote(err error) (string, bool) {
+	var h halt
+	if errors.As(err, &h) {
+		return h.note, true
+	}
+	var b inference.BudgetExceeded
+	if !errors.As(err, &b) {
+		return "", false
+	}
+	switch b.Reason {
+	case inference.ReasonRun, inference.ReasonParentRun:
+		return "The run stopped at its cost cap.", true
+	case inference.ReasonThread:
+		return "The run stopped at this chat's cost cap.", true
+	case inference.ReasonMonthly:
+		return "The run stopped because the monthly budget is used up.", true
+	case inference.ReasonSpendCap:
+		return "The run stopped because the Anthropic account reached its spend limit.", true
+	case inference.ReasonSourceMonth:
+		return "The run stopped at its monthly source cap.", true
+	}
+	return "The run stopped at a spending limit.", true
 }

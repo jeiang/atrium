@@ -250,6 +250,16 @@ function seed(): Map<number, MockThread> {
     queued: [],
     cost: 0.03,
   });
+  add({
+    thread: thread(14, 'Sort the shed receipts', 400),
+    items: [
+      item(1, 'user', 'Sort every shed receipt by supplier.', { run_id: 108 }),
+      item(3, 'stop', 'The run stopped after 24 steps, the most one chat run may take.', { run_id: 108 }),
+    ],
+    active: null,
+    queued: [],
+    cost: 0.21,
+  });
   for (let index = 0; index < 33; index++) {
     add({
       thread: thread(300 + index, `Notes on the allotment, week ${index + 1}`, 600 + index * 240),

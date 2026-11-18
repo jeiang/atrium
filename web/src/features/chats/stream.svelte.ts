@@ -184,7 +184,7 @@ export class RunStream {
           this.segments.push({ kind: 'user', text: (event as RunStreamEventUser).data.text });
           break;
         case 'run_error':
-          this.error = (event as RunStreamEventRunError).data.problem.message;
+          this.error ??= (event as RunStreamEventRunError).data.problem.message;
           break;
         case 'run_done': {
           const { state, error } = (event as RunStreamEventRunDone).data;

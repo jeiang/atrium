@@ -10031,6 +10031,11 @@
             "maximum": 9007199254740991,
             "type": "integer"
           },
+          "default_context": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
           "efforts": {
             "items": {
               "type": "string"
@@ -10078,6 +10083,7 @@
           "id",
           "name",
           "context_window",
+          "default_context",
           "max_output",
           "efforts",
           "thinking",
@@ -10424,6 +10430,9 @@
             "maximum": 9007199254740991,
             "type": "integer"
           },
+          "context_override": {
+            "type": "boolean"
+          },
           "cost_cap_usd": {
             "anyOf": [
               {
@@ -10451,6 +10460,7 @@
           "model",
           "effort",
           "context_limit",
+          "context_override",
           "thinking",
           "web_search"
         ],

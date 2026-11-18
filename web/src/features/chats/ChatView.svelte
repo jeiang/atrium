@@ -78,6 +78,7 @@
   let editError = $state('');
   let regenerating = $state(false);
   let branching = $state<number>();
+  let continuing = $state(false);
 
   const first = $derived(transcript.data?.pages[0]);
   const items = $derived(
@@ -148,6 +149,7 @@
       !shown.some((stream) => stream.active),
   );
   const latestRun = $derived(activeRun?.id ?? items.findLast((entry) => entry.run_id != null)?.run_id ?? undefined);
+  const stopped = $derived(settledTurn && visible.at(-1)?.kind === 'stop' ? visible.at(-1) : undefined);
 
   $effect(() => {
     const query = matchMedia('(width < 861px)');
@@ -231,6 +233,18 @@
       });
     } finally {
       branching = undefined;
+    }
+  }
+
+  async function onContinue(): Promise<void> {
+    if (continuing) return;
+    continuing = true;
+    try {
+      await onSend('Continue.');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'No new run was started.', { tone: 'error' });
+    } finally {
+      continuing = false;
     }
   }
 
@@ -627,6 +641,10 @@
   </div>
 {/snippet}
 
+{#snippet continueAction()}
+  <Button variant="secondary" pending={continuing} onclick={onContinue}>Continue</Button>
+{/snippet}
+
 <div class="chat" bind:this={root}>
   <header class="chat__head">
     <a class="chat__back link" href={p('/chat')}><Icon name="chevron" />All chats</a>
@@ -714,6 +732,12 @@
           </li>
         {:else if entry.kind === 'compaction'}
           <li class="turn turn--divider">Earlier messages were summarized</li>
+        {:else if entry.kind === 'stop'}
+          <li class="turn turn--stop">
+            <Notice tone="warn" variant="inline" action={entry === stopped ? continueAction : undefined}>
+              {entry.text}
+            </Notice>
+          </li>
         {:else if entry.text}
           <li class="turn">
             {#if entry.kind === 'draft'}

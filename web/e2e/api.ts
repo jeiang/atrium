@@ -53,7 +53,14 @@ const home: Home = {
   ],
   agenda: true,
   about: null,
-  defaults: { model: 'fake-model', effort: 'medium', context_limit: 0, thinking: 'off', web_search: true },
+  defaults: {
+    model: 'fake-model',
+    effort: 'medium',
+    context_limit: 0,
+    context_override: false,
+    thinking: 'off',
+    web_search: true,
+  },
   composer: {
     models: [],
     model: 'fake-model',

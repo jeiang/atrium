@@ -58,6 +58,15 @@
     synced = signature;
   });
 
+  function onModel(event: Event): void {
+    const previous = config?.models.find((entry) => entry.id === draft.model);
+    const select = event.currentTarget;
+    if (!(select instanceof HTMLSelectElement)) return;
+    const next = config?.models.find((entry) => entry.id === select.value);
+    if (!previous || !next || draft.context !== String(previous.default_context)) return;
+    if (config?.context_limits.includes(next.default_context)) draft.context = String(next.default_context);
+  }
+
   function tokens(limit: number): string {
     return limit >= 1_000_000 ? `${limit / 1_000_000} million tokens` : `${Math.round(limit / 1000)}k tokens`;
   }
@@ -117,6 +126,7 @@
           <SelectField
             label="Model"
             bind:value={draft.model}
+            oninput={onModel}
             options={modelOptions}
             help={price}
             error={errors.model}

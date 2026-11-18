@@ -70,7 +70,7 @@ test.describe('chat list', () => {
     );
     await expect(list.getByRole('listitem')).toHaveCount(30);
     await page.getByRole('button', { name: 'Show more chats' }).click();
-    await expect(list.getByRole('listitem')).toHaveCount(41);
+    await expect(list.getByRole('listitem')).toHaveCount(42);
     await expect(page.getByRole('button', { name: 'Show more chats' })).toHaveCount(0);
     await list.getByRole('link', { name: /Winter tyre sizes/ }).click();
     await expect(page).toHaveURL(/\/chat\/9$/);
@@ -744,6 +744,42 @@ test.describe('an interrupted run', () => {
       await page.setViewportSize({ width: layout.width, height: layout.height });
       await openChat(page, '/chat/12');
       await expect(page.getByText('order_supplies {"boards": 12}')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeVisible();
+      if (layout.touch) await expectTouchTargets(page, 'main');
+      await expectRoundedSurfaces(page, edgeSurfaces);
+      await expectNoHorizontalScroll(page);
+      await expectNoSeriousAxeFindings(page);
+    });
+  }
+});
+
+test.describe('a stopped run', () => {
+  const reason = 'The run stopped after 24 steps, the most one chat run may take.';
+
+  test('names why it stopped and Continue starts a new run in the same chat', async ({ page }) => {
+    const sent: string[] = [];
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && request.url().endsWith('/threads/14/messages'))
+        sent.push(String(request.postDataJSON()?.text));
+    });
+    await openChat(page, '/chat/14');
+    const notice = transcript(page).getByText(reason);
+    await expect(notice).toBeVisible();
+    await expect(page.getByText('The run failed')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    await expect(transcript(page).getByText('Delivery takes three days')).toBeVisible({ timeout: 15_000 });
+    await settled(page);
+    await expect(notice).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Continue', exact: true })).toHaveCount(0);
+    expect(sent).toEqual(['Continue.']);
+    await expect(page).toHaveURL(/\/chat\/14$/);
+  });
+
+  for (const layout of layouts) {
+    test(`${layout.name}: the stopped run passes the design and axe checks`, async ({ page }) => {
+      await page.setViewportSize({ width: layout.width, height: layout.height });
+      await openChat(page, '/chat/14');
+      await expect(transcript(page).getByText(reason)).toBeVisible();
       await expect(page.getByRole('button', { name: 'Continue', exact: true })).toBeVisible();
       if (layout.touch) await expectTouchTargets(page, 'main');
       await expectRoundedSurfaces(page, edgeSurfaces);

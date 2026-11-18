@@ -163,7 +163,11 @@ func Finish(ctx context.Context, tx db.Querier, runID int64, terminal Terminal) 
 	data := map[string]any{"state": terminal.State, "thread_id": threadID}
 	if terminal.State == "failed" {
 		kind = RunError
-		data = map[string]any{"state": terminal.State, "problem": map[string]any{"code": "run_failed", "message": "The run failed."}, "effect_ids": []int64{}}
+		message := "The run failed."
+		if terminal.Error != nil && *terminal.Error != "" {
+			message = *terminal.Error
+		}
+		data = map[string]any{"state": terminal.State, "problem": map[string]any{"code": "run_failed", "message": message}, "effect_ids": []int64{}}
 	}
 	if err := appendOne(ctx, tx, runID, runID, Payload{Kind: kind, Data: data, Time: terminal.Time}); err != nil {
 		return err

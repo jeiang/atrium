@@ -75,10 +75,11 @@ type MemorySearchInput struct {
 }
 
 type RecallInput struct {
-	ThreadID int64
-	ResultID int64
-	Offset   int64
-	Limit    int64
+	ThreadID  int64
+	ResultID  int64
+	ToolUseID string
+	Offset    int64
+	Limit     int64
 }
 
 type MemoryTree struct {
@@ -547,13 +548,7 @@ func clipSummary(text string, limit int) string {
 func (s *Service) ResultRecall(ctx context.Context, in RecallInput) (application.Read[RecallPage], error) {
 	out := RecallPage{ResultID: in.ResultID}
 	rev, err := s.snapshot(ctx, string(ResultRecallName), memoryScopes, in, func(q db.Querier) error {
-		var body string
-		err := q.QueryRowContext(ctx,
-			"SELECT r.body FROM tool_results r JOIN runs ON runs.id = r.run_id WHERE r.result_id = ? AND runs.thread_id = ?",
-			in.ResultID, in.ThreadID).Scan(&body)
-		if errors.Is(err, sql.ErrNoRows) {
-			return notFound(fmt.Sprintf("no stored result %d in this thread", in.ResultID))
-		}
+		body, err := recallBody(ctx, q, in)
 		if err != nil {
 			return err
 		}
@@ -561,4 +556,38 @@ func (s *Service) ResultRecall(ctx context.Context, in RecallInput) (application
 		return nil
 	})
 	return application.Read[RecallPage]{Revision: rev, Data: out}, err
+}
+
+func recallBody(ctx context.Context, q db.Querier, in RecallInput) (string, error) {
+	if in.ToolUseID != "" {
+		var resultID *int64
+		var result, failure *string
+		err := q.QueryRowContext(ctx,
+			"SELECT c.result_id, c.result, c.error FROM tool_calls c JOIN runs ON runs.id = c.run_id WHERE c.tool_use_id = ? AND runs.thread_id = ? ORDER BY c.id DESC LIMIT 1",
+			in.ToolUseID, in.ThreadID).Scan(&resultID, &result, &failure)
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", notFound(fmt.Sprintf("no tool call %s in this thread", in.ToolUseID))
+		}
+		if err != nil {
+			return "", err
+		}
+		switch {
+		case resultID != nil:
+			in.ResultID = *resultID
+		case result != nil:
+			return *result, nil
+		case failure != nil:
+			return *failure, nil
+		default:
+			return "", notFound(fmt.Sprintf("tool call %s has no result yet", in.ToolUseID))
+		}
+	}
+	var body string
+	err := q.QueryRowContext(ctx,
+		"SELECT r.body FROM tool_results r JOIN runs ON runs.id = r.run_id WHERE r.result_id = ? AND runs.thread_id = ?",
+		in.ResultID, in.ThreadID).Scan(&body)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", notFound(fmt.Sprintf("no stored result %d in this thread", in.ResultID))
+	}
+	return body, err
 }

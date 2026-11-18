@@ -87,6 +87,7 @@ type state struct {
 	thread       threads.Thread
 	kind         tool.Kind
 	contextLimit int64
+	window       int64
 	req          request
 	writer       *progress.Writer
 	x            *dispatcher
@@ -145,6 +146,7 @@ func (s *state) offer(ctx context.Context, set registry.Set, marks threads.Marks
 	if err != nil {
 		return err
 	}
+	req.params.ContextManagement, req.params.Betas = contextEdits(s.contextLimit), editBetas
 	s.req, s.offered = req, set
 	s.use(set, marks)
 	return nil
@@ -278,6 +280,11 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 	if flushErr := s.writer.Flush(ctx); flushErr != nil {
 		return nil, flushErr
 	}
+	if note, ok := stopNote(err); ok {
+		if _, aerr := journal.AppendMessage(ctx, d, s.thread.ID, &runID, journal.User, []json.RawMessage{block.StopBlock(note)}, s.now(), nil); aerr != nil {
+			return nil, aerr
+		}
+	}
 	if errText != nil {
 		if rerr := memory.Rebuild(ctx, d.Write, s.thread.ID, s.now()); rerr != nil {
 			log.Error(fmt.Sprintf("thread %d memory tree rebuild failed", s.thread.ID), logx.RunID, runID, logx.Err, rerr)
@@ -397,7 +404,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		Embed: o.Embed, Now: now, Client: client, Progress: writer, Ledger: r.Ledger, Sources: o.Limits.Sources,
 	}
 	s := &state{
-		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, contextLimit: contextLimit,
+		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, contextLimit: contextLimit, window: model.ContextWindow,
 		writer: writer, env: env, steps: steps, stepsKey: maxStepsKey(kind), doomThreshold: doomThreshold, inference: o.Inference, ttl: ttl, jobName: jobName,
 		x: &dispatcher{d: d, tc: tc, now: now, tuning: tuning, withdrawn: map[string]struct{}{}, registry: r.Registry, source: r.currentRegistry, allow: allow},
 		admission: admission{
@@ -607,10 +614,16 @@ func toolUseCount(msg *anthropic.Message) int64 {
 }
 
 func compactionOf(msg *anthropic.Message) int64 {
-	if msg == nil || msg.StopReason != block.Compaction {
+	if msg == nil {
 		return 0
 	}
-	return 1
+	var n int64
+	for _, raw := range msg.Content {
+		if b, err := block.Decode(raw); err == nil && b.Kind == block.Compaction {
+			n++
+		}
+	}
+	return n
 }
 
 func (s *state) settlePending(ctx context.Context) error {
@@ -681,7 +694,10 @@ func (s *state) body(ctx context.Context) error {
 		}
 		last = next
 	}
-	return RunLimit(fmt.Sprintf("stopped: step cap reached after %d steps in this %s run (%s)", s.steps, s.kind, s.stepsKey))
+	return halt{
+		limit: RunLimit(fmt.Sprintf("stopped: step cap reached after %d steps in this %s run (%s)", s.steps, s.kind, s.stepsKey)),
+		note:  fmt.Sprintf("The run stopped after %d steps, the most one %s run may take.", s.steps, s.kind),
+	}
 }
 
 func (s *state) unattended(ctx context.Context) (bool, error) {
@@ -731,8 +747,11 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		return false, nil, err
 	}
 	span.SetAttributes(obs.Int64(obs.ContextSize, size))
-	if size > s.contextLimit {
-		return false, nil, RunLimit(fmt.Sprintf("next request would be about %d tokens, over the %d limit", size, s.contextLimit))
+	if size > s.window {
+		return false, nil, halt{
+			limit: RunLimit(fmt.Sprintf("next request would be about %d tokens, over the %d-token model window", size, s.window)),
+			note:  fmt.Sprintf("The run stopped because the conversation grew past the model's %d-token window.", s.window),
+		}
 	}
 	messages, err := s.req.buildMessages(ctx, s.d.Read, files.ScopeOf(s.thread.ID, s.thread.ProjectID), active)
 	if err != nil {
