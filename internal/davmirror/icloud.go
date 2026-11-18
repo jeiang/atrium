@@ -227,10 +227,13 @@ func outcome(capability string, err error) (connections.Result, bool) {
 func failure(capability string, err error) (connections.Result, bool) {
 	if status, ok := errors.AsType[*StatusError](err); ok {
 		switch {
-		case status.Refused() && status.Step == StepRoot:
+		case status.Refused() && !status.accepted && status.Challenge:
 			return connections.Result{Capability: capability, State: connections.NeedsReauth, Reason: "iCloud refused the app password"}, true
 		case status.Refused():
 			reason := "iCloud accepted the app password but refused " + status.Refusal()
+			if !status.accepted {
+				reason = "iCloud refused " + status.Refusal() + " without asking for a password again"
+			}
 			for i, other := range status.Also {
 				if i == 0 {
 					reason += "; also refused "

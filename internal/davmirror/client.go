@@ -131,6 +131,7 @@ type StatusError struct {
 	Also        []*StatusError
 	location    *url.URL
 	empty       bool
+	accepted    bool
 }
 
 func (e *StatusError) Error() string {
@@ -354,6 +355,7 @@ func (c *Client) send(ctx context.Context, step, method string, target *url.URL,
 	if resp.StatusCode != http.StatusMultiStatus {
 		status := &StatusError{Method: method, URL: maskedURL(target), Status: resp.StatusCode, Step: step,
 			Host: c.hostClass(target), Challenge: resp.Header.Get("WWW-Authenticate") != "", RetryAfter: connections.RetryAfter(resp.Header.Get("Retry-After"), time.Now()), empty: len(bytes.TrimSpace(raw)) == 0}
+		status.accepted = c.accepted
 		log.Warn("dav request failed", logx.Integration, string(c.connection), logx.Capability, c.capability, "step", step, "method", method, "status", resp.StatusCode, "host", status.Host, "challenge", status.Challenge)
 		if location := resp.Header.Get("Location"); location != "" {
 			status.location, _ = resolve(target, location)

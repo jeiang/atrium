@@ -40,6 +40,7 @@ type partitionedDAV struct {
 	partition        string
 	rootHome         bool
 	partitionRefuses bool
+	rootRefuses      bool
 	refuseTimes      int
 	retryAfter       string
 	requests         []string
@@ -83,6 +84,7 @@ func (p *partitionedDAV) serve(w http.ResponseWriter, r *http.Request) {
 	if good {
 		p.authorized[host]++
 	}
+	rootRefuses := p.rootRefuses
 	redirect, partition, rootHome, partitionRefuses, retryAfter := p.redirectTo, p.partition, p.rootHome, p.partitionRefuses, p.retryAfter
 	if good && host == partitionHost && p.refuseTimes > 0 {
 		p.refuseTimes--
@@ -95,6 +97,8 @@ func (p *partitionedDAV) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case rootRefuses && host == frontHost && r.URL.Path == "/":
+		w.WriteHeader(http.StatusUnauthorized)
 	case host == frontHost && r.URL.Path == "/":
 		if partition != "" {
 			w.Header().Set("X-Apple-User-Partition", partition)

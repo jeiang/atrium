@@ -322,3 +322,44 @@ func TestADAVRefusalHoldSurvivesTheHostDroppingAndDeclaringTheConnectionAgain(t 
 		t.Errorf("declaring the held connection again stored %s %q %+v, want the held %q %+v", after, afterReason, afterHold, reason, hold)
 	}
 }
+
+func TestAChallengeLessCardDAVRefusalFailsWithoutBlamingThePasswordAndLeavesCalDAVRunning(t *testing.T) {
+	dir, dav := partitionedICloud(t)
+	dav.set(func(p *partitionedDAV) { p.rootRefuses = true })
+	view := testICloudConnection(t)
+	card, cardReason := capabilityResult(view, davmirror.CapabilityCardDAV)
+	if card != "failing" || !strings.Contains(cardReason, "iCloud refused the root request on the configured host (HTTP 401, no WWW-Authenticate challenge) without asking for a password again") ||
+		strings.Contains(cardReason, "app password") {
+		t.Errorf("a challenge-less carddav root refusal = %s %q, want failing without a word on the app password", card, cardReason)
+	}
+	if cal, calReason := capabilityResult(view, davmirror.CapabilityCalDAV); cal != "ok" {
+		t.Errorf("caldav beside the carddav refusal = %s %q, want ok", cal, calReason)
+	}
+	if view.State != "failing" {
+		t.Errorf("the connection beside one refused capability is %s %q, want failing, not needs_reauth", view.State, view.Reason)
+	}
+	if _, _, hold := storedCardDAV(t, dir); hold.Refusals != 1 {
+		t.Fatalf("the carddav refusal stored %+v, want one refusal held", hold)
+	}
+
+	dav.drain()
+	if got := runApp(t, "contacts", "sync"); got.code == cli.ExitOK || !strings.Contains(got.stderr, "skipped, backing off until ") {
+		t.Errorf("contacts sync during the carddav hold = %d %q %q, want the skip", got.code, got.stdout, got.stderr)
+	}
+	if got := runApp(t, "calendar", "sync"); got.code != cli.ExitOK {
+		t.Errorf("calendar sync during the carddav hold = %d %q %q, want it to run", got.code, got.stdout, got.stderr)
+	}
+	runApp(t, "connections", "check")
+	if got := dav.drain(); len(got) != 0 {
+		t.Errorf("syncs and a check during the carddav hold sent carddav requests %q", got)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	var calState string
+	if err := d.Read.QueryRow(`SELECT json_extract(value, '$.state') FROM connections, json_each(results_json)
+		WHERE connections.id = 'icloud/icloud' AND json_extract(value, '$.capability') = 'caldav'`).Scan(&calState); err != nil {
+		t.Fatal(err)
+	}
+	if after, _, hold := storedCardDAV(t, dir); calState != "ok" || after != "failing" || hold.Refusals != 1 {
+		t.Errorf("after the syncs and the check caldav is %s and carddav %s %+v, want ok beside the held failing carddav", calState, after, hold)
+	}
+}

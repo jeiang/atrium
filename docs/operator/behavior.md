@@ -500,11 +500,16 @@ capability failing, and a login the server refuses marks it as needing reauth,
 as the scheduled check does. An SMTP session that cannot connect or greet marks
 `smtp` failing, and a refused login (codes 530 to 535) marks it as needing
 reauth. A
-contacts or calendar mirror sync whose first request the server refuses (401
-or 403) marks `carddav` or `caldav` as needing reauth. A refusal after that
-first request accepted the password, a server error, a network error, a TLS
+contacts or calendar mirror sync or check refused (401 or 403) with a
+`WWW-Authenticate` challenge before any request of that run accepted the
+password marks `carddav` or `caldav` as needing reauth. A refusal with no
+challenge before then marks it failing as `iCloud refused the <step> request
+... without asking for a password again`, which says nothing about the
+password. A refusal after an earlier request of the run accepted the password
+reads `iCloud accepted the app password but refused ...`. These, a server
+error, a network error, a TLS
 error, or a discovery step that points at a host the credential may not go to
-marks it failing, and the reason names the step. A refusal or server error
+mark it failing, and the reason names the step. A refusal or server error
 also names the host class (the configured host, the partition host the root
 named, or a sibling host) without the request address, and a refusal says
 whether it carried a `WWW-Authenticate` challenge and lists the other
