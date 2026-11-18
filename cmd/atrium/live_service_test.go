@@ -47,10 +47,9 @@ func TestServeChatAndAgentTickShareOneRunAuthority(t *testing.T) {
 	stopWhileHeld(t, stop, release)
 	waitUntil(t, 10*time.Second, "the in-flight reply", func() bool { return api.Remaining() == 0 })
 	var state string
-	if err := d.Read.QueryRow("SELECT state FROM runs WHERE id = ?", run).Scan(&state); err != nil || state != "running" && state != "interrupted" {
-		t.Fatalf("chat run %s after serve stopped, want it left resumable: %v", state, err)
+	if err := d.Read.QueryRow("SELECT state FROM runs WHERE id = ?", run).Scan(&state); err != nil || state != "interrupted" {
+		t.Fatalf("chat run %s after serve stopped, want it interrupted: %v", state, err)
 	}
-	asstExec(t, d, "UPDATE runs SET lease_until = ? WHERE id = ? AND state = 'running'", unixNow()-1, run)
 
 	api.Push(asstReply("resumed reply"))
 	tick("restart", cli.ExitOK)

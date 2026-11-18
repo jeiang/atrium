@@ -429,8 +429,51 @@ func TestAsstLiveRunQueuesStopsAndStaysResumableAcrossShutdown(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT state FROM runs WHERE id = ?", asstLastRun(t, d, busy)).Scan(&state); err != nil {
 		t.Fatal(err)
 	}
-	if state != "running" && state != "interrupted" {
-		t.Errorf("run in flight at shutdown ended %s, want it left resumable", state)
+	if state != "interrupted" {
+		t.Errorf("run in flight at shutdown ended %s, want it interrupted", state)
+	}
+}
+
+func TestAsstRunStoppedByShutdownResumesAtOnceAfterRestart(t *testing.T) {
+	t.Parallel()
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	asstWarm(t)
+	d := asstDB(t, dir)
+	base, _, stop := startServeStoppable(t, dir)
+	asstExec(t, d, "UPDATE jobs SET next_due = NULL")
+	w := localWebG1(t, base)
+
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("deploy", "profile_get", map[string]any{"key": "k"})))
+	release := asstHold(t, api)
+	sent := len(api.Requests())
+	thread := webStartG1(t, w, map[string]any{"text": "outlive the deploy"})
+	asstWaitRequests(t, api, sent+1)
+	run := asstLastRun(t, d, thread)
+	webWantG1(t, w.do(http.MethodPost, threadG1(thread, "/messages"), map[string]any{"text": "note sent during the deploy"}), http.StatusAccepted)
+	stopWhileHeld(t, stop, release)
+
+	var state string
+	var owner *string
+	var lease *float64
+	if err := d.Read.QueryRow("SELECT state, owner, lease_until FROM runs WHERE id = ?", run).Scan(&state, &owner, &lease); err != nil {
+		t.Fatal(err)
+	}
+	if state != "interrupted" || owner != nil || lease != nil {
+		t.Fatalf("run stopped by shutdown is %s with owner %v and lease %v, want interrupted and released", state, owner, lease)
+	}
+
+	api.Push(asstReply("answered after the restart"))
+	restarted := len(api.Requests())
+	startServeIn(t, dir)
+	asstWaitCount(t, d, 1, "SELECT COUNT(*) FROM runs WHERE id = ? AND state = 'done'", run)
+	asstWaitCount(t, d, 0, "SELECT COUNT(*) FROM runs WHERE thread_id = ? AND state <> 'done'", thread)
+	asstWaitCount(t, d, 0, "SELECT COUNT(*) FROM thread_queue WHERE thread_id = ? AND consumed_at IS NULL", thread)
+	answered := false
+	for _, r := range api.Requests()[restarted:] {
+		answered = answered || strings.Contains(string(r.Body), "note sent during the deploy")
+	}
+	if !answered {
+		t.Fatal("the note sent during the run was not answered after the restart")
 	}
 }
 

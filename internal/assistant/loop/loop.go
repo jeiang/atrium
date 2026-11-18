@@ -258,8 +258,12 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 		s.observeRun(started, span, finished)
 		return finished, ferr
 	case ctx.Err() != nil:
+		if stopping(o.Stop) {
+			s.release(ctx)
+		}
 		return nil, ctx.Err()
 	case errors.Is(err, progress.ErrShutdown):
+		s.release(ctx)
 		log.Info(fmt.Sprintf("run %d stopped for shutdown; it resumes on restart", runID), logx.RunID, runID)
 		return nil, err
 	case errors.As(err, new(*tool.Park)):
@@ -423,6 +427,25 @@ func (s *state) renew(ctx context.Context) error {
 		return LeaseLost(fmt.Sprintf("run %d was taken over by another process", s.run.ID))
 	}
 	return nil
+}
+
+const releaseTimeout = 10 * time.Second
+
+func stopping(stop <-chan struct{}) bool {
+	select {
+	case <-stop:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *state) release(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
+	defer cancel()
+	if _, err := journal.ReleaseRun(ctx, s.d.Write, s.run.ID, deref(s.run.Owner)); err != nil {
+		log.Error(fmt.Sprintf("run %d could not be released for resume; it resumes when its lease expires", s.run.ID), logx.RunID, s.run.ID, logx.Err, err)
+	}
 }
 
 func (s *state) heartbeat(ctx context.Context) func() {
