@@ -26,8 +26,9 @@ const (
 )
 
 const (
-	AppleIDKey = "icloud_apple_id"
-	AccountKey = "calendar_account"
+	AppleIDKey         = "icloud_apple_id"
+	ContactsAppleIDKey = "icloud_contacts_apple_id"
+	AccountKey         = "calendar_account"
 )
 
 const (
@@ -57,27 +58,61 @@ func EndpointsFrom(env config.Env) Endpoints {
 }
 
 type Login struct {
-	AppleID string
-	Account string
-	DAV     *connections.Lease
+	AppleID         string
+	ContactsAppleID string
+	Account         string
+	DAV             *connections.Lease
 }
 
 func LoadLogin(ctx context.Context, q db.Querier) (Login, error) {
 	var out Login
-	for _, step := range []struct {
-		key  string
-		into *string
-	}{{AppleIDKey, &out.AppleID}, {AccountKey, &out.Account}} {
-		found, err := settings.From(ctx).Resolve(ctx, q, step.key)
-		if err != nil {
-			return Login{}, err
-		}
-		*step.into = strings.TrimSpace(found.Value)
+	if err := out.load(ctx, q, AccountKey, &out.Account); err != nil {
+		return Login{}, err
+	}
+	if err := out.loadAppleIDs(ctx, q); err != nil {
+		return Login{}, err
 	}
 	if account, err := icloudAccount(ctx, out); err == nil {
 		out.DAV = openConnection(ctx, q, ICloudID(account.Name))
 	}
 	return out, nil
+}
+
+func (l *Login) loadAppleIDs(ctx context.Context, q db.Querier) error {
+	if err := l.load(ctx, q, AppleIDKey, &l.AppleID); err != nil {
+		return err
+	}
+	return l.load(ctx, q, ContactsAppleIDKey, &l.ContactsAppleID)
+}
+
+func (l *Login) load(ctx context.Context, q db.Querier, key string, into *string) error {
+	found, err := settings.From(ctx).Resolve(ctx, q, key)
+	if err != nil {
+		return err
+	}
+	*into = strings.TrimSpace(found.Value)
+	return nil
+}
+
+func (l Login) User(capability string, account config.AccountSpec) (user, source string) {
+	switch {
+	case capability == CapabilityCardDAV && l.ContactsAppleID != "":
+		return l.ContactsAppleID, "the " + ContactsAppleIDKey + " setting"
+	case l.AppleID != "":
+		return l.AppleID, "the " + AppleIDKey + " setting"
+	}
+	if l.DAV != nil {
+		var cfg map[string]string
+		_ = json.Unmarshal(l.DAV.Config(), &cfg)
+		if apple := strings.TrimSpace(cfg["apple_id"]); apple != "" {
+			return apple, "the connection's apple_id"
+		}
+	}
+	return account.Login, "the mail account login"
+}
+
+func holdTag(user, password string) string {
+	return connections.CredentialTag(user + "\x00" + password)
 }
 
 func openConnection(ctx context.Context, q db.Querier, id connections.ID) *connections.Lease {
@@ -117,14 +152,15 @@ func icloudAccount(ctx context.Context, login Login) (config.AccountSpec, error)
 }
 
 func ICloudLogin(ctx context.Context, login Login) (config.CalDAVLogin, error) {
+	return loginFor(ctx, login, CapabilityCalDAV)
+}
+
+func loginFor(ctx context.Context, login Login, capability string) (config.CalDAVLogin, error) {
 	account, err := icloudAccount(ctx, login)
 	if err != nil {
 		return config.CalDAVLogin{}, err
 	}
-	apple := login.AppleID
-	if apple == "" {
-		apple = account.Login
-	}
+	apple, _ := login.User(capability, account)
 	password := ""
 	if login.DAV != nil && login.DAV.ID() == ICloudID(account.Name) {
 		password, _ = icloudPassword(ctx, login.DAV, account.Name)
@@ -140,7 +176,7 @@ func ICloudLogin(ctx context.Context, login Login) (config.CalDAVLogin, error) {
 }
 
 func DAVClient(ctx context.Context, login Login, endpoint, capability string) (*Client, error) {
-	creds, err := ICloudLogin(ctx, login)
+	creds, err := loginFor(ctx, login, capability)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +190,7 @@ func DAVClient(ctx context.Context, login Login, endpoint, capability string) (*
 	if err != nil {
 		return nil, err
 	}
-	client.cache, client.credential = cacheKey(capability, endpoint, creds.AppleID, creds.Password), connections.CredentialTag(creds.Password)
+	client.cache, client.credential = cacheKey(capability, endpoint, creds.AppleID, creds.Password), holdTag(creds.AppleID, creds.Password)
 	return client, nil
 }
 
@@ -333,7 +369,7 @@ func checkICloud(ctx context.Context, lease *connections.Lease, caps []connectio
 		var prev connections.Hold
 		stored, found := lease.Stored(ctx, cap.Name)
 		if found {
-			prev = connections.HeldBy(stored, connections.CredentialTag(session.password))
+			prev = connections.HeldBy(stored, session.tag(cap.Name))
 		}
 		now := time.Now()
 		_, running := syncing.Load(key)
@@ -349,7 +385,7 @@ func checkICloud(ctx context.Context, lease *connections.Lease, caps []connectio
 			discoveries.Delete(key)
 		}
 		result, err := session.check(ctx, cap.Name, key, retries(prev))
-		result = settle(result, err, prev, connections.CredentialTag(session.password), time.Now())
+		result = settle(result, err, prev, session.tag(cap.Name), time.Now())
 		if !reuse && prev.Active(now) {
 			result.Reason = "tested at the operator's request during a backoff that was to end " + prev.Ends() + ": " + result.Reason
 		}
@@ -369,10 +405,9 @@ func resultList(r *connections.Result) []connections.Result {
 }
 
 type icloudSession struct {
-	http      *http.Client
-	user      string
-	source    string
-	login     string
+	base      *http.Client
+	names     Login
+	account   config.AccountSpec
 	password  string
 	endpoints Endpoints
 }
@@ -387,12 +422,13 @@ func openICloud(ctx context.Context, lease *connections.Lease, wrap func(http.Ro
 	if err != nil {
 		return icloudSession{}, &connections.Result{Capability: CapabilityCalDAV, State: connections.NeedsReauth, Reason: err.Error()}, nil
 	}
-	var cfg map[string]string
-	_ = json.Unmarshal(lease.Config(), &cfg)
-	s := icloudSession{user: strings.TrimSpace(cfg["apple_id"]), source: "the connection's apple_id", login: spec.Login, password: password, endpoints: EndpointsFrom(config.OS)}
-	if s.user == "" {
-		s.user, s.source = spec.Login, "the mail account login"
+	names := Login{DAV: lease}
+	if q := lease.Querier(); q != nil {
+		if err := names.loadAppleIDs(ctx, q); err != nil {
+			return icloudSession{}, nil, err
+		}
 	}
+	s := icloudSession{names: names, account: spec, password: password, endpoints: EndpointsFrom(config.OS)}
 	base, err := lease.Transport()
 	if err != nil {
 		return icloudSession{}, nil, err
@@ -402,13 +438,23 @@ func openICloud(ctx context.Context, lease *connections.Lease, wrap func(http.Ro
 		traced.Transport = wrap(base.Transport)
 		base = &traced
 	}
-	s.http = BasicClient(base, s.user, password)
+	s.base = base
 	return s, nil, nil
+}
+
+func (s icloudSession) user(capability string) (user, source string) {
+	return s.names.User(capability, s.account)
+}
+
+func (s icloudSession) tag(capability string) string {
+	user, _ := s.user(capability)
+	return holdTag(user, s.password)
 }
 
 func (s icloudSession) key(capability string) string {
 	_, endpoint, _ := s.kind(capability)
-	return cacheKey(capability, endpoint, s.user, s.password)
+	user, _ := s.user(capability)
+	return cacheKey(capability, endpoint, user, s.password)
 }
 
 func (s icloudSession) kind(capability string) (Kind, string, bool) {
@@ -426,7 +472,8 @@ func (s icloudSession) check(ctx context.Context, capability, cache string, retr
 	if !ok {
 		return connections.Result{Capability: capability, State: connections.Failing, Reason: "unknown iCloud capability"}, nil
 	}
-	client, err := New(s.http, endpoint)
+	user, _ := s.user(capability)
+	client, err := New(BasicClient(s.base, user, s.password), endpoint)
 	if err != nil {
 		return connections.Result{Capability: capability, State: connections.Failing, Reason: err.Error()}, nil
 	}

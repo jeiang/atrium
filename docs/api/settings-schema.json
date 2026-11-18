@@ -738,6 +738,22 @@
           "restart": false
         },
         {
+          "key": "icloud_contacts_apple_id",
+          "label": "Contacts Apple ID",
+          "module": "calendar",
+          "type": "string",
+          "multi": false,
+          "choices": [],
+          "default": "",
+          "value": null,
+          "source": null,
+          "class": "ui",
+          "editable": true,
+          "secret": false,
+          "group": "connections",
+          "restart": false
+        },
+        {
           "key": "icloud_calendar",
           "label": "Calendar",
           "module": "calendar",

@@ -27,6 +27,8 @@ type Server struct {
 	User         string
 	Password     string
 	Unavailable  atomic.Bool
+	cardUser     string
+	logins       []string
 }
 
 const header = `<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav">`
@@ -74,6 +76,20 @@ func (s *Server) Objects() map[string]string {
 	return out
 }
 
+func (s *Server) SetCardUser(user string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cardUser = user
+}
+
+func (s *Server) TakeLogins() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := s.logins
+	s.logins = nil
+	return out
+}
+
 func calendarPath(i int) string { return fmt.Sprintf("/calendars/cal%d/", i) }
 
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
@@ -81,11 +97,25 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
-	if user, pass, ok := r.BasicAuth(); !ok || user != s.User || pass != s.Password {
+	user, pass, ok := r.BasicAuth()
+	body, _ := io.ReadAll(r.Body)
+	kind := "caldav"
+	if strings.Contains(string(body), "urn:ietf:params:xml:ns:carddav") {
+		kind = "carddav"
+	}
+	s.mu.Lock()
+	cardUser := s.cardUser
+	s.logins = append(s.logins, kind+" "+user)
+	s.mu.Unlock()
+	if !ok || pass != s.Password || user != s.User && (kind != "carddav" || user != cardUser) {
+		w.Header().Set("WWW-Authenticate", `Basic realm="caldavtest"`)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	body, _ := io.ReadAll(r.Body)
+	if kind == "carddav" && cardUser != "" && user != cardUser && r.URL.Path != "/" {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch r.Method {

@@ -23,6 +23,7 @@ const (
 func SettingsDefs() []settings.Def {
 	return []settings.Def{
 		settings.Value(settings.UI, settings.Def{Key: davmirror.AppleIDKey, Module: unit.Calendar, Type: settings.String}),
+		settings.Value(settings.UI, settings.Def{Key: davmirror.ContactsAppleIDKey, Module: unit.Calendar, Type: settings.String}),
 		settings.Value(settings.UI, settings.Def{Key: davmirror.AccountKey, Module: unit.Calendar, Type: settings.String}),
 		settings.Value(settings.UI, settings.Def{Key: ICloudCalendarKey, Module: unit.Calendar, Type: settings.String}),
 		settings.Value(settings.UI, settings.Def{
