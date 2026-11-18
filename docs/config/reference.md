@@ -132,6 +132,7 @@ Operator settings are stored in the database and edited in the application. They
 | `default_event_minutes` | int | `60` | ui |
 | `icloud_apple_id` | string | none | ui |
 | `icloud_calendar` | string | none | ui |
+| `icloud_contacts_apple_id` | string | none | ui |
 | `work_days` | string | `mon,tue,wed,thu,fri` | ui |
 | `work_hours` | string | `09:00-17:00` | ui |
 

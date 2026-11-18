@@ -147,6 +147,7 @@ var manifest = []Entry{
 	{Module: "calendar", Key: "google_client_id", Class: ClassOperator, Action: ActionRename, Target: "google/default.config.client_id", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "calendar", Key: "google_oauth_client_secret", Class: ClassOperator, Action: ActionRename, Target: "google/default credential oauth/client_secret", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "calendar", Key: "icloud_apple_id", Class: ClassOperator, Action: ActionRename, Target: "icloud/<account> caldav/carddav config.apple_id", Default: "", Type: String, Choices: nil, Cutover: false},
+	{Module: "calendar", Key: "icloud_contacts_apple_id", Class: ClassOperator, Action: ActionCarry, Target: "settings.icloud_contacts_apple_id", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "calendar", Key: "icloud_calendar", Class: ClassOperator, Action: ActionCarry, Target: "settings.icloud_calendar", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "calendar", Key: "max_events", Class: ClassTuning, Action: ActionDropTuning, Target: "internal/apps/calendar/tuning.go:TuningMaxEvents", Default: "200", Type: Int, Choices: nil, Cutover: false},
 	{Module: "calendar", Key: "max_occurrences", Class: ClassTuning, Action: ActionDropTuning, Target: "internal/apps/calendar/tuning.go:TuningMaxOccurrences", Default: "2000", Type: Int, Choices: nil, Cutover: false},

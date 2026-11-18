@@ -1208,6 +1208,13 @@ func withinPath(base, target string) bool {
 // read-only lease has none.
 func (l *Lease) DB() *db.DB { return l.store.d }
 
+func (l *Lease) Querier() db.Querier {
+	if l.store == nil {
+		return nil
+	}
+	return l.store.q
+}
+
 // DB returns the database a store was opened on.
 func (s *Store) DB() *db.DB { return s.d }
 

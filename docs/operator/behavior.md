@@ -525,7 +525,8 @@ refusal(s); no request was sent`, and health checks (the hourly sweep, the
 check at start, rechecks and `connections check`) send nothing and keep the
 stored result. The backoff is read from the stored result, so a restart
 neither ends it nor sends anything. The first sync or check that works ends
-it, and so does a changed app password. `connections test <id>` still runs
+it, and so does a changed app password or a changed login for that capability
+(`icloud_contacts_apple_id` for CardDAV, `icloud_apple_id` for both). `connections test <id>` still runs
 during a backoff because the operator asked for it; its reason starts with
 `tested at the operator's request during a backoff that was to end <time
 UTC>:`, and it ends the backoff when it works or counts as one more refusal

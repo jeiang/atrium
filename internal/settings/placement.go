@@ -41,6 +41,7 @@ var placement = map[string]string{
 	"export_obsidian_kinds":               PlaceKnowledgeExport,
 	"export_obsidian_private_to":          PlaceKnowledgeExport,
 	"icloud_apple_id":                     PlaceConnections,
+	"icloud_contacts_apple_id":            PlaceConnections,
 	"icloud_calendar":                     PlaceAppsCalendar,
 	"mail_mode":                           PlaceAppsMail,
 	"mail_ship24_destination_country":     PlaceConnections,

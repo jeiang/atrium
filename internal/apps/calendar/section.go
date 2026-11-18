@@ -12,6 +12,7 @@ func Sections() []settingspage.Section {
 		Fields: []settingspage.Field{
 			{Key: davmirror.AccountKey, Label: "Account"},
 			{Key: davmirror.AppleIDKey, Label: "Apple ID"},
+			{Key: davmirror.ContactsAppleIDKey, Label: "Contacts Apple ID"},
 			{Key: ICloudCalendarKey, Label: "Calendar"},
 			{Key: DefaultMinutesKey, Label: "Event minutes", Number: true, Whole: true},
 			{Key: WorkHoursKey, Label: "Work hours"},

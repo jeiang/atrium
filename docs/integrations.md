@@ -148,8 +148,10 @@ mail account for their CalDAV and CardDAV login through one shared `icloud`
 connection that neither module owns: turning calendar or contacts off leaves it
 enabled for the other, and a rejected password marks both capabilities for one
 repair. The Calendar section on the
-Calendar settings page (`/settings/calendar`) edits `calendar_account`, `icloud_apple_id`, `icloud_calendar`,
-`default_event_minutes`, `work_hours` and `work_days`.
+Calendar settings page (`/settings/calendar`) edits `calendar_account`, `icloud_apple_id`,
+`icloud_contacts_apple_id`, `icloud_calendar`, `default_event_minutes`, `work_hours` and `work_days`.
+CardDAV logs in as `icloud_contacts_apple_id` when it is set; otherwise CardDAV and CalDAV both use
+`icloud_apple_id`, then the connection's `apple_id`, then the mail login, in checks, traces and syncs alike.
 
 Discovery asks the DAV root for the current user principal and the home set in
 one request. iCloud answers the root on the partition that accepted the
