@@ -20,6 +20,7 @@
     gap: var(--s-1);
     align-items: center;
     min-block-size: var(--target);
+    min-inline-size: var(--target);
     padding: var(--s-1) var(--s-4);
     border: 1px solid var(--line);
     border-radius: var(--r-pill);
@@ -126,6 +127,7 @@
     display: flex;
     align-items: center;
     min-block-size: var(--target);
+    min-inline-size: var(--target);
     color: var(--ink);
     text-decoration: none;
   }
@@ -293,6 +295,7 @@
     align-items: center;
     justify-self: start;
     min-block-size: var(--target);
+    min-inline-size: var(--target);
   }
 
   .mail-section {
@@ -388,6 +391,7 @@
     display: inline-flex;
     align-items: center;
     min-block-size: var(--target);
+    min-inline-size: var(--target);
   }
 
   .mail-rule-ref__state {

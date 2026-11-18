@@ -32,6 +32,7 @@
     gap: var(--s-2);
     justify-self: start;
     min-block-size: var(--target);
+    min-inline-size: var(--target);
     padding-inline: var(--s-1);
     border-radius: var(--r-sm);
     font-size: var(--t-sm);
@@ -367,6 +368,7 @@
     display: inline-flex;
     align-items: center;
     min-block-size: var(--target);
+    min-inline-size: var(--target);
     border-radius: var(--r-sm);
   }
 
