@@ -53,7 +53,7 @@
   .page-title {
     margin: 0;
     font-size: var(--t-xl);
-    font-weight: 800;
+    font-weight: 700;
     line-height: var(--lh-tight);
     letter-spacing: -0.01em;
   }
@@ -81,7 +81,7 @@
     flex: 1 1 auto;
     margin: 0;
     font-size: var(--t-lg);
-    font-weight: 800;
+    font-weight: 700;
     line-height: var(--lh-tight);
     letter-spacing: -0.005em;
   }
@@ -249,7 +249,7 @@
 
   .field__req {
     font-size: var(--t-xs);
-    font-weight: 500;
+    font-weight: 400;
     color: var(--ink-3);
   }
 
@@ -513,7 +513,7 @@
     padding: 0 var(--s-4);
     border-radius: var(--r-pill);
     font-size: var(--t-sm);
-    font-weight: 500;
+    font-weight: 400;
     color: var(--ink-2);
     cursor: pointer;
   }
@@ -814,7 +814,7 @@
   .row__title {
     grid-column: 2;
     overflow: hidden;
-    font-weight: 500;
+    font-weight: 400;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -837,7 +837,7 @@
   }
 
   .row[data-unread="true"] .row__title {
-    font-weight: 800;
+    font-weight: 700;
   }
 
   .row__unread {
@@ -1014,7 +1014,7 @@
   .statebox__title {
     margin: 0;
     font-size: var(--t-lg);
-    font-weight: 800;
+    font-weight: 700;
   }
 
   .statebox__text {
@@ -1108,7 +1108,7 @@
     flex: 1 1 auto;
     margin: 0;
     font-size: var(--t-lg);
-    font-weight: 800;
+    font-weight: 700;
     line-height: var(--lh-tight);
   }
 
