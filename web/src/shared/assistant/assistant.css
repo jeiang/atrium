@@ -132,10 +132,6 @@
     color: var(--moss);
   }
 
-  .receipt[data-tone="pending"] .receipt__mark {
-    color: var(--honey);
-  }
-
   .receipt[data-tone="declined"] .receipt__mark {
     color: var(--ink-3);
   }

@@ -10,7 +10,6 @@ export interface UnsafeCommand {
   path: string;
   open: string;
   scenario?: MockScenario;
-  clock?: boolean;
   press: (page: Page) => Promise<void>;
 }
 
@@ -31,7 +30,6 @@ export async function pressWithFault(page: Page, command: UnsafeCommand, answer:
     fault: { method: command.method, path: command.path, answer },
   });
   const sent = record(page, command);
-  if (command.clock) await page.clock.install();
   await gotoShell(page, command.open);
   await command.press(page);
   await expect.poll(() => sent.length).toBe(1);

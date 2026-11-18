@@ -156,38 +156,29 @@ test.describe('Mail messages', () => {
     await expect(forward.getByLabel('Message')).toHaveValue(/Could you bring the bean seeds/);
   });
 
-  test('send waits 10 seconds: Undo sends nothing, letting it run sends once', async ({ page }) => {
-    await page.clock.install();
+  test('desktop Send sends at once, once, with no countdown', async ({ page }) => {
     const sent = writes(page);
     await gotoShell(page, '/apps/mail');
     await newEmail(page);
     const dialog = compose(page);
+    await expectRoundedSurfaces(page, edges);
+    await expectNoHorizontalScroll(page);
+    await expectNoSeriousAxeFindings(page);
     await dialog.getByRole('button', { name: 'Send', exact: true }).click();
-    await expect(dialog.locator('.receipt')).toContainText('Sending to Odile Marsh in 10 s');
-    await page.clock.runFor(4_000);
-    await dialog.locator('.receipt').getByRole('button', { name: 'Undo' }).click();
-    await expect(dialog.locator('.receipt')).toHaveCount(0);
-    await page.clock.runFor(12_000);
-    expect(sent.filter((line) => line.endsWith('/send'))).toEqual([]);
-
-    await dialog.getByRole('button', { name: 'Send', exact: true }).click();
-    await expect(dialog.locator('.receipt')).toContainText('in 10 s');
-    await page.clock.runFor(10_500);
+    await expect.poll(() => sent, { timeout: 2_000 }).toEqual(['POST /drafts', 'POST /drafts/500/send']);
     await expect(toast(page, 'Sent to Odile Marsh.')).toBeVisible();
     await expect(page.locator('dialog[open]')).toHaveCount(0);
+    await expect(page.locator('.receipt')).toHaveCount(0);
     expect(sent).toEqual(['POST /drafts', 'POST /drafts/500/send']);
   });
 
   test('an unknown send is shown as blocked and can be recorded as sent', async ({ page }) => {
     await useScenario(page, { mailbox: { send: 'unknown' } });
     const sent = writes(page);
-    await page.clock.install();
     await gotoShell(page, '/apps/mail');
     await newEmail(page);
     const dialog = compose(page);
     await dialog.getByRole('button', { name: 'Send', exact: true }).click();
-    await expect(dialog.locator('.receipt')).toContainText('in 10 s');
-    await page.clock.runFor(10_500);
     await expect(dialog.getByText('The send outcome is unknown')).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Send', exact: true })).toHaveCount(0);
     await dialog.getByRole('button', { name: 'Mark as sent' }).click();

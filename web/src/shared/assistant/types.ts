@@ -202,7 +202,6 @@ export interface Approval {
   primary: string;
   irreversible: boolean;
   done: string;
-  sending?: string;
 }
 
 export interface DecidedElsewhere {

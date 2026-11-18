@@ -50,7 +50,6 @@
     MediaTorrent,
     MediaTorrent,
   ];
-  const hold = { hash: 'g1', until: 0, timer: 0, toast: 0 };
   const problem = {
     tone: 'error' as const,
     title: 'atrium refused this',
@@ -67,7 +66,6 @@
     <li><TorrentCard torrent={seeding} oncontrol={onNothing} onremove={onNothing} /></li>
     <li><TorrentCard torrent={errored} {problem} oncontrol={onNothing} onremove={onNothing} /></li>
     <li><TorrentCard torrent={untagged} offline oncontrol={onNothing} onremove={onNothing} /></li>
-    <li><TorrentCard torrent={downloading} {hold} oncontrol={onNothing} onremove={onNothing} onundo={onNothing} /></li>
   </ul>
   <ViewState kind="empty" title="Not following anything" level={3}>
     Follow a show and atrium downloads its new episodes.

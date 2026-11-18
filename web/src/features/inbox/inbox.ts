@@ -230,7 +230,6 @@ function draftItem(key: string, draft: Draft): InboxItem {
       primary: `Send email to ${name}`,
       irreversible: true,
       done: `Sent to ${draft.to}`,
-      sending: 'Sending',
     },
     revision: draft.revision,
     decided:

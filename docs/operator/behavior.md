@@ -183,8 +183,8 @@ emergency bypass.
 - The Downloads screen (`/apps/torrents`) and Library screens
   (`/apps/media`) are not kept on the device. Removing a torrent asks
   first and says whether its files are deleted. Removing it with its files
-  needs a press and hold on a phone or touch screen; on a desktop the request
-  is sent only after 10 seconds, and Undo in that time sends nothing. Undo
+  needs a press and hold on a phone or touch screen; on a desktop the confirm
+  button sends the request at once. Undo
   after a pause, resume, follow or unfollow sends the opposite request, even
   though the server now answers these changes with undoable `effect_ids`
   (pause and resume through `media_torrent_state`, follow and unfollow
@@ -913,8 +913,12 @@ module is off and 503 when the calendar cannot be listed, for example when none
 is configured. Full page navigations are not conditional fragment responses.
 
 In a chat, the assistant's thinking appears in a Thinking disclosure: open while
-that step streams, closed once it ends, and collapsed in place in the finished
-transcript. A status row stays up for the whole run and says what it is doing:
+that step streams and closed once it ends, unless you opened or closed it
+yourself. A block you opened stays open as the run moves on, when it finishes
+and after the transcript reloads. Expand thinking in the chat actions menu opens
+every thinking block in every chat and is remembered by the browser; Collapse
+thinking turns it off. Mail Send, an approval card's send and Decline act at
+once, with no countdown. A status row stays up for the whole run and says what it is doing:
 Thinking, Running and the tool name, Writing, or Waiting for you. While any chat
 run works, the avatar menu's Chats item (and the avatar) or the phone Chats tab
 shows a dot; `GET /shell` reports the count as `chats_running`. The model menu

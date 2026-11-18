@@ -14,7 +14,6 @@
   import { on } from 'svelte/events';
   import { announce } from '../../shared/announce.svelte';
   import HoldButton from '../../shared/assistant/HoldButton.svelte';
-  import ReceiptLine, { UNDO_MS } from '../../shared/assistant/ReceiptLine.svelte';
   import { device } from '../../shared/device.svelte';
   import Button from '../../shared/ui/Button.svelte';
   import Dialog from '../../shared/ui/Dialog.svelte';
@@ -54,11 +53,9 @@
   let cc = $state('');
   let subject = $state('');
   let body = $state('');
-  let phase = $state<'edit' | 'saving' | 'counting' | 'sending' | 'unknown'>('edit');
-  let left = $state(0);
+  let phase = $state<'edit' | 'saving' | 'sending' | 'unknown'>('edit');
   let attempt = $state(0);
   let problem = $state<Problem>();
-  let countTimer: number | undefined;
 
   const forwarding = $derived(start.kind === 'forward' && !draft);
   const title = $derived(
@@ -92,7 +89,6 @@
   $effect(() => {
     const begin = start;
     untrack(() => {
-      stopCount();
       problem = undefined;
       phase = 'edit';
       attempt += 1;
@@ -107,19 +103,12 @@
     });
   });
 
-  $effect(() => () => stopCount());
-
   function fill(next: Draft): void {
     draft = next;
     to = next.to;
     cc = next.cc;
     subject = next.subject;
     body = next.body;
-  }
-
-  function stopCount(): void {
-    clearInterval(countTimer);
-    countTimer = undefined;
   }
 
   async function save(): Promise<Draft> {
@@ -177,7 +166,6 @@
   }
 
   async function deliver(ready: Draft): Promise<void> {
-    stopCount();
     phase = 'sending';
     try {
       const sent = await handleSend(ready.id, ready.revision);
@@ -206,36 +194,14 @@
   async function onSend(): Promise<void> {
     if (phase !== 'edit') return;
     const ready = await prepared();
-    if (!ready) return;
-    if (touch) {
-      await deliver(ready);
-      return;
-    }
-    phase = 'counting';
-    left = UNDO_MS / 1000;
-    announce(`Sending in ${left} seconds. Press Undo to stop.`);
-    countTimer = window.setInterval(() => {
-      left -= 1;
-      if (left > 0) return;
-      void deliver(ready);
-    }, 1000);
-  }
-
-  function onStop(): void {
-    if (phase !== 'counting') return;
-    stopCount();
-    phase = 'edit';
-    attempt += 1;
-    announce('Not sent. The draft is saved.');
+    if (ready) await deliver(ready);
   }
 
   let confirming = $state(false);
 
   async function onConfirm(): Promise<void> {
     confirming = false;
-    if (phase !== 'edit') return;
-    const ready = await prepared();
-    if (ready) await deliver(ready);
+    await onSend();
   }
 
   async function onDiscard(): Promise<void> {
@@ -270,13 +236,9 @@
     phase = 'edit';
     attempt += 1;
   }
-
-  function onClosed(): void {
-    if (phase === 'counting') onStop();
-  }
 </script>
 
-<Dialog bind:open {title} sheet={touch} pending={busy} onclose={onClosed}>
+<Dialog bind:open {title} sheet={touch} pending={busy}>
   <form class="mail-compose" inert={locked || undefined} onsubmit={(event) => event.preventDefault()}>
     {#if !draft && start.kind === 'new'}
       <SelectField label="From" {options} bind:value={account} required />
@@ -321,8 +283,6 @@
       onresolve={onResolve}
       ondone={(said) => toast(said)}
     />
-  {:else if phase === 'counting'}
-    <ReceiptLine tone="pending" title="Sending to {firstName(to)} in {left} s" onundo={onStop} />
   {/if}
   {#snippet actions()}
     {#if forwarding}

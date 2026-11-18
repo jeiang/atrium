@@ -46,6 +46,7 @@
   import ScopeMenu from './ScopeMenu.svelte';
   import { effortFixed, type Scope, startOptions } from './scope';
   import { RunStream, type StreamStatus } from './stream.svelte';
+  import { onThoughtToggle, thoughtOpen } from './thinking.svelte';
   import { threadQuery } from './thread';
   import WorkPanel from './WorkPanel.svelte';
   import './chats.css';
@@ -441,13 +442,14 @@
     };
   });
 
-  type Part = { kind: 'thinking'; text: string } | { kind: 'tools'; calls: ToolCall[] };
+  type Part = { kind: 'thinking'; text: string; n: number } | { kind: 'tools'; calls: ToolCall[] };
 
   function activity(steps: Step[] | null): Part[] {
     const parts: Part[] = [];
+    let n = 0;
     for (const step of steps ?? []) {
       if (step.kind === 'thinking') {
-        if (step.text.trim()) parts.push({ kind: 'thinking', text: step.text });
+        if (step.text.trim()) parts.push({ kind: 'thinking', text: step.text, n: n++ });
         continue;
       }
       if (step.kind === 'note' || !step.id) continue;
@@ -464,6 +466,34 @@
       else parts.push({ kind: 'tools', calls: [call] });
     }
     return parts;
+  }
+
+  function runKey(entry: TranscriptItem): string {
+    return entry.run_id == null ? `s${entry.seq}` : String(entry.run_id);
+  }
+
+  const thoughtBase = $derived.by(() => {
+    const counts = new Map<string, number>();
+    const out = new Map<TranscriptItem, number>();
+    for (const entry of items) {
+      if (entry.kind !== 'activity') continue;
+      const n = counts.get(runKey(entry)) ?? 0;
+      out.set(entry, n);
+      counts.set(runKey(entry), n + activity(entry.steps).filter((part) => part.kind === 'thinking').length);
+    }
+    return out;
+  });
+
+  function settledThought(entry: TranscriptItem, n: number): string {
+    return `${runKey(entry)}:${(thoughtBase.get(entry) ?? 0) + n}`;
+  }
+
+  function streamThought(stream: RunStream, index: number): string {
+    let n = 0;
+    for (const segment of stream.segments.slice(0, index)) {
+      if (segment.kind === 'thinking' && segment.text.trim()) n++;
+    }
+    return `${stream.run}:${n}`;
   }
 
   function proposalFor(run: number): TranscriptItem | undefined {
@@ -744,9 +774,10 @@
 {#snippet thought(
     text: string,
     live: boolean,
+    key: string,
   )}
   <li class="turn">
-    <details class="thinking" open={live}>
+    <details class="thinking" open={thoughtOpen(key, live)} ontoggle={(event) => onThoughtToggle(event, key, live)}>
       <summary class="thinking__summary">Thinking</summary>
       <div class="thinking__body"><Markdown {text} /></div>
     </details>
@@ -836,7 +867,7 @@
         {:else if entry.kind === 'activity'}
           {#each activity(entry.steps) as part, index (index)}
             {#if part.kind === 'thinking'}
-              {@render thought(part.text, false)}
+              {@render thought(part.text, false, settledThought(entry, part.n))}
             {:else}
               <li class="turn">{@render tools(part.calls)}</li>
             {/if}
@@ -884,7 +915,11 @@
               {@render bubble(segment.text)}
             {/if}
           {:else if segment.kind === 'thinking'}
-            {@render thought(segment.text, stream.active && index === stream.segments.length - 1)}
+            {@render thought(
+              segment.text,
+              stream.active && index === stream.segments.length - 1,
+              streamThought(stream, index),
+            )}
           {:else if segment.kind === 'text'}
             <li class="turn"><Markdown text={segment.text} /></li>
           {:else}

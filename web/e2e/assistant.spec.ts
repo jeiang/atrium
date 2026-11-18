@@ -241,26 +241,17 @@ test.describe('approval cards on a desktop', () => {
     await expect(trigger).toBeFocused();
   });
 
-  test('a send counts down for 10 seconds with Undo before it acts', async ({ page }) => {
-    test.setTimeout(45_000);
+  test('a send acts at once, with no countdown', async ({ page }) => {
     await gotoGallery(page);
     const card = await showCard(page, 'a-draft');
     const send = card.getByRole('button', { name: 'Send email to Ilse' });
     await press(page, send, 50);
     await expect(send).not.toHaveAttribute('aria-disabled');
+    await expect(log(page)).toHaveText('No decisions yet');
     await press(page, send, 50);
-    const pending = card.locator('.receipt[data-tone="pending"]');
-    await expect(pending).toContainText(/Sending to Ilse de Wit in (10|9) s/);
-    await pending.getByRole('button', { name: 'Undo', exact: true }).click();
-    await expect(pending).toHaveCount(0);
-    await expect(log(page)).toHaveText('No decisions yet');
-
-    await expect(card.locator('.approval__row')).not.toHaveAttribute('inert');
-    await card.getByRole('button', { name: 'Send email to Ilse' }).click();
-    await page.waitForTimeout(6000);
-    await expect(log(page)).toHaveText('No decisions yet');
-    await expect(log(page)).toHaveText('approve a-draft', { timeout: 8000 });
+    await expect(log(page)).toHaveText('approve a-draft', { timeout: 2_000 });
     await expect(card.locator('.receipt')).toContainText('Sent to Ilse de Wit');
+    await expect(card.getByRole('button', { name: 'Undo', exact: true })).toHaveCount(0);
   });
 
   test('unknown kinds, decisions made elsewhere and blocked cards still say what they are', async ({ page }) => {

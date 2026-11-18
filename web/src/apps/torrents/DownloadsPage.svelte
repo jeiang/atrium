@@ -26,13 +26,10 @@
   import {
     controlToast,
     handleControl,
-    held,
-    holdRemoval,
     type Problem,
     phaseOf,
     problemOf,
     refreshTorrents,
-    undoRemoval,
     useTorrents,
   } from './torrents.svelte';
   import './torrents.css';
@@ -130,13 +127,6 @@
     }
   }
 
-  function onRemoveFilesHeld(): void {
-    const torrent = removing;
-    if (!torrent) return;
-    open = false;
-    holdRemoval(torrent, client, (problem) => (problems[torrent.hash] = problem));
-  }
-
   function onFiles(torrent: MediaTorrent): void {
     filesHash = torrent.hash;
     filesFallback = torrent;
@@ -206,11 +196,9 @@
                 {torrent}
                 {offline}
                 pending={pending[torrent.hash]}
-                hold={held[torrent.hash]}
                 problem={problems[torrent.hash]}
                 oncontrol={(action) => void onControl(torrent, action)}
                 onremove={() => onRemove(torrent)}
-                onundo={() => undoRemoval(torrent)}
                 onfiles={() => onFiles(torrent)}
               />
             </li>
@@ -247,7 +235,7 @@
         disabled={sending || offline}
         onconfirm={() => void onRemoveFilesNow()}
         onreveal={() => undefined}
-        onsend={touch ? () => void onRemoveFilesNow() : onRemoveFilesHeld}
+        onsend={() => void onRemoveFilesNow()}
       />
     {:else}
       <Button

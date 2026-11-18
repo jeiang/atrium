@@ -54,7 +54,6 @@ const commands: Command[] = [
     method: 'POST',
     path: '/drafts/\\d+/send',
     open: '/apps/mail',
-    clock: true,
     press: async (page) => {
       await page.getByRole('button', { name: 'New email' }).click();
       const compose = page.locator('dialog[open]').first();
@@ -62,8 +61,6 @@ const commands: Command[] = [
       await compose.getByLabel('Subject').fill('Bean seeds');
       await compose.getByLabel('Message').fill('I will bring two jars.');
       await compose.getByRole('button', { name: 'Send', exact: true }).click();
-      await expect(compose.locator('.receipt')).toContainText('in 10 s');
-      await page.clock.runFor(10_500);
     },
     unknown: 'send_outcome_unknown',
     choices: ['Mark as sent'],
