@@ -376,7 +376,7 @@ func (s *Service) execute(ctx context.Context, runID int64, settled func(context
 	client, err := s.ResolveClient(ctx)
 	var nc config.NotConfigured
 	if errors.As(err, &nc) {
-		watched := progress.Watched(runID)
+		watched := progress.Watched(s.DB.Write, runID)
 		if err := journal.FinishRun(ctx, s.DB.Write, runID, journal.Failed, s.now(), new(nc.Error())); err != nil {
 			return nil, err
 		}

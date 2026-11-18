@@ -25,7 +25,7 @@ no default; a `null` default is not a usable credential or listener value.
 | `port` | port | `8480` | Public listener port. |
 | `host` | TOML-compatible attribute set | `{}` | Read-only host requirements rendered to `ATRIUM_HOST_CONFIG`. Unknown, retired, operator-only, or compiled tuning keys fail evaluation with their destination. Module flags are host-declarable exceptions among operator settings. |
 | `connections` | attribute set of connection submodules | `{}` | Host-owned connections keyed by id; fields are below. |
-| `accounts` | attribute set of mail account submodules | `{}` | Generates `mail/<id>` connections with their capabilities and, for an account with `passwordFile`, its password credential; fields are below. `mailAccounts` is the old name: it still evaluates for one release with a warning and the same output, setting both fails evaluation, and it is removed in the release after the one that adds `accounts`. |
+| `accounts` | attribute set of mail account submodules | `{}` | Generates `mail/<id>` connections with their capabilities and, for an account with `passwordFile`, its password credential; fields are below. |
 | `secretFiles` | attribute set of strings | `{}` | App signing key file paths, delivered through `LoadCredential`. Only `action_links.action_link_key` and `media.link_key` are accepted. |
 | `database.keyFile` | null or string | `null` | Absolute host key-file path, delivered as the `db-key` credential. |
 | `initialTimezone` | null or string | `config.time.timeZone` | Seeds `tz` only when no operator value exists. |
@@ -360,9 +360,10 @@ the `atrium-sync`, `atrium-scan`, `atrium-notion-sync`, `atrium-dav-sync`, and
 the units that serve the embedding endpoint in `embeddingServerUnits` and
 retarget other references to them. Use `unitNames` for current units.
 
-The removed `web.local.enable`/`.port`, `modelServerUnits`, and
-`backup.onCalendar` options have explicit evaluation errors naming
-`web.emergency.*`, `embeddingServerUnits`, and `backup.schedule` respectively.
+The removed `web.local.enable`/`.port`, `modelServerUnits`,
+`backup.onCalendar`, and `mailAccounts` options have explicit evaluation errors
+naming `web.emergency.*`, `embeddingServerUnits`, `backup.schedule`, and
+`accounts` respectively.
 The removed `mediaAgent.ffmpegPackage` option has an evaluation error; the
 agent no longer runs ffmpeg.
 There is no `settings`, `mediaRoot`, or `web.local.port` input in this option

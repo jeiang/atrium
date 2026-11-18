@@ -72,5 +72,5 @@ func (s *Service) RunState(ctx context.Context, runID int64) (string, bool, erro
 }
 
 func (s *Service) ServeStream(ctx context.Context, w http.ResponseWriter, stream StreamSpec, live StreamLive) error {
-	return progress.Serve(ctx, w, s.db.Read, stream, live)
+	return progress.Serve(ctx, w, s.db, stream, live)
 }

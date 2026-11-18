@@ -354,7 +354,7 @@ claims about the running application. Operator contracts are in
   id and an iCloud or Gmail preset, owned by the Mail app
   (`internal/apps/mail/accounts` holds the `mail_accounts` rows), declared as `mail/<id>` connections by the
   host (`services.atrium.accounts`, with a `capabilities` list; the old
-  name `mailAccounts` warns for one release) or added, tested and removed on the
+  name `mailAccounts` is removed and fails evaluation) or added, tested and removed on the
   Mail settings page (stored in the database, password only on an encrypted
   database). A host account's password comes from its `passwordFile`: both
   UIs show it as set in host configuration with no entry box and refuse a

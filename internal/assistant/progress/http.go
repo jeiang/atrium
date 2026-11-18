@@ -62,7 +62,8 @@ type Live struct {
 	State    func(context.Context) (string, bool, error)
 }
 
-func Serve(ctx context.Context, w http.ResponseWriter, q db.Querier, s Stream, live Live) error {
+func Serve(ctx context.Context, w http.ResponseWriter, d *db.DB, s Stream, live Live) error {
+	q := d.Read
 	h := w.Header()
 	h.Set("Content-Type", "text/event-stream; charset=utf-8")
 	h.Set("Cache-Control", "private, no-store, no-transform")
@@ -81,7 +82,7 @@ func Serve(ctx context.Context, w http.ResponseWriter, q db.Querier, s Stream, l
 	}
 	wake, unsubscribe := Subscribe()
 	defer unsubscribe()
-	transient, unsubscribeLive := SubscribeLive(s.RunID)
+	transient, unsubscribeLive := SubscribeLive(d.Write, s.RunID)
 	defer unsubscribeLive()
 	var pending []string
 	if err := write("retry: 1000\n\n"); err != nil {

@@ -58,43 +58,49 @@ func ancestors(ctx context.Context, q db.Querier, runID int64) ([]int64, error) 
 
 const liveBuffer = 32
 
+type liveKey struct {
+	db     *sql.DB
+	stream int64
+}
+
 var liveListeners = struct {
 	sync.Mutex
-	streams map[int64]map[chan string]struct{}
-}{streams: make(map[int64]map[chan string]struct{})}
+	streams map[liveKey]map[chan string]struct{}
+}{streams: make(map[liveKey]map[chan string]struct{})}
 
-func SubscribeLive(streamID int64) (<-chan string, func()) {
+func SubscribeLive(writer *sql.DB, streamID int64) (<-chan string, func()) {
+	key := liveKey{writer, streamID}
 	ch := make(chan string, liveBuffer)
 	liveListeners.Lock()
-	if liveListeners.streams[streamID] == nil {
-		liveListeners.streams[streamID] = make(map[chan string]struct{})
+	if liveListeners.streams[key] == nil {
+		liveListeners.streams[key] = make(map[chan string]struct{})
 	}
-	liveListeners.streams[streamID][ch] = struct{}{}
+	liveListeners.streams[key][ch] = struct{}{}
 	liveListeners.Unlock()
 	return ch, func() {
 		liveListeners.Lock()
 		defer liveListeners.Unlock()
-		delete(liveListeners.streams[streamID], ch)
-		if len(liveListeners.streams[streamID]) == 0 {
-			delete(liveListeners.streams, streamID)
+		delete(liveListeners.streams[key], ch)
+		if len(liveListeners.streams[key]) == 0 {
+			delete(liveListeners.streams, key)
 		}
 	}
 }
 
-func Watched(streamID int64) bool {
+func Watched(writer *sql.DB, streamID int64) bool {
 	liveListeners.Lock()
 	defer liveListeners.Unlock()
-	return len(liveListeners.streams[streamID]) > 0
+	return len(liveListeners.streams[liveKey{writer, streamID}]) > 0
 }
 
-func Publish(ctx context.Context, q db.Querier, runID int64, kind string, data map[string]any) error {
+func Publish(ctx context.Context, writer *sql.DB, runID int64, kind string, data map[string]any) error {
 	liveListeners.Lock()
 	idle := len(liveListeners.streams) == 0
 	liveListeners.Unlock()
 	if idle {
 		return nil
 	}
-	ids, err := ancestors(ctx, q, runID)
+	ids, err := ancestors(ctx, writer, runID)
 	if err != nil {
 		return err
 	}
@@ -106,7 +112,7 @@ func Publish(ctx context.Context, q db.Querier, runID int64, kind string, data m
 	liveListeners.Lock()
 	defer liveListeners.Unlock()
 	for _, id := range ids {
-		for ch := range liveListeners.streams[id] {
+		for ch := range liveListeners.streams[liveKey{writer, id}] {
 			select {
 			case ch <- frame:
 			default:
