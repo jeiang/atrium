@@ -188,10 +188,10 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				})
 			}, Nav: []web.NavItem{
 				{Hub: true, Label: "Mail", Icon: "mail", Page: "mail_app", Order: 25},
-				{Section: "mail_app", Label: "Decisions", URL: "/triage", Icon: "route", Page: "triage", Order: 10},
-				{Section: "mail_app", Label: "Rules", URL: "/rules", Icon: "scroll-text", Page: "rules", Order: 20},
+				{Section: "mail_app", Label: "Decisions", URL: "/apps/mail/decisions", Icon: "route", Page: "triage", Order: 10},
+				{Section: "mail_app", Label: "Rules", URL: "/apps/mail/rules", Icon: "scroll-text", Page: "rules", Order: 20},
 				{Label: "Mail", URL: "/settings/mail", Page: "mail", Settings: true, Primary: true, Order: 15},
-				{Section: "mail_app", Label: "Status", URL: "/live", Icon: "lock", Page: "mail_status", Order: 30},
+				{Section: "mail_app", Label: "Status", URL: "/apps/mail/mode", Icon: "lock", Page: "mail_status", Order: 30},
 			}},
 		},
 		Groups:   SettingGroups(),

@@ -23,8 +23,7 @@
     "orval.config.ts",
     "playwright.config.ts",
     "playwright.live.config.ts",
-    "e2e/**/*.ts",
-    "e2e-live/**/*.ts"
+    "e2e/**/*.ts"
   ],
   "exclude": ["src/worker"]
 }

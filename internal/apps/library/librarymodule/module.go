@@ -92,9 +92,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			},
 			Public: publicCheck,
 			Nav: []web.NavItem{
-				{Section: "apps", Label: "Downloads", URL: "/apps/media/downloads", Icon: "download", Page: "media_downloads", Order: 10},
-				{Section: "apps", Label: "Channels", URL: "/apps/media/channels", Icon: "tv", Page: "media_channels", Order: 20},
-				{Section: "apps", Label: "Library", URL: "/apps/media/library", Icon: "film", Page: "media_library", Order: 30},
+				{Section: "apps", Label: "Downloads", URL: "/apps/torrents", Icon: "download", Page: "media_downloads", Order: 10},
+				{Section: "apps", Label: "Channels", URL: "/apps/media/following", Icon: "tv", Page: "media_channels", Order: 20},
+				{Section: "apps", Label: "Library", URL: "/apps/media", Icon: "film", Page: "media_library", Order: 30},
 			},
 		}},
 		Groups:   SettingGroups(),

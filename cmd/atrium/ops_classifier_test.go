@@ -308,7 +308,7 @@ func TestOpsMonthlyBudgetRefusalDefersAndRaisesAttention(t *testing.T) {
 		t.Errorf("sampler status = %q, want skipped_budget", status)
 	}
 	items := classificationItems(t, f, d)
-	if len(items) != 1 || items[0].Kind != "classification_budget" || !strings.Contains(items[0].Detail, "/settings/usage") ||
+	if len(items) != 1 || items[0].Kind != "classification_budget" || !strings.Contains(items[0].Detail, "/assistant/spend") ||
 		!strings.Contains(items[0].Detail, "ops_condenser") {
 		t.Fatalf("attention = %+v, want one classification_budget item linking /settings/usage", items)
 	}

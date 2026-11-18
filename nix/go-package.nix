@@ -40,6 +40,8 @@ in
       ${goSrc.licenseCheck}
       ${goSrc.licenseReport "internal/about/THIRD_PARTY_NOTICES"}
       ${sqlcipherLib.appendNotices "internal/about/THIRD_PARTY_NOTICES"}
+      cat internal/web/app/dist/third-party-notices.txt >>internal/about/THIRD_PARTY_NOTICES
+      rm internal/web/app/dist/third-party-notices.txt
     '';
 
     postInstall = ''
@@ -52,6 +54,7 @@ in
       runHook preInstallCheck
       [ "$($out/bin/atrium --version)" = "atrium ${finalAttrs.version}" ]
       grep -qa sqlcipher_page_cipher $out/bin/atrium
+      grep -qa "@tanstack/svelte-query" $out/bin/atrium
       runHook postInstallCheck
     '';
 

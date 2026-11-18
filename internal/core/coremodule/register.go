@@ -144,7 +144,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		AccountCredential: connections.AccountCredential(),
 		Pages: []web.Page{
 			{Module: about.Module, Nav: []web.NavItem{
-				{Label: "About", URL: "/about", Icon: "file-text", Page: "about", Footer: true, Order: 10},
+				{Label: "About", URL: "/settings/general", Icon: "file-text", Page: "about", Footer: true, Order: 10},
 				{Group: "Instance", Label: "Usage", URL: usageURL, Page: "usage", Settings: true, Order: 60},
 				{Label: "Connections", URL: connections.Screen, Page: "connections", Settings: true, Order: 30},
 			}},
@@ -160,14 +160,13 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 					return err
 				})
 			}, Nav: []web.NavItem{
-				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
-				{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
+				{Section: "review", Label: "Needs you", URL: "/inbox", Icon: "list-checks", Page: "review_needs", Order: 10},
 			}},
 			{Nav: []web.NavItem{
 				{Hub: true, Label: "Review", Icon: "inbox", Page: "review", Badge: true, Order: 10},
 				{Hub: true, Label: "Library", Icon: "library", Page: "library", Order: 20},
 				{Hub: true, Label: "Apps", Icon: "layout-grid", Page: "apps", Order: 30},
-				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
+				{Label: "Sign-in", URL: "/settings/sign-in", Page: "auth", Settings: true, Primary: true, Order: 50},
 			}, OIDC: oidcconn.Source()},
 			{Module: func(_ chi.Router, d *web.Deps) {
 				authRoutes(d)
@@ -211,9 +210,9 @@ func AttentionSources() []attention.Source {
 
 func SettingGroups() []settings.Group {
 	return []settings.Group{
-		{Name: "sessions", Title: "Sessions", Page: "/settings/auth", Keys: []string{oidc.KeyIdleDays, oidc.KeyMaxDays}},
+		{Name: "sessions", Title: "Sessions", Page: "/settings/sign-in", Keys: []string{oidc.KeyIdleDays, oidc.KeyMaxDays}},
 		{Name: "budget", Title: "Monthly budget", Page: usageURL, Keys: []string{inference.BudgetKey, inference.ChatKey, inference.UnattendedKey}},
-		{Name: "general", Title: "General", Keys: []string{config.KeyTZ}},
+		{Name: "general", Title: "General", Page: "/settings/general", Keys: []string{config.KeyTZ}},
 	}
 }
 
@@ -224,7 +223,7 @@ const (
 	embedStepTimeout = 20 * time.Minute
 	recoverInterval  = time.Minute
 	recoveryStall    = 5 * time.Minute
-	usageURL         = "/settings/usage"
+	usageURL         = "/assistant/spend"
 )
 
 func recoverProposals(ctx context.Context, d *db.DB, _ config.Config) error {

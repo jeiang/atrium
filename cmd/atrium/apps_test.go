@@ -103,7 +103,7 @@ func TestOperatorSwitchesAppsFromTheManifest(t *testing.T) {
 	if mediaApp["enabled"] != true || mediaApp["state"] != "enabled" || mediaApp["switchable"] != true || mediaApp["name"] != "Library" {
 		t.Fatalf("media entry: %v", mediaApp)
 	}
-	if nav, _ := json.Marshal(mediaApp["nav"]); !strings.Contains(string(nav), "/apps/media/channels") {
+	if nav, _ := json.Marshal(mediaApp["nav"]); !strings.Contains(string(nav), "/apps/media/following") {
 		t.Fatalf("media nav: %s", nav)
 	}
 	if needs, _ := json.Marshal(mediaApp["needs"]); !strings.Contains(string(needs), `"module":"media"`) {
