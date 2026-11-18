@@ -11,8 +11,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/unit"
 )
 
 func loopRequests(t *testing.T, requests []anthropictest.Request) []map[string]any {
@@ -30,6 +32,17 @@ func loopRequests(t *testing.T, requests []anthropictest.Request) []map[string]a
 		out = append(out, body)
 	}
 	return out
+}
+
+func pauseMemoryWork(t *testing.T, s *apiSite, token, dir string) {
+	t.Helper()
+	var id int64
+	if err := asstDB(t, dir).Read.QueryRow("SELECT id FROM jobs WHERE declaration_key = ?", unit.Assistant+"/"+assistant.MemoryWorkName).Scan(&id); err != nil {
+		t.Fatalf("memory work job: %v", err)
+	}
+	if paused := s.do(http.MethodPut, "/api/v1/schedules/"+strconv.FormatInt(id, 10)+"/enabled", token, map[string]any{"enabled": false}); paused.status != http.StatusOK {
+		t.Fatalf("pause memory work: %d %s", paused.status, paused.body)
+	}
 }
 
 func startThread(t *testing.T, s *apiSite, token string, body map[string]any) int64 {
@@ -92,6 +105,7 @@ func TestRunStopLeavesATranscriptItemAndContinueStartsANewRun(t *testing.T) {
 	warm(t, api)
 	s := startAPISite(t, dir, api)
 	owner := s.token("owner")
+	pauseMemoryWork(t, s, owner, dir)
 
 	api.Push(asstProbes("s", loop.TuningMaxStepsChat, true)...)
 	id := startThread(t, s, owner, map[string]any{"text": "sort the receipts", "web_search": false})
@@ -148,6 +162,7 @@ func TestChatRequestsCarryContextEditsAndReplayCompaction(t *testing.T) {
 	warm(t, api)
 	s := startAPISite(t, dir, api)
 	owner := s.token("owner")
+	pauseMemoryWork(t, s, owner, dir)
 
 	compaction := anthropictest.Compaction("Summary of the earlier turns.", "opaque-compaction-1")
 	api.Push(
