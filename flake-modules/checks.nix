@@ -105,19 +105,15 @@
       login = "operator@icloud.example";
       passwordFile = "/run/secrets/icloud-app-password";
     };
-    accountsRenamed = let
+    accountsRender = let
       withAccounts = atrium: host ({web.allowedHost = "atrium.example.org";} // atrium);
-      renamed = withAccounts {accounts.icloud = icloudAccount;};
-      legacy = withAccounts {mailAccounts.icloud = icloudAccount;};
+      declared = withAccounts {accounts.icloud = icloudAccount;};
       loads = system: builtins.filter (lib.hasPrefix "LoadCredential=") (lib.splitString "\n" system.config.systemd.units."atrium.service".text);
       conn = system: system.config.services.atrium.renderedHost.connections."mail/icloud";
-      renameWarned = system: builtins.any (lib.hasInfix "services.atrium.mailAccounts is renamed to services.atrium.accounts") system.config.warnings;
     in
-      assert failing renamed == [] && failing legacy == [];
-      assert renameWarned legacy && !(renameWarned renamed);
-      assert renamed.config.services.atrium.renderedHost == legacy.config.services.atrium.renderedHost;
-      assert loads renamed == loads legacy && builtins.elem "LoadCredential=mail-account-icloud:/run/secrets/icloud-app-password" (loads renamed);
-      assert conn renamed
+      assert failing declared == [];
+      assert builtins.elem "LoadCredential=mail-account-icloud:/run/secrets/icloud-app-password" (loads declared);
+      assert conn declared
       == {
         kind = "mail";
         label = "icloud";
@@ -131,10 +127,7 @@
         credential_files."mail/icloud/password" = "\${CREDENTIALS_DIRECTORY}/mail-account-icloud";
       };
       assert (conn (withAccounts {accounts.icloud = icloudAccount // {capabilities = ["imap"];};})).capabilities == ["imap"];
-      assert refusedWith "services.atrium.mailAccounts and services.atrium.accounts are both set" {
-        accounts.icloud = icloudAccount;
-        mailAccounts.home = icloudAccount;
-      }; true;
+      assert refusedWith "services.atrium.mailAccounts" {mailAccounts.home = icloudAccount;}; true;
     exampleEvaluates = assert failing nixos == [] && failing defaults == []; true;
     hostKeyRefused = assert refusedWith "unknown key core.not_a_key" {host.core.not_a_key = true;}; true;
     operatorKeyRefused = assert refusedWith "atrium settings set monthly_budget_usd" {host.assistant.monthly_budget_usd = 1;}; true;
@@ -624,7 +617,7 @@
           touch $out
         '';
 
-        module = assert exampleEvaluates && accountsRenamed && defaultAuth && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && chatEndpointRefused && embeddingDependencyKept && connectionRefused && notionConnectionRefused && mediaAgentRefused && mainWithoutMedia && mediaAgentUnit && emergencyOptionsRefused && backupOptionsRefused && opsPortRefused && credentialsMatch && backupInServe && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig && deployCheck;
+        module = assert exampleEvaluates && accountsRender && defaultAuth && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && chatEndpointRefused && embeddingDependencyKept && connectionRefused && notionConnectionRefused && mediaAgentRefused && mainWithoutMedia && mediaAgentUnit && emergencyOptionsRefused && backupOptionsRefused && opsPortRefused && credentialsMatch && backupInServe && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig && deployCheck;
           pkgs.linkFarm "atrium-units" (map (name: {
               inherit name;
               path = unit name;

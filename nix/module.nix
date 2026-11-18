@@ -44,7 +44,7 @@
   };
 
   accountCredential = id: "mail-account-${id}";
-  accounts = cfg.accounts // cfg.mailAccounts;
+  inherit (cfg) accounts;
   accountType = types.submodule {
     options = {
       label = mkOption {
@@ -570,6 +570,7 @@ in {
     (lib.mkRemovedOptionModule ["services" "atrium" "web" "local" "port"] "Use services.atrium.web.emergency.port; the emergency listener runs in atrium.service.")
     (lib.mkRemovedOptionModule ["services" "atrium" "mediaAgent" "ffmpegPackage"] "the media agent no longer runs ffmpeg; remove the option.")
     (lib.mkRemovedOptionModule ["services" "atrium" "modelServerUnits"] "use services.atrium.embeddingServerUnits for the service/embedding server; the local chat server is retired and mail classification uses the service/anthropic connection under monthly_budget_usd")
+    (lib.mkRemovedOptionModule ["services" "atrium" "mailAccounts"] "Use services.atrium.accounts with the same account entries.")
   ];
 
   options.services.atrium = {
@@ -674,13 +675,6 @@ in {
         };
       };
       description = "Mail accounts by id, rendered as mail/<id> connections with their capabilities and, when passwordFile is set, a host-file password credential. The id keys the account's cached mail; keep it stable.";
-    };
-
-    mailAccounts = mkOption {
-      type = types.attrsOf accountType;
-      default = {};
-      visible = false;
-      description = "Old name of services.atrium.accounts, kept for one release with an evaluation warning; setting both is an error.";
     };
 
     secretFiles = mkOption {
@@ -973,12 +967,7 @@ in {
   };
 
   config = mkIf cfg.enable {
-    warnings = lib.optional (cfg.mailAccounts != {}) "services.atrium.mailAccounts is renamed to services.atrium.accounts and will be removed in the next release; move the same account entries to services.atrium.accounts.";
     assertions = [
-      {
-        assertion = cfg.mailAccounts == {} || cfg.accounts == {};
-        message = "services.atrium.mailAccounts and services.atrium.accounts are both set; mailAccounts is the old name of accounts, so move every entry to services.atrium.accounts and remove mailAccounts.";
-      }
       {
         assertion = hostErrors == [];
         message = lib.concatStringsSep "; " hostErrors;
