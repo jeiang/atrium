@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/pem"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -176,11 +177,6 @@ func TestAFailingConnectionIsNotRecheckedByBootOrRuntimeFailuresInsideItsBackoff
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHostConfig(t, dir, "http://qbittorrent.invalid", tmdb.URL+"/3", images.URL, eztv.URL+"/api/get-torrents"))
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
-	waitFor(t, func() bool {
-		state := connectionState(t, dir, "service/tmdb")
-		return state != "" && state != "untested"
-	})
-
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	observed := func() int {
 		t.Helper()
@@ -190,6 +186,53 @@ func TestAFailingConnectionIsNotRecheckedByBootOrRuntimeFailuresInsideItsBackoff
 		}
 		return rows
 	}
+	until := func(what string, ok func() bool) {
+		t.Helper()
+		started := time.Now()
+		for deadline := started.Add(60 * time.Second); !ok(); time.Sleep(25 * time.Millisecond) {
+			if time.Now().Before(deadline) {
+				continue
+			}
+			var state, reason string
+			var checked, lastOK, reauth *float64
+			if err := d.Read.QueryRow("SELECT state, reason, checked_at, last_ok_at, reauth_at FROM connections WHERE id = 'service/tmdb'").
+				Scan(&state, &reason, &checked, &lastOK, &reauth); err != nil {
+				t.Fatalf("timed out after %s waiting for %s; connection row: %v", time.Since(started), what, err)
+			}
+			at := func(v *float64) string {
+				if v == nil {
+					return "never"
+				}
+				return fmt.Sprintf("%s ago", time.Since(time.Unix(0, int64(*v*1e9))).Round(time.Second))
+			}
+			backoff := "none"
+			if (state == "failing" || state == "needs_reauth") && checked != nil {
+				since := lastOK
+				if state == "needs_reauth" && reauth != nil {
+					since = reauth
+				}
+				tier := time.Hour
+				if since != nil {
+					switch failing := time.Duration((*checked - *since) * float64(time.Second)); {
+					case failing >= 6*time.Hour:
+						tier = 12 * time.Hour
+					case failing >= 3*time.Hour:
+						tier = 6 * time.Hour
+					case failing >= time.Hour:
+						tier = 3 * time.Hour
+					}
+				}
+				backoff = fmt.Sprintf("%s tier, until %s", tier, time.Until(time.Unix(0, int64(*checked*1e9)).Add(tier)).Round(time.Second))
+			}
+			t.Fatalf("timed out after %s waiting for %s: tmdb state %q reason %q, checked %s, last ok %s, reauth %s, backoff %s; %d TMDB requests, %d observe-health rows",
+				time.Since(started).Round(time.Millisecond), what, state, reason, at(checked), at(lastOK), at(reauth), backoff, calls.Load(), observed())
+		}
+	}
+	until("the boot check to leave service/tmdb untested", func() bool {
+		state := connectionState(t, dir, "service/tmdb")
+		return state != "" && state != "untested"
+	})
+
 	before := observed()
 	now := time.Now()
 	if _, err := d.Write.Exec("UPDATE connections SET state = 'failing', reason = 'seeded', checked_at = ?, last_ok_at = ? WHERE id = 'service/tmdb'",
@@ -208,7 +251,7 @@ func TestAFailingConnectionIsNotRecheckedByBootOrRuntimeFailuresInsideItsBackoff
 		t.Fatal(err)
 	}
 	c.do(http.MethodGet, "/web/v1/media/shows?q=Lanterns+after", nil)
-	waitFor(t, func() bool { return observed() > before })
+	until("an observe-health recheck for the refused request after the 1 hour backoff", func() bool { return observed() > before })
 	if rows := observed() - before; rows != 1 {
 		t.Fatalf("observe-health rows after a boot and a refused request inside the backoff and one request after it: %d, want 1", rows)
 	}
@@ -227,7 +270,7 @@ func TestAFailingConnectionIsNotRecheckedByBootOrRuntimeFailuresInsideItsBackoff
 		t.Fatal(err)
 	}
 	c.do(http.MethodGet, "/web/v1/media/shows?q=Lanterns+later", nil)
-	waitFor(t, func() bool { return observed() > before })
+	until("an observe-health recheck for the refused request after the 3 hour backoff", func() bool { return observed() > before })
 	if rows := observed() - before; rows != 1 {
 		t.Fatalf("observe-health rows after a refused request inside a 3 hour backoff and one after it: %d, want 1", rows)
 	}
@@ -238,7 +281,7 @@ func TestAFailingConnectionIsNotRecheckedByBootOrRuntimeFailuresInsideItsBackoff
 		t.Fatalf("show search after TMDB came back: %d %.300s", got.status, got.body)
 	}
 	sent := calls.Load()
-	waitFor(t, func() bool { return connectionState(t, dir, "service/tmdb") == "ok" })
+	until("the successful search to mark service/tmdb ok without a check", func() bool { return connectionState(t, dir, "service/tmdb") == "ok" })
 	if extra := calls.Load() - sent; extra != 0 || observed() != before {
 		t.Fatalf("recovery sent %d check requests and %d observe-health rows, want none", extra, observed()-before)
 	}
