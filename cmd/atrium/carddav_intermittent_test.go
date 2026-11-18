@@ -324,8 +324,13 @@ func TestADAVRefusalHoldSurvivesTheHostDroppingAndDeclaringTheConnectionAgain(t 
 }
 
 func TestAChallengeLessCardDAVRefusalFailsWithoutBlamingThePasswordAndLeavesCalDAVRunning(t *testing.T) {
-	dir, dav := partitionedICloud(t)
-	dav.set(func(p *partitionedDAV) { p.rootRefuses = true })
+	requireCipher(t)
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	dir, srv := davFixture(t)
+	sharedICloudHost(t, dir, davPassword)
+	t.Setenv(davmirror.CalDAVEnv, srv.URL+"/")
+	t.Setenv(davmirror.CardDAVEnv, srv.URL+"/")
+	srv.RefuseCards.Store(true)
 	view := testICloudConnection(t)
 	card, cardReason := capabilityResult(view, davmirror.CapabilityCardDAV)
 	if card != "failing" || !strings.Contains(cardReason, "iCloud refused the root request on the configured host (HTTP 401, no WWW-Authenticate challenge) without asking for a password again") ||
@@ -342,7 +347,7 @@ func TestAChallengeLessCardDAVRefusalFailsWithoutBlamingThePasswordAndLeavesCalD
 		t.Fatalf("the carddav refusal stored %+v, want one refusal held", hold)
 	}
 
-	dav.drain()
+	cards := srv.CardRequests.Load()
 	if got := runApp(t, "contacts", "sync"); got.code == cli.ExitOK || !strings.Contains(got.stderr, "skipped, backing off until ") {
 		t.Errorf("contacts sync during the carddav hold = %d %q %q, want the skip", got.code, got.stdout, got.stderr)
 	}
@@ -350,8 +355,8 @@ func TestAChallengeLessCardDAVRefusalFailsWithoutBlamingThePasswordAndLeavesCalD
 		t.Errorf("calendar sync during the carddav hold = %d %q %q, want it to run", got.code, got.stdout, got.stderr)
 	}
 	runApp(t, "connections", "check")
-	if got := dav.drain(); len(got) != 0 {
-		t.Errorf("syncs and a check during the carddav hold sent carddav requests %q", got)
+	if got := srv.CardRequests.Load() - cards; got != 0 {
+		t.Errorf("syncs and a check during the carddav hold sent %d carddav requests", got)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	var calState string

@@ -27,6 +27,8 @@ type Server struct {
 	User         string
 	Password     string
 	Unavailable  atomic.Bool
+	RefuseCards  atomic.Bool
+	CardRequests atomic.Int64
 }
 
 const header = `<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav">`
@@ -82,10 +84,18 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if user, pass, ok := r.BasicAuth(); !ok || user != s.User || pass != s.Password {
+		w.Header().Set("WWW-Authenticate", `Basic realm="caldavtest"`)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 	body, _ := io.ReadAll(r.Body)
+	if strings.Contains(string(body), "urn:ietf:params:xml:ns:carddav") {
+		s.CardRequests.Add(1)
+		if s.RefuseCards.Load() {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch r.Method {
