@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -118,9 +119,13 @@ func TestRunEventsPersistAcrossRuns(t *testing.T) {
 	s := newStreamSite(t)
 	s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("first stream")))
 	threadID, runID := s.start("first")
+	live, _ := s.events(s.token, threadID, runID, "")
+	if n := strings.Count(live, "event: complete\n"); n != 1 {
+		t.Fatalf("%d terminal events: %s", n, live)
+	}
 	first, _ := s.events(s.token, threadID, runID, "")
-	if n := strings.Count(first, "event: complete\n"); n != 1 {
-		t.Fatalf("%d terminal events: %s", n, first)
+	if !slices.Equal(frameIDs(first), frameIDs(live)) {
+		t.Fatalf("the finished stream replays other frames:\n%s\nlive:\n%s", first, live)
 	}
 	s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("second stream")))
 	sent := s.do(http.MethodPost, fmt.Sprintf("/api/v1/threads/%d/messages", threadID), s.token, map[string]any{"text": "second"})
