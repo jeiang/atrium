@@ -448,9 +448,28 @@ func TestAsstWebFetchRefusesUntypedAndNonPublicURLs(t *testing.T) {
 	}
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("w2", "web_fetch", map[string]any{"url": site.URL + "/page"})), asstReply("blocked"))
 	untyped, _ := startG5(w, "fetch the page I mentioned")
-	asstSettleThread(t, d, untyped)
-	if result := asstToolResult(t, d, untyped); !strings.Contains(result, "url is not allowed") {
-		t.Errorf("untyped fetch result %s", result)
+	if state := asstSettleThread(t, d, untyped); state != "done" {
+		t.Errorf("untyped loopback fetch left the run %q, want done with a refusal", state)
+	}
+	if result := asstToolResult(t, d, untyped); !strings.Contains(result, "non-public address") {
+		t.Errorf("untyped loopback fetch result %s, want a hard refusal", result)
+	}
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("w3", "web_fetch", map[string]any{"url": "https://example.com/page"})))
+	public, _ := startG5(w, "fetch the article I mentioned")
+	if state := asstSettleThread(t, d, public); state != "parked" {
+		t.Fatalf("untyped public fetch left the run %q, want parked", state)
+	}
+	var subject, rule string
+	if err := d.Read.QueryRow("SELECT json_extract(preview, '$.change.subject'), json_extract(preview, '$.change.rule') FROM proposals "+
+		"WHERE kind = 'permission' AND status = 'pending' AND json_extract(payload, '$.thread_id') = ?", public).Scan(&subject, &rule); err != nil {
+		t.Fatalf("untyped public fetch request: %v", err)
+	}
+	if subject != "https://example.com/page" || !strings.Contains(rule, "not typed by the operator") {
+		t.Errorf("untyped public fetch card: %q %q", subject, rule)
+	}
+	var asked int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM proposals WHERE kind = 'permission' AND json_extract(payload, '$.thread_id') IN (?, ?)", local, untyped).Scan(&asked); err != nil || asked != 0 {
+		t.Errorf("loopback fetches filed %d permission requests, %v, want none", asked, err)
 	}
 	if n := hits.Load(); n != 0 {
 		t.Errorf("the refused fetches reached the server %d times", n)

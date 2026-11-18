@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/memory"
+	"github.com/jeiang/atrium/internal/assistant/permission"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/subagents"
@@ -72,6 +73,7 @@ type Transcript struct {
 	BranchedFrom    *threads.Thread `json:"branched_from"`
 	Question        *Question       `json:"question"`
 	Held            *service.Held   `json:"held"`
+	Asks            []Ask           `json:"asks"`
 	History         bool            `json:"-"`
 	Earlier         int64           `json:"-"`
 	EarlierKeep     int             `json:"-"`
@@ -82,6 +84,11 @@ type Question struct {
 	RunID     int64  `json:"run_id"`
 	ToolUseID string `json:"tool_use_id"`
 	Text      string `json:"text"`
+}
+
+type Ask struct {
+	ProposalID int64 `json:"proposal_id"`
+	RunID      int64 `json:"run_id"`
 }
 
 type Queued struct {
@@ -323,7 +330,24 @@ func transcript(ctx context.Context, q db.Querier, in TranscriptInput) (Transcri
 		out.Items = out.Items[cut:]
 	}
 	out.History = hasHistory(ctx, q, in.ID)
-	return out, nil
+	out.Asks, err = asks(ctx, q, out.Active)
+	return out, err
+}
+
+func asks(ctx context.Context, q db.Querier, active *journal.Run) ([]Ask, error) {
+	if active == nil || active.State != journal.Parked {
+		return []Ask{}, nil
+	}
+	parked := 0.0
+	if active.EndedAt != nil {
+		parked = *active.EndedAt
+	}
+	ids, err := proposals.ForRunSince(ctx, q, permission.Kind, active.ID, parked)
+	out := make([]Ask, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, Ask{ProposalID: id, RunID: active.ID})
+	}
+	return out, err
 }
 
 func (s *Service) Transcript(ctx context.Context, in TranscriptInput) (application.Read[Transcript], error) {

@@ -20,3 +20,4 @@ api-path-removed-without-deprecation GET /mail/packages D17, R1.10; Packages is 
 api-path-removed-without-deprecation POST /mail/packages/poll D17, R1.10; Packages is its own opt-in app, moved to POST /packages/poll (P12.3, #943)
 api-path-removed-without-deprecation POST /mail/packages/{package_id}/dismiss D17, R1.10; Packages is its own opt-in app, moved to POST /packages/{package_id}/dismiss (P12.3, #943)
 api-path-removed-without-deprecation POST /calendar/candidates D33, R1.44; candidates are inbox proposals made by the mail pass (P12.2, #942)
+response-property-one-of-added GET /proposals/{proposal_id} operator decision 2026-11-18 (never blocked: approval cards show the change); a new preview kind, which clients ignore when unknown

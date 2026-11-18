@@ -70,7 +70,7 @@ test.describe('chat list', () => {
     );
     await expect(list.getByRole('listitem')).toHaveCount(30);
     await page.getByRole('button', { name: 'Show more chats' }).click();
-    await expect(list.getByRole('listitem')).toHaveCount(42);
+    await expect(list.getByRole('listitem')).toHaveCount(43);
     await expect(page.getByRole('button', { name: 'Show more chats' })).toHaveCount(0);
     await list.getByRole('link', { name: /Winter tyre sizes/ }).click();
     await expect(page).toHaveURL(/\/chat\/9$/);
@@ -986,5 +986,51 @@ test.describe('G3', () => {
     test.info().annotations.push({ type: 'G3', description: `${browserName} ${JSON.stringify(result)}` });
     expect(result.frames).toBeGreaterThan(50);
     expect(result.applyP95).toBeLessThanOrEqual(50);
+  });
+});
+
+test.describe('asks from one step', () => {
+  const gallery = (page: Page): Locator => page.locator('section.asks');
+
+  for (const layout of layouts) {
+    test(`${layout.name}: three asks form one gallery that passes the design and axe checks`, async ({ page }) => {
+      await page.setViewportSize({ width: layout.width, height: layout.height });
+      await openChat(page, '/chat/15');
+      await expect(gallery(page).getByText('3 asks')).toBeVisible();
+      await expect(gallery(page).locator('.asks__card')).toHaveCount(3);
+      await expect(gallery(page).getByText('Behind the boiler.')).toBeVisible();
+      await expect(gallery(page).getByText('Under the stairs.')).toBeVisible();
+      const track = gallery(page).locator('.asks__track');
+      expect(await track.evaluate((element) => getComputedStyle(element).scrollSnapType)).toContain('x');
+      await track.focus();
+      await expect(track).toBeFocused();
+      if (layout.touch) await expectTouchTargets(page, 'main');
+      await expectRoundedSurfaces(page, edgeSurfaces);
+      await expectNoHorizontalScroll(page);
+      await expectNoSeriousAxeFindings(page);
+    });
+  }
+
+  test('Approve all decides every card and the run resumes once', async ({ page }) => {
+    await openChat(page, '/chat/15');
+    const approvals: string[] = [];
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && /\/approvals\/\d+\/approve$/.test(request.url())) approvals.push(request.url());
+    });
+    await gallery(page).getByRole('button', { name: 'Approve all' }).click();
+    await expect(page.getByText('Sent the reminder to 6 people.')).toHaveCount(1);
+    expect(approvals).toHaveLength(3);
+    await expect(gallery(page)).toHaveCount(0);
+  });
+
+  test('Deny all declines every card', async ({ page }) => {
+    await openChat(page, '/chat/15');
+    const denials: string[] = [];
+    page.on('request', (request) => {
+      if (request.method() === 'POST' && /\/approvals\/\d+\/deny$/.test(request.url())) denials.push(request.url());
+    });
+    await gallery(page).getByRole('button', { name: 'Deny all' }).click();
+    await expect(page.getByText('Understood. The reminder was not sent.')).toHaveCount(1);
+    expect(denials).toHaveLength(3);
   });
 });

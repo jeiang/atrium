@@ -35,6 +35,15 @@
     await queryClient.invalidateQueries({ queryKey: ['proposal', id] });
     await queryClient.invalidateQueries({ queryKey: ['thread'] });
   }
+
+  export function declining(id: number): boolean {
+    return deferred.has(id);
+  }
+
+  export function release(id: number): void {
+    clearTimeout(deferred.get(id));
+    deferred.delete(id);
+  }
 </script>
 
 <script lang="ts">

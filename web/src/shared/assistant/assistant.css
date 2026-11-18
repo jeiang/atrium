@@ -225,6 +225,15 @@
     color: var(--moss);
   }
 
+  del.change__body {
+    color: var(--ink-3);
+  }
+
+  ins.change__body {
+    text-decoration: none;
+    color: var(--moss);
+  }
+
   .change__meta {
     font-size: var(--t-xs);
     color: var(--ink-3);

@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -147,6 +148,23 @@ func (f *Fetcher) FetchPage(ctx context.Context, rawURL string, lim Limits) (Pag
 		return Page{}, FetchError("too large")
 	}
 	return Page{Body: body, Charset: contentCharset(resp.Header), URL: resp.Request.URL.String()}, nil
+}
+
+func (f *Fetcher) CheckPublic(ctx context.Context, rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return FetchError(err.Error())
+	}
+	addrs, err := net.DefaultResolver.LookupNetIP(ctx, "ip", u.Hostname())
+	if err != nil {
+		return nil
+	}
+	for _, a := range addrs {
+		if !f.allowed(a.Unmap().WithZone("")) {
+			return Blocked(u.Hostname() + " resolves to a non-public address")
+		}
+	}
+	return nil
 }
 
 func (f *Fetcher) dialContext(ctx context.Context, network, addr string) (net.Conn, error) {

@@ -72,6 +72,7 @@ func lookupResult(t *testing.T, r anthropictest.Request, id string) map[string]a
 func TestLookupReturnsTypedFieldsWithoutUntrusted(t *testing.T) {
 	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	denyMarkedInternet(t)
 	start := warm(t, api)
 	message := seedLookupMail(t, dir)
 	api.Push(
@@ -138,6 +139,7 @@ func TestLookupReturnsTypedFieldsWithoutUntrusted(t *testing.T) {
 func TestLookupTextFieldKeepsUntrusted(t *testing.T) {
 	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	denyMarkedInternet(t)
 	start := warm(t, api)
 	message := seedLookupMail(t, dir)
 	api.Push(

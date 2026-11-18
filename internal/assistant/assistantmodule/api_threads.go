@@ -137,6 +137,7 @@ type apiTranscript struct {
 	Queued     []apiQueued   `json:"queued"`
 	Question   *apiQuestion  `json:"question"`
 	Held       *apiHeld      `json:"held"`
+	Asks       []asstapp.Ask `json:"asks"`
 	CostUSD    float64       `json:"cost_usd"`
 	Meter      service.Meter `json:"meter"`
 	Items      []apiItem     `json:"items"`
@@ -845,7 +846,7 @@ func apiBindings(p *apiPages) []application.Binding {
 func transcriptOut(v asstapp.Transcript, cursor api.Cursor) apiTranscript {
 	out := apiTranscript{
 		Thread: threadOut(v.Thread), ActiveRun: runOut(v.Active), Queued: []apiQueued{},
-		CostUSD: v.Cost, Meter: v.Meter, Items: []apiItem{},
+		CostUSD: v.Cost, Meter: v.Meter, Items: []apiItem{}, Asks: append([]asstapp.Ask{}, v.Asks...),
 	}
 	if v.Earlier != 0 {
 		out.NextCursor = cursor.Next(seqCursor{Seq: v.Earlier, Keep: v.EarlierKeep})

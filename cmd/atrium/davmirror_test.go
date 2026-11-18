@@ -214,6 +214,7 @@ func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothi
 func TestContactNameLookupKeepsEgressAndIdentifiersDropIt(t *testing.T) {
 	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	denyMarkedInternet(t)
 	contactsDir := filepath.Join(dir, "contacts")
 	setEnv(t, settingEnv(contacts.DirKey), contactsDir)
 	if err := os.MkdirAll(filepath.Join(contactsDir, "card"), 0o777); err != nil {

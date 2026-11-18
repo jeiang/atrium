@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/journal"
@@ -163,20 +164,54 @@ func duplicate(ctx context.Context, q db.Querier, scope string, project int64, n
 	return 0, nil
 }
 
-func refused(r Record, verb string) error {
+func protection(r Record) string {
 	switch {
 	case r.StandingInstructions():
-		return tool.Error(fmt.Sprintf("%s holds the operator's standing instructions and cannot be %s", Cite(r.ID), verb))
+		return Cite(r.ID) + " holds the operator's standing instructions"
 	case r.Confirmed():
-		return tool.Error(fmt.Sprintf("%s is confirmed by the operator and cannot be %s", Cite(r.ID), verb))
-	case r.Retracted():
-		return tool.Error(fmt.Sprintf("%s is retracted and cannot be %s", Cite(r.ID), verb))
+		return Cite(r.ID) + " is confirmed by the operator"
 	case r.Writer == WriterOperator || r.Writer == WriterImport:
-		return tool.Error(fmt.Sprintf("%s is operator-owned and cannot be %s", Cite(r.ID), verb))
+		return Cite(r.ID) + " is operator-owned"
 	case r.Private && r.ProjectID == nil:
-		return tool.Error(fmt.Sprintf("%s is private and cannot be %s", Cite(r.ID), verb))
+		return Cite(r.ID) + " is private"
+	}
+	return ""
+}
+
+func refused(r Record, verb string) error {
+	if r.Retracted() {
+		return tool.Error(fmt.Sprintf("%s is retracted and cannot be %s", Cite(r.ID), verb))
+	}
+	if rule := protection(r); rule != "" {
+		return tool.Error(fmt.Sprintf("%s and cannot be %s", rule, verb))
 	}
 	return nil
+}
+
+func guard(ctx context.Context, r Record, verb string, change tool.Change) error {
+	if r.Retracted() {
+		return refused(r, verb)
+	}
+	rule := protection(r)
+	if rule == "" || tool.Approved(ctx) {
+		return nil
+	}
+	change.Subject, change.Rule = r.Title, rule
+	return &tool.NeedsApproval{Change: change}
+}
+
+func editFields(before, after Record) []tool.ChangeField {
+	var out []tool.ChangeField
+	add := func(name, was, now string) {
+		if was != now {
+			out = append(out, tool.ChangeField{Name: name, Before: was, After: now})
+		}
+	}
+	add("Title", before.Title, after.Title)
+	add("Body", before.Body, after.Body)
+	add("Aliases", strings.Join(before.Aliases, ", "), strings.Join(after.Aliases, ", "))
+	add("Scope", before.Scope, after.Scope)
+	return out
 }
 
 func (w Writer) Effect(operation string, id int64) ledger.New {
@@ -209,9 +244,6 @@ func AgentWriteTx(ctx context.Context, tx *sql.Tx, w Writer, in WriteInput) (Rec
 		if rec == nil {
 			return Record{}, ledger.Result{}, tool.Error(fmt.Sprintf("%s is unknown", Cite(in.ID)))
 		}
-		if err := refused(*rec, "edited"); err != nil {
-			return Record{}, ledger.Result{}, err
-		}
 		if projectOf(rec.ProjectID) != projectOf(project) {
 			return Record{}, ledger.Result{}, tool.Error(fmt.Sprintf("%s belongs to another project", Cite(in.ID)))
 		}
@@ -230,6 +262,9 @@ func AgentWriteTx(ctx context.Context, tx *sql.Tx, w Writer, in WriteInput) (Rec
 		}
 		next.Marks = rec.Marks | marks
 		next.UpdatedAt = w.Now
+		if err := guard(ctx, *rec, "edited", tool.Change{Title: "Edit " + Cite(rec.ID), Fields: editFields(*rec, next)}); err != nil {
+			return Record{}, ledger.Result{}, err
+		}
 		aliases, err := aliasesJSON(next.Aliases)
 		if err != nil {
 			return Record{}, ledger.Result{}, err
@@ -292,15 +327,16 @@ func AgentRetractTx(ctx context.Context, tx *sql.Tx, w Writer, id int64, reason 
 	if rec == nil {
 		return Record{}, ledger.Result{}, tool.Error(fmt.Sprintf("%s is unknown", Cite(id)))
 	}
-	if err := refused(*rec, "retracted"); err != nil {
-		return Record{}, ledger.Result{}, err
-	}
 	project, err := threadProject(ctx, tx, w.ThreadID)
 	if err != nil {
 		return Record{}, ledger.Result{}, err
 	}
 	if projectOf(rec.ProjectID) != projectOf(project) {
 		return Record{}, ledger.Result{}, tool.Error(fmt.Sprintf("%s belongs to another project", Cite(id)))
+	}
+	if err := guard(ctx, *rec, "retracted", tool.Change{Title: "Retract " + Cite(rec.ID),
+		Fields: []tool.ChangeField{{Name: "Status", Before: "Live", After: "Retracted"}}, Note: reason}); err != nil {
+		return Record{}, ledger.Result{}, err
 	}
 	now := w.Now
 	if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded_hash = NULL, updated_at = ? WHERE id = ?",

@@ -22,10 +22,11 @@ import (
 type ProposalPayload interface{ proposalPayload() }
 
 type PermissionPayload struct {
-	Kind     string          `json:"kind"`
-	Args     []reviewapp.Arg `json:"args"`
-	ThreadID *int64          `json:"thread_id" api:"nullable"`
-	RunID    *int64          `json:"run_id" api:"nullable"`
+	Kind     string                   `json:"kind"`
+	Args     []reviewapp.Arg          `json:"args"`
+	ThreadID *int64                   `json:"thread_id" api:"nullable"`
+	RunID    *int64                   `json:"run_id" api:"nullable"`
+	Change   reviewapp.ProposalChange `json:"change" api:"nullable"`
 }
 
 type ActionPayload struct {
@@ -172,7 +173,7 @@ func detailOf(c reviewapp.Card) ProposalDetail {
 		Actions: proposalActions(c.Kind, c.Status, c.Undoable, blocked),
 	}
 	if c.Kind == permission.Kind {
-		out.Payload = PermissionPayload{Kind: permission.Kind, Args: c.Args, ThreadID: c.ThreadID, RunID: c.RunID}
+		out.Payload = PermissionPayload{Kind: permission.Kind, Args: c.Args, ThreadID: c.ThreadID, RunID: c.RunID, Change: reviewapp.GuardedChangeOf(c)}
 	} else {
 		out.Payload = ActionPayload{Kind: "action", ProposalKind: c.Kind, Module: c.Module, Label: c.KindLabel, Args: c.Args, Preview: rawJSON(c.Preview), Change: reviewapp.ChangeOf(c), Result: rawJSON(c.Result)}
 	}

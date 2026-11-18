@@ -126,6 +126,10 @@ func (s *Service) agentCommand(ctx context.Context, name application.Name, id in
 		auditN, err = s.audit(ctx, tx, name, id, state.OK, effectID)
 		return err
 	})
+	var ask *tool.NeedsApproval
+	if errors.As(err, &ask) {
+		return application.Change[Written]{}, err
+	}
 	if err != nil {
 		return application.Change[Written]{}, s.reject(ctx, name, id, agentFailure(err))
 	}

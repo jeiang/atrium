@@ -8,7 +8,10 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 )
 
-const ToolCallChange = "tool_call"
+const (
+	ToolCallChange = "tool_call"
+	GuardedChange  = "guarded_change"
+)
 
 type ProposalChange interface{ proposalChange() }
 
@@ -151,6 +154,21 @@ type PreviewToolCall struct {
 	Args json.RawMessage `json:"args"`
 }
 
+type PreviewGuardedChange struct {
+	Kind    string               `json:"kind"`
+	Title   string               `json:"title"`
+	Subject string               `json:"subject"`
+	Rule    string               `json:"rule"`
+	Fields  []PreviewChangeField `json:"fields"`
+	Note    string               `json:"note"`
+}
+
+type PreviewChangeField struct {
+	Name   string `json:"name"`
+	Before string `json:"before"`
+	After  string `json:"after"`
+}
+
 func (PreviewFolderSplit) proposalChange()    {}
 func (PreviewInboxBacklog) proposalChange()   {}
 func (PreviewFolderMerge) proposalChange()    {}
@@ -162,6 +180,7 @@ func (PreviewCalendarUpdate) proposalChange() {}
 func (PreviewCalendarReply) proposalChange()  {}
 func (PreviewReminder) proposalChange()       {}
 func (PreviewToolCall) proposalChange()       {}
+func (PreviewGuardedChange) proposalChange()  {}
 
 var changeKinds = map[string]reflect.Type{
 	"rebalance_split":   reflect.TypeFor[PreviewFolderSplit](),
@@ -175,6 +194,7 @@ var changeKinds = map[string]reflect.Type{
 	"calendar_rsvp":     reflect.TypeFor[PreviewCalendarReply](),
 	"reminder":          reflect.TypeFor[PreviewReminder](),
 	ToolCallChange:      reflect.TypeFor[PreviewToolCall](),
+	GuardedChange:       reflect.TypeFor[PreviewGuardedChange](),
 }
 
 var RegisterChanges = sync.OnceFunc(func() {
@@ -193,7 +213,7 @@ func ChangeOf(c Card) ProposalChange {
 		return PreviewToolCall{Kind: ToolCallChange, Tool: c.Kind, Args: args.Args}
 	}
 	t, ok := changeKinds[c.Kind]
-	if !ok || c.Kind == ToolCallChange {
+	if !ok || c.Kind == ToolCallChange || c.Kind == GuardedChange {
 		return nil
 	}
 	raw, err := json.Marshal(c.Preview)
@@ -206,4 +226,19 @@ func ChangeOf(c Card) ProposalChange {
 	}
 	v.Elem().FieldByName("Kind").SetString(c.Kind)
 	return v.Elem().Interface().(ProposalChange)
+}
+
+func GuardedChangeOf(c Card) ProposalChange {
+	var preview struct {
+		Change *PreviewGuardedChange `json:"change"`
+	}
+	raw, err := json.Marshal(c.Preview)
+	if err != nil || json.Unmarshal(raw, &preview) != nil || preview.Change == nil {
+		return nil
+	}
+	preview.Change.Kind = GuardedChange
+	if preview.Change.Fields == nil {
+		preview.Change.Fields = []PreviewChangeField{}
+	}
+	return *preview.Change
 }

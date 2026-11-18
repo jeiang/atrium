@@ -3,6 +3,7 @@ import {
   ApiError,
   type Effect,
   ok,
+  type PermissionPayload,
   type ProposalDetail,
   reviewEffects,
   reviewUndoEffect,
@@ -49,8 +50,10 @@ export interface ApprovalOrigin {
 
 export function proposalToApproval(proposal: ProposalDetail, origin: ApprovalOrigin): Approval {
   const action = proposal.payload.kind === 'action' ? (proposal.payload as ActionPayload) : undefined;
-  const change = (action?.change ?? null) as ApprovalChange | null;
-  const args: Arg[] = action?.args ?? [];
+  const permission = proposal.payload.kind === 'permission' ? (proposal.payload as PermissionPayload) : undefined;
+  const change = (action?.change ?? permission?.change ?? null) as ApprovalChange | null;
+  const args: Arg[] = action?.args ?? permission?.args ?? [];
+  const restorable = change?.kind === 'guarded_change' && change.fields.length > 0;
   const audience = args.find((arg) => audienceLabels.includes(arg.label.toLowerCase()))?.value;
   const label = action?.label || (origin.inRun ? 'Allow this step' : proposal.kind);
   return {
@@ -63,7 +66,11 @@ export function proposalToApproval(proposal: ProposalDetail, origin: ApprovalOri
     change,
     plain: { label, args, preview: action?.preview ?? null },
     consequence: {
-      reversible: proposal.undoable ? 'Yes, for 10 seconds with Undo, then from History' : 'No',
+      reversible: proposal.undoable
+        ? 'Yes, for 10 seconds with Undo, then from History'
+        : restorable
+          ? 'Yes, from History'
+          : 'No',
       audience: audience ?? 'Only you',
       cost: 'Free',
       outside: proposal.account
@@ -75,7 +82,7 @@ export function proposalToApproval(proposal: ProposalDetail, origin: ApprovalOri
             : 'Stays inside atrium',
     },
     primary: origin.inRun ? label : 'Approve',
-    irreversible: !proposal.undoable,
+    irreversible: !proposal.undoable && !restorable,
     done: origin.inRun ? `${label}: done` : 'Approved. atrium applied it',
   };
 }

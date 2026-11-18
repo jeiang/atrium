@@ -50,10 +50,15 @@ func (s *Service) WebFetch(ctx context.Context, in WebFetchInput) (application.R
 		}
 		allowed[n] = struct{}{}
 	}
-	if _, ok := allowed[url]; !ok {
-		return application.Read[WebPage]{}, tool.Error("url is not allowed: only URLs the operator typed or web_search returned in this thread can be fetched")
+	fetcher := &webfetch.Fetcher{}
+	if _, ok := allowed[url]; !ok && !tool.Approved(ctx) {
+		if err := fetcher.CheckPublic(ctx, url); err != nil {
+			return application.Read[WebPage]{}, tool.Error("fetch failed: " + err.Error())
+		}
+		return application.Read[WebPage]{}, &tool.NeedsApproval{Change: tool.Change{Title: "Fetch a page", Subject: url,
+			Rule: "this URL was not typed by the operator or returned by web_search in this thread"}}
 	}
-	page, err := (&webfetch.Fetcher{}).FetchPage(ctx, url, lim)
+	page, err := fetcher.FetchPage(ctx, url, lim)
 	if err != nil {
 		var te tool.Error
 		if errors.As(err, &te) {

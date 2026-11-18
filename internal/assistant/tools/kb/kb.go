@@ -258,7 +258,7 @@ func Tools(svc func(*tool.Context) *kbapp.Service) []tool.Tool {
 		{
 			Name: "kb_write",
 			Description: "Create or edit one durable knowledge record: a fact, decision or reference worth keeping. " +
-				"Creating needs title and body; pass id to edit an unconfirmed record. Never store secrets. Logged and undoable by the operator.",
+				"Creating needs title and body; pass id to edit. Editing a confirmed, operator-written, imported, private or standing-instructions record waits for the operator's approval in a chat. Never store secrets. Logged and undoable by the operator.",
 			InputSchema: json.RawMessage(writeSchema()),
 			Handler:     write(svc),
 			Effect:      tool.WriteUndo, Undo: kbapp.UndoOp,
@@ -268,7 +268,7 @@ func Tools(svc func(*tool.Context) *kbapp.Service) []tool.Tool {
 		},
 		{
 			Name:        "kb_retract",
-			Description: "Retract a knowledge record that is wrong or superseded. The record stays in history and the operator can undo. Give a short reason.",
+			Description: "Retract a knowledge record that is wrong or superseded. The record stays in history and the operator can undo. Give a short reason. Retracting a confirmed, operator-written, imported, private or standing-instructions record waits for the operator's approval in a chat.",
 			InputSchema: json.RawMessage(retractSchema),
 			Handler:     retract(svc),
 			Effect:      tool.WriteUndo, Undo: kbapp.UndoOp,

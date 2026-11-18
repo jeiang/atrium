@@ -167,7 +167,7 @@ func (x *dispatcher) invoke(ctx context.Context, use ToolUse) (errText *string, 
 	case registry.Denied:
 		return fail(authorized.Name + " is not allowed in this thread by the permission table")
 	case registry.Ask:
-		approved, rerr := x.requestPermission(ctx, authorized, args)
+		approved, rerr := x.requestPermission(ctx, authorized, args, nil)
 		if rerr != nil {
 			if text, ok := toolErrorText(rerr); ok {
 				return fail(text)
@@ -178,9 +178,27 @@ func (x *dispatcher) invoke(ctx context.Context, use ToolUse) (errText *string, 
 			return nil, nil, &tool.Park{Question: permission.Title(authorized.Name)}
 		}
 	}
-	value, err = x.call(progress.WithTool(ctx, x.tc.RunID, use.ID), &authorized, args)
+	callCtx := progress.WithTool(ctx, x.tc.RunID, use.ID)
+	value, err = x.call(callCtx, &authorized, args)
+	var need *tool.NeedsApproval
+	if errors.As(err, &need) && x.tc.Kind == tool.Chat {
+		approved, rerr := x.requestPermission(ctx, authorized, args, &need.Change)
+		if rerr != nil {
+			if text, ok := toolErrorText(rerr); ok {
+				return fail(text)
+			}
+			return nil, nil, rerr
+		}
+		if !approved {
+			return nil, nil, &tool.Park{Question: permission.TitleOf(authorized.Name, &need.Change)}
+		}
+		value, err = x.call(tool.WithApproved(callCtx), &authorized, args)
+	}
 	if errors.Is(err, errInterrupted) {
 		return fail(interruptedText(use, true))
+	}
+	if errors.As(err, &need) {
+		return fail(need.Error())
 	}
 	if err == nil {
 		marks := authorized.Marks
@@ -222,13 +240,13 @@ func (x *dispatcher) invoke(ctx context.Context, use ToolUse) (errText *string, 
 	return fail(fmt.Sprintf("%s failed: %s", use.Name, className(err)))
 }
 
-func (x *dispatcher) requestPermission(ctx context.Context, t tool.Tool, args tool.Args) (bool, error) {
+func (x *dispatcher) requestPermission(ctx context.Context, t tool.Tool, args tool.Args, change *tool.Change) (bool, error) {
 	payload, err := permission.NewPayload(t.Name, x.tc, args)
 	if err != nil {
 		return false, err
 	}
-	title := permission.Title(t.Name)
-	id, _, err := proposals.Create(ctx, x.d, permission.Kind, nil, title, payload, permission.Preview{Args: args},
+	title := permission.TitleOf(t.Name, change)
+	id, _, err := proposals.Create(ctx, x.d, permission.Kind, nil, title, payload, permission.Preview{Args: args, Change: change},
 		permission.Fingerprint(t.Name, x.tc.RunID, payload.Args), x.now())
 	if err != nil {
 		return false, err
@@ -405,6 +423,7 @@ func (x *dispatcher) skip(ctx context.Context, use ToolUse) (json.RawMessage, er
 
 func (x *dispatcher) executeAll(ctx context.Context, uses []ToolUse) ([]json.RawMessage, error) {
 	results := make([]json.RawMessage, len(uses))
+	var parked *tool.Park
 	interrupted := false
 	for i, use := range uses {
 		if !interrupted && x.urgent != nil {
@@ -420,10 +439,20 @@ func (x *dispatcher) executeAll(ctx context.Context, uses []ToolUse) ([]json.Raw
 		} else {
 			r, err = x.execute(ctx, use)
 		}
-		if err != nil {
+		var park *tool.Park
+		switch {
+		case errors.As(err, &park):
+			if parked == nil {
+				parked = park
+			}
+			continue
+		case err != nil:
 			return nil, err
 		}
 		results[i] = r
+	}
+	if parked != nil {
+		return nil, parked
 	}
 	return results, nil
 }

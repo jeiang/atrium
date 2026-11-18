@@ -151,7 +151,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Effects: func(d module.EffectDeps) module.Effects {
 			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}
 			return module.Effects{
-				Proposals: slices.Concat(a.Proposals(), permissionProposals(d.Resume)),
+				Proposals: slices.Concat(a.Proposals(), permissionProposals(d.DB, d.Resume)),
 				Undo:      slices.Concat(asstapp.FileUndo(), kb.Undo(), tasksapp.Undo(), asstapp.ScheduleUndo(), export.Undo(d.Ledger), []ledger.UndoDefinition{attention.SnoozeUndoDefinition(attention.UndoTaskSnooze, d.Now)}),
 				Resolve:   export.Resolve(d.Ledger),
 			}
