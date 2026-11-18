@@ -244,6 +244,7 @@ func TestSearchWebAsksInAMarkedChat(t *testing.T) {
 	t.Parallel()
 	t.Run("refused after mail", func(t *testing.T) {
 		dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+		denyMarkedInternet(t)
 		start := warm(t, api)
 		message := seedMail(t, dir)
 		api.Push(

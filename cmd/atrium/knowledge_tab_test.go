@@ -77,16 +77,19 @@ func TestKnowledgeTabConfirmRetractAndPurge(t *testing.T) {
 	}
 
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("r1", "kb_retract", map[string]any{"id": first, "reason": "stale"})))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("cannot")))
 	if ran := runApp(t, "agent", "run", "--text", "retract the boiler code"); ran.code != cli.ExitOK {
 		t.Fatalf("agent retract run: %d %s", ran.code, ran.stderr)
 	}
-	var refusal string
-	if err := d.Read.QueryRow("SELECT COALESCE(error, '') FROM tool_calls WHERE name = 'kb_retract' ORDER BY id DESC LIMIT 1").Scan(&refusal); err != nil {
-		t.Fatalf("agent retract call: %v", err)
+	var rule, note, status string
+	if err := d.Read.QueryRow("SELECT COALESCE(json_extract(preview, '$.change.rule'), ''), COALESCE(json_extract(preview, '$.change.note'), ''), status "+
+		"FROM proposals WHERE kind = 'permission' AND json_extract(payload, '$.tool') = 'kb_retract' ORDER BY id DESC LIMIT 1").Scan(&rule, &note, &status); err != nil {
+		t.Fatalf("agent retract request: %v", err)
 	}
-	if !strings.Contains(refusal, "confirmed by the operator") {
-		t.Errorf("agent retract of a confirmed record = %q, want a refusal", refusal)
+	if !strings.Contains(rule, "confirmed by the operator") || note != "stale" || status != "pending" {
+		t.Errorf("agent retract of a confirmed record asked with rule %q, note %q, status %q", rule, note, status)
+	}
+	if _, _, retracted := knowledgeMarks(t, d, first); retracted {
+		t.Fatal("the agent retracted a confirmed record before the operator decided")
 	}
 
 	apiData(t, w.do(http.MethodPost, fmt.Sprintf("/web/v1/knowledge/%d/retract", first), nil), http.StatusOK)

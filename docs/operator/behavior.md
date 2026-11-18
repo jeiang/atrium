@@ -945,9 +945,10 @@ after the last decision. Anything the assistant cannot do on its own asks the
 same way, with a card that shows what changes: editing or retracting a
 confirmed, operator-written, imported, private or standing-instructions
 knowledge record (title and before and after, or the retraction and reason),
-closing a commitment from mail, and fetching a URL you did not type. Changes
-to its own guard rails (the permission table, spend caps, mail mode, go-live
-and baseline, credentials and connection settings) stay refused. Scheduled,
+closing a commitment from mail, and fetching a public URL you did not type.
+Changes to its own guard rails (the permission table, spend caps, mail mode,
+go-live and baseline, credentials and connection settings) and fetches of
+non-public addresses stay refused. Scheduled,
 nightly and subagent runs never park, so an ask there is a deny. `web_fetch`
 fetches URLs you typed or a verified `search_web` citation added directly;
 it uses no proxy and connects only to public addresses, checked on every

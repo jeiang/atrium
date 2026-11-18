@@ -107,6 +107,7 @@ func warm(t *testing.T, api *modelLog) int {
 func TestMailReadDropsInternetButKeepsOwnAndNotify(t *testing.T) {
 	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+	denyMarkedInternet(t)
 	start := warm(t, api)
 	message := seedMail(t, dir)
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("m1", "mail_read", map[string]any{"message_id": message})))
@@ -245,6 +246,7 @@ func replayedSignatures(t *testing.T, r anthropictest.Request) []string {
 func TestThinkingIsReplayedOnlyIntoTheContextItWasSignedIn(t *testing.T) {
 	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	denyMarkedInternet(t)
 	fakeOpenMeteo(t, dir)
 	start := warm(t, api)
 	message := seedMail(t, dir)
@@ -290,6 +292,7 @@ func TestThinkingIsReplayedOnlyIntoTheContextItWasSignedIn(t *testing.T) {
 func TestBranchOfAMarkedThreadIsNotOfferedEgress(t *testing.T) {
 	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+	denyMarkedInternet(t)
 	warm(t, api)
 	message := seedMail(t, dir)
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("m1", "mail_read", map[string]any{"message_id": message})))
@@ -332,6 +335,7 @@ func TestBranchOfAMarkedThreadIsNotOfferedEgress(t *testing.T) {
 func TestEmptyMailSearchLeavesTheThreadUnmarked(t *testing.T) {
 	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	denyMarkedInternet(t)
 	path := filepath.Join(dir, "atrium.db")
 	d := mustConnect(t, path, db.Key{})
 	if err := db.Migrate(context.Background(), d, path); err != nil {

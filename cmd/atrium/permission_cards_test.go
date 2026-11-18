@@ -14,6 +14,12 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 )
 
+func denyMarkedInternet(t *testing.T) {
+	t.Helper()
+	setEnv(t, settingEnv("permission_internet_pii"), "deny")
+	setEnv(t, settingEnv("permission_internet_untrusted_kinds"), "deny")
+}
+
 func pendingPermissions(t *testing.T, d *db.DB, run int64) []int64 {
 	t.Helper()
 	rows, err := d.Read.Query("SELECT id FROM proposals WHERE kind = 'permission' AND status = 'pending' AND json_extract(payload, '$.run_id') = ? ORDER BY id", run)

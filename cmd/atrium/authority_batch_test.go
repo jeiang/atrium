@@ -62,6 +62,7 @@ func TestAuthorityBatchRefusesTheInternetAfterAMailRead(t *testing.T) {
 	t.Parallel()
 	srv, pages := webPages(t)
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	denyMarkedInternet(t)
 	start := warm(t, api)
 	message := seedMail(t, dir)
 	api.Push(
@@ -99,6 +100,7 @@ func TestQueuedMarkedReferenceAppliesToTheRestOfTheBatch(t *testing.T) {
 	t.Parallel()
 	srv, pages := webPages(t)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+	denyMarkedInternet(t)
 	warm(t, api)
 	message := seedMail(t, dir)
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("m1", "mail_read", map[string]any{"message_id": message})))
@@ -215,6 +217,7 @@ func TestLookupMarksApplyToTheNextInternetCall(t *testing.T) {
 	t.Parallel()
 	srv, pages := webPages(t)
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	denyMarkedInternet(t)
 	start := warm(t, api)
 	message := seedMail(t, dir)
 	api.Push(
@@ -300,6 +303,7 @@ func TestApprovalDeniedByANewMarkPerformsNothing(t *testing.T) {
 	t.Parallel()
 	srv, pages := webPages(t)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+	denyMarkedInternet(t)
 	warm(t, api)
 	thread := latestThread(t, dir)
 	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})

@@ -1790,7 +1790,8 @@ claims about the running application. Operator contracts are in
   same `permission` request with a `guarded_change` preview and performs
   the call once on approval; changes to the agent's own guard rails
   (permission table, spend caps, mail mode, go-live and baseline,
-  credentials and connection settings) stay refused. The chat transcript
+  credentials and connection settings) and a URL that resolves to a
+  non-public address stay refused. The chat transcript
   lists the parked run's requests as `asks`, and the chat shows several
   requests or approval cards from one step as one scrolling gallery with
   Approve all and Deny all. An approval card's apply re-authorizes the

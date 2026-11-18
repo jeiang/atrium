@@ -69,6 +69,7 @@ func waitIdle(t *testing.T, dir string, thread int64) {
 func TestReferenceBringsAThreadVerbatimWithItsMarks(t *testing.T) {
 	t.Parallel()
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+	denyMarkedInternet(t)
 	warm(t, api)
 	message := seedMail(t, dir)
 

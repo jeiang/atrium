@@ -316,13 +316,21 @@ func TestCommitmentToolsMergeTaskAndMailLists(t *testing.T) {
 		t.Fatalf("nightly run offered a chat-only write: %v", names)
 	}
 
-	run("chat", "c1", "task_close", map[string]any{"ref": "commitment:1"})
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", "task_close", map[string]any{"ref": "commitment:1"})))
+	if ran := runApp(t, "agent", "run", "--kind", "chat", "--text", "close the roof quote"); ran.code != cli.ExitOK {
+		t.Fatalf("commitment close run: %d %s", ran.code, ran.stderr)
+	}
 	var st string
 	if err := d.Read.QueryRow("SELECT status FROM commitments WHERE id = 1").Scan(&st); err != nil || st != "open" {
-		t.Fatalf("task_close changed a commitment: %s %v", st, err)
+		t.Fatalf("task_close changed a commitment before approval: %s %v", st, err)
 	}
-	if got := results(); !strings.Contains(got, "is_error") {
-		t.Fatalf("commitment ref was not refused: %s", got)
+	var rule, before, after string
+	if err := d.Read.QueryRow("SELECT json_extract(preview, '$.change.rule'), json_extract(preview, '$.change.fields[0].before'), json_extract(preview, '$.change.fields[0].after') "+
+		"FROM proposals WHERE kind = 'permission' AND status = 'pending' AND json_extract(payload, '$.tool') = 'task_close'").Scan(&rule, &before, &after); err != nil {
+		t.Fatalf("commitment close request: %v", err)
+	}
+	if !strings.Contains(rule, "commitment from mail") || before != "open" || after != "done" {
+		t.Fatalf("commitment close card: rule %q, %q -> %q", rule, before, after)
 	}
 	run("chat", "u1", "task_update", map[string]any{"ref": "commitment:1", "title": "Quote"})
 	if got := results(); !strings.Contains(got, "is_error") {
