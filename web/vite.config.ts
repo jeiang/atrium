@@ -56,10 +56,10 @@ function shellWorker(base: string): Plugin {
 }
 
 function packageDir(root: string, id: string): string | undefined {
-  const path = resolve(root, id.replace(/^\0/, '').split('?')[0]).split(sep).join('/');
+  const path = resolve(root, id.replace(/^\0/, '').replace(/\?.*$/, '')).split(sep).join('/');
   const at = path.lastIndexOf('/node_modules/');
   if (at < 0) return undefined;
-  const [scope, name] = path.slice(at + '/node_modules/'.length).split('/');
+  const [scope = '', name = ''] = path.slice(at + '/node_modules/'.length).split('/');
   return `${path.slice(0, at)}/node_modules/${scope.startsWith('@') ? `${scope}/${name}` : scope}`;
 }
 
@@ -116,7 +116,7 @@ function thirdPartyNotices(): Plugin {
 export default defineConfig(({ mode }) => ({
   plugins: [
     svelte({ preprocess: { style: ({ content }) => ({ code: `${readFileSync(customMedia, 'utf8')}${content}` }) } }),
-    thirdPartyNotices(),
+    mode === 'mock' ? undefined : thirdPartyNotices(),
     mode === 'mock' ? mockWorker() : shellWorker('/'),
   ],
   define: { __ATRIUM_CONTRACT__: JSON.stringify(contractHash) },
