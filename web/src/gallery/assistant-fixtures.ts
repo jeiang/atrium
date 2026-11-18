@@ -73,7 +73,6 @@ export const draftApproval: Approval = {
   primary: 'Send email to Ilse',
   irreversible: true,
   done: 'Sent to Ilse de Wit',
-  sending: 'Sending to Ilse de Wit',
 };
 
 export const moveApproval: Approval = {

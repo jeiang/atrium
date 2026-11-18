@@ -102,8 +102,7 @@ test.describe('inbox on a desktop', () => {
     });
   }
 
-  test('a send counts down 10 seconds with Undo, then sends once and updates the badge', async ({ page }) => {
-    test.setTimeout(60_000);
+  test('a send goes out at once, once, and updates the badge', async ({ page }) => {
     await gotoShell(page, '/inbox/draft:7');
     await waiting(page, 3);
     const draft = card(page, 'draft:7');
@@ -112,18 +111,9 @@ test.describe('inbox on a desktop', () => {
     await expect(draft.locator('.approval__row')).not.toHaveAttribute('inert');
     await send.press('Enter');
     await expect(send).not.toHaveAttribute('aria-disabled');
+    expect(await requests(page)).toEqual([]);
     await send.click();
-    const pending = draft.locator('.receipt[data-tone="pending"]');
-    await expect(pending).toContainText(/Sending in (10|9) s/);
-    await pending.getByRole('button', { name: 'Undo', exact: true }).click();
-    await expect(pending).toHaveCount(0);
-    expect(await requests(page)).toEqual([]);
-
-    await expect(draft.locator('.approval__row')).not.toHaveAttribute('inert');
-    await draft.getByRole('button', { name: 'Send email to Ilse' }).click();
-    await page.waitForTimeout(6000);
-    expect(await requests(page)).toEqual([]);
-    await expect(draft.locator('.receipt')).toContainText('Sent to Ilse de Wit', { timeout: 10_000 });
+    await expect(draft.locator('.receipt')).toContainText('Sent to Ilse de Wit', { timeout: 2_000 });
     const sent = await requests(page);
     expect(sent).toHaveLength(1);
     expect(sent[0]?.path).toBe('/web/v1/drafts/7/send');
@@ -242,7 +232,6 @@ test.describe('inbox on a desktop', () => {
     });
 
     test('a send whose outcome is unknown shows the draft as blocked and never sends it again', async ({ page }) => {
-      test.setTimeout(60_000);
       await useScenario(page, { inbox: { decide: 'unknown' } });
       await gotoShell(page, '/inbox/draft:7');
       const draft = card(page, 'draft:7');
@@ -251,7 +240,6 @@ test.describe('inbox on a desktop', () => {
       await send.press('Enter');
       await expect(send).not.toHaveAttribute('aria-disabled');
       await send.click();
-      await expect(draft.locator('.receipt[data-tone="pending"]')).toContainText(/Sending in (10|9) s/);
       await expect(page.getByText('The mail server did not confirm the send.')).toBeVisible({ timeout: 15_000 });
       await expect(page.getByText('The outcome is unknown')).toBeVisible();
       await expect(draft).toHaveAttribute('data-state', 'blocked');

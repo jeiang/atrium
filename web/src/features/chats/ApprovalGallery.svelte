@@ -4,7 +4,7 @@
   import { queryClient } from '../../shared/query';
   import Button from '../../shared/ui/Button.svelte';
   import { toast } from '../../shared/ui/toast.svelte';
-  import ParkedApproval, { declining, release } from './ParkedApproval.svelte';
+  import ParkedApproval from './ParkedApproval.svelte';
 
   interface Props {
     ids: number[];
@@ -25,10 +25,9 @@
   async function decideAll(decision: 'approve' | 'deny'): Promise<void> {
     if (busy) return;
     busy = decision;
-    const todo = ids.filter((id) => open(id) && (decision === 'deny' || !declining(id)));
+    const todo = ids.filter(open);
     try {
       for (const id of todo) {
-        release(id);
         ok(decision === 'approve' ? await reviewApprove(id, {}) : await reviewDismiss(id, {}));
       }
       announce(decision === 'approve' ? `Approved ${todo.length} asks` : `Denied ${todo.length} asks`);

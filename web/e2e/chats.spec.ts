@@ -258,7 +258,6 @@ test.describe('while atrium is unreachable', () => {
       const send = card.getByRole('button', { name: /send email/i });
       await expect(send).not.toHaveAttribute('aria-disabled');
       await send.click();
-      await expect(card.locator('.receipt[data-tone="pending"]')).toBeVisible();
       await expect(
         page
           .getByRole('list', { name: 'Notifications' })
@@ -343,6 +342,52 @@ test.describe('streaming', () => {
     await expect(messages.locator('details.thinking')).toHaveCount(1);
     await expect(messages.locator('details.thinking')).toHaveJSProperty('open', false);
   });
+
+  test('a thinking block the reader opened stays open as the run moves on and its transcript settles', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: desktop.width, height: desktop.height });
+    await openChat(page, '/chat/7', { speed: 0.5 });
+    const messages = transcript(page);
+    const thought = messages.locator('details.thinking');
+    await expect(thought).toHaveJSProperty('open', true, { timeout: 15_000 });
+    await expect(messages.locator('.status-slot')).toHaveText('Running search_web', { timeout: 15_000 });
+    await expect(thought).toHaveJSProperty('open', false);
+    await thought.getByText('Thinking').click();
+    await expect(thought).toHaveJSProperty('open', true);
+    await expect(messages.getByText(finalText)).toBeVisible({ timeout: 30_000 });
+    await settled(page);
+    await page.waitForTimeout(500);
+    await expect(thought).toHaveCount(1);
+    await expect(thought).toHaveJSProperty('open', true);
+    await expect(thought.getByText('Checking the saved supplier list.')).toBeVisible();
+    await expectRoundedSurfaces(page, edgeSurfaces);
+    await expectNoHorizontalScroll(page);
+    await expectNoSeriousAxeFindings(page);
+  });
+
+  for (const layout of layouts) {
+    test(`${layout.name}: Expand thinking opens every thinking block and stays on after a reload`, async ({ page }) => {
+      await page.setViewportSize({ width: layout.width, height: layout.height });
+      await openChat(page, '/chat/11');
+      const thought = transcript(page).locator('details.thinking');
+      await expect(thought).toHaveJSProperty('open', false);
+      await page.getByRole('button', { name: 'Chat actions' }).click();
+      await page.getByRole('menuitem', { name: 'Expand thinking' }).click();
+      await expect(thought).toHaveJSProperty('open', true);
+      await page.reload();
+      await expect(transcript(page).getByText('roof sheets need replacing.', { exact: false })).toBeVisible();
+      await expect(thought).toHaveJSProperty('open', true);
+      await expect(thought.getByText('Two sheets are cracked in the photos.')).toBeVisible();
+      if (layout.touch) await expectTouchTargets(page, 'main');
+      await expectRoundedSurfaces(page, edgeSurfaces);
+      await expectNoHorizontalScroll(page);
+      await expectNoSeriousAxeFindings(page);
+      await page.getByRole('button', { name: 'Chat actions' }).click();
+      await page.getByRole('menuitem', { name: 'Collapse thinking' }).click();
+      await expect(thought).toHaveJSProperty('open', false);
+    });
+  }
 
   test('the account menu marks Chats while a run works and clears it after', async ({ page }) => {
     await page.setViewportSize({ width: desktop.width, height: desktop.height });
@@ -445,24 +490,32 @@ test.describe('streaming', () => {
     await expect(messages.getByText('Sent the reminder to 6 people.')).toBeVisible({ timeout: 20_000 });
   });
 
-  test('declining waits for the undo window, and Undo keeps the ask open', async ({ page }) => {
-    test.setTimeout(45_000);
-    await page.setViewportSize({ width: desktop.width, height: desktop.height });
-    await openChat(page, '/chat/8');
-    const card = transcript(page).locator('[data-approval="501"]');
-    await showRow(card);
-    await expect(card.locator('.approval__row')).not.toHaveAttribute('inert');
-    await card.getByRole('button', { name: 'Decline' }).click();
-    await expect(card.getByText('Declined. atrium will not do this')).toBeVisible();
-    await card.getByRole('button', { name: 'Undo', exact: true }).click();
-    await expect(card.getByRole('button', { name: 'Decline' })).toBeVisible();
-    await expect(card.locator('.approval__row')).not.toHaveAttribute('inert');
-    await card.getByRole('button', { name: 'Decline' }).click();
-    await expect(transcript(page).getByText('Understood. The reminder was not sent.')).toBeVisible({
-      timeout: 20_000,
+  for (const layout of layouts) {
+    test(`${layout.name}: Decline sends the dismissal at once`, async ({ page }) => {
+      test.setTimeout(45_000);
+      const sent: string[] = [];
+      page.on('request', (request) => {
+        if (request.method() !== 'GET') sent.push(`${request.method()} ${new URL(request.url()).pathname}`);
+      });
+      await page.setViewportSize({ width: layout.width, height: layout.height });
+      await openChat(page, '/chat/8');
+      const card = transcript(page).locator('[data-approval="501"]');
+      await showRow(card);
+      await expect(card.locator('.approval__row')).not.toHaveAttribute('inert');
+      await card.getByRole('button', { name: 'Decline' }).click();
+      await expect.poll(() => sent, { timeout: 2_000 }).toEqual(['POST /web/v1/approvals/501/deny']);
+      await expect(transcript(page).getByText('Understood. The reminder was not sent.')).toBeVisible({
+        timeout: 20_000,
+      });
+      await expect(transcript(page).getByRole('heading', { name: 'Declined' })).toBeVisible();
+      await expect(transcript(page).getByRole('button', { name: 'Undo', exact: true })).toHaveCount(0);
+      expect(sent).toEqual(['POST /web/v1/approvals/501/deny']);
+      if (layout.touch) await expectTouchTargets(page, 'main');
+      await expectRoundedSurfaces(page, edgeSurfaces);
+      await expectNoHorizontalScroll(page);
+      await expectNoSeriousAxeFindings(page);
     });
-    await expect(transcript(page).getByRole('heading', { name: 'Declined' })).toBeVisible();
-  });
+  }
 
   test('an approved download reads as applied with Undo, and Undo reverses it', async ({ page }) => {
     test.setTimeout(45_000);

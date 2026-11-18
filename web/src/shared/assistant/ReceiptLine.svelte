@@ -13,7 +13,7 @@
     at?: string | number | Date;
     actor?: string;
     note?: string;
-    tone?: 'done' | 'pending' | 'declined';
+    tone?: 'done' | 'declined';
     undoUntil?: number;
     undoLabel?: string;
     onundo?: () => void | Promise<void>;
@@ -64,7 +64,7 @@
 
 <div class="receipt" data-tone={tone} tabindex="-1" bind:this={element}>
   <span class="receipt__mark">
-    <Icon name={tone === 'pending' ? 'clock' : tone === 'declined' ? 'close' : 'check'} />
+    <Icon name={tone === 'declined' ? 'close' : 'check'} />
   </span>
   <span class="receipt__text">
     <span class="receipt__title">{title}</span>

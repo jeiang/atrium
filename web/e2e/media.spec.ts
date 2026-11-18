@@ -92,8 +92,8 @@ test.describe('Downloads', () => {
     await expect(torrent(page, 'c3')).toHaveCount(0);
   });
 
-  test('remove with files waits 10 seconds and Undo sends nothing', async ({ page }) => {
-    test.slow();
+  test('remove with files sends at once on desktop', async ({ page }) => {
+    const sent = writes(page);
     await gotoShell(page, '/apps/torrents');
     await torrent(page, 'd4')
       .getByRole('button', { name: /^Remove/ })
@@ -101,25 +101,14 @@ test.describe('Downloads', () => {
     const dialog = page.getByRole('dialog');
     await dialog.getByLabel('Also delete the downloaded files').check();
     await expect(dialog.getByText('This cannot be undone.')).toBeVisible();
+    await expectRoundedSurfaces(page, edges);
+    await expectNoHorizontalScroll(page);
+    await expectNoSeriousAxeFindings(page);
     await dialog.getByRole('button', { name: 'Remove and delete files' }).click();
-    await expect(torrent(page, 'd4')).toContainText('Removing with its files');
-    await torrent(page, 'd4').getByRole('button', { name: 'Undo' }).click();
-    await expect(toast(page, 'Nothing was removed.')).toBeVisible();
-    await page.waitForTimeout(10_500);
-    await page.reload();
-    await expect(torrent(page, 'd4')).toBeVisible();
-
-    await torrent(page, 'd4')
-      .getByRole('button', { name: /^Remove/ })
-      .click();
-    await page.getByRole('dialog').getByLabel('Also delete the downloaded files').check();
-    await page.getByRole('dialog').getByRole('button', { name: 'Remove and delete files' }).click();
-    await expect(toast(page, 'Removing Paper.Boats.1998.Remastered and its files in 10 seconds.')).toBeVisible();
-    await expect(torrent(page, 'd4')).toBeVisible();
-    await expect(toast(page, 'Removed Paper.Boats.1998.Remastered and deleted its files.')).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect.poll(() => sent, { timeout: 2_000 }).toEqual(['/web/v1/media/torrents/d4/control']);
+    await expect(toast(page, 'Removed Paper.Boats.1998.Remastered and deleted its files.')).toBeVisible();
     await expect(torrent(page, 'd4')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Undo' })).toHaveCount(0);
   });
 
   test('keyboard alone pauses and removes', async ({ page, browserName }) => {

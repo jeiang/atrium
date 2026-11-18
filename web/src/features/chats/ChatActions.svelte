@@ -18,6 +18,7 @@
   import ViewState from '../../shared/ui/ViewState.svelte';
   import { navigate } from '../../shell/router';
   import { chatTitle, failureText, handleFlag } from './manage';
+  import { setExpanded, thinking } from './thinking.svelte';
 
   interface Props {
     thread: Thread;
@@ -56,12 +57,14 @@
     { value: 'pin', label: thread.pinned ? 'Unpin' : 'Pin to the top' },
     { value: 'archive', label: thread.archived ? 'Restore from archive' : 'Archive' },
     { value: 'move', label: 'Move to a space' },
+    { value: 'thinking', label: thinking.expanded ? 'Collapse thinking' : 'Expand thinking' },
     { value: 'delete', label: 'Delete chat', danger: true },
   ]);
 
   function onSelect(value: string): void {
     if (value === 'pin') void handleFlag(thread.id, title, 'pinned', !thread.pinned);
     else if (value === 'archive') void handleFlag(thread.id, title, 'archived', !thread.archived);
+    else if (value === 'thinking') setExpanded(!thinking.expanded);
     else if (value === 'move') {
       choice = current;
       moveError = '';

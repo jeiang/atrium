@@ -71,12 +71,10 @@
   let asking = $state(false);
   let outcome = $state<Outcome>();
   let resolving = $state(false);
-  let phase = $state<'open' | 'busy' | 'counting' | 'decided'>('open');
+  let phase = $state<'open' | 'busy' | 'decided'>('open');
   let busyOn = $state<Decision>();
-  let left = $state(0);
   let receipt = $state<{ decision: Decision; title: string; at: Date; note?: string; undoUntil?: number }>();
   let armTimer: number | undefined;
-  let countTimer: number | undefined;
   let cardHeight = $state(0);
   let rootHeight = $state(0);
 
@@ -187,8 +185,6 @@
     return () => clearTimeout(armTimer);
   });
 
-  $effect(() => () => clearInterval(countTimer));
-
   $effect(() => {
     const focused = document.activeElement;
     if (rowInert && focused instanceof HTMLElement && row?.contains(focused)) focused.blur();
@@ -209,7 +205,7 @@
   }
 
   async function decide(decision: Decision, handler: Handler): Promise<void> {
-    if (phase !== 'open' && phase !== 'counting') return;
+    if (phase !== 'open') return;
     const focused = article?.contains(document.activeElement) || document.activeElement === document.body;
     phase = 'busy';
     busyOn = decision;
@@ -237,30 +233,7 @@
   }
 
   function onSend(): void {
-    if (rowInert) return;
-    if (mode === 'hold') {
-      void decide('approve', onapprove);
-      return;
-    }
-    if (phase !== 'open') return;
-    phase = 'counting';
-    left = UNDO_MS / 1000;
-    announce(`${approval.sending ?? 'Sending'} in ${left} seconds. Press Undo to stop.`);
-    countTimer = window.setInterval(() => {
-      left -= 1;
-      if (left > 0) return;
-      clearInterval(countTimer);
-      void decide('approve', onapprove);
-    }, 1000);
-  }
-
-  async function onStop(): Promise<void> {
-    if (phase !== 'counting') return;
-    clearInterval(countTimer);
-    phase = 'open';
-    announce('Not sent. Nothing changed.');
-    await tick();
-    row?.querySelector<HTMLElement>('button')?.focus();
+    if (!rowInert) void decide('approve', onapprove);
   }
 
   function onConfirmOpen(): void {
@@ -381,8 +354,6 @@
       undoUntil={receipt.undoUntil}
       onundo={receipt.undoUntil === undefined ? undefined : onUndo}
     />
-  {:else if phase === 'counting'}
-    <ReceiptLine tone="pending" title="{approval.sending ?? 'Sending'} in {left} s" onundo={onStop} />
   {:else}
     {#if blocked}
       <p class="approval__note">{blocked.reason}</p>

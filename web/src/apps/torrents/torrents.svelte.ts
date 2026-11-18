@@ -15,7 +15,7 @@ import {
 } from '../../contract';
 import { outcomeUnknown, refusedOffline } from '../../shared/device.svelte';
 import type { Tone } from '../../shared/ui/Badge.svelte';
-import { dismissToast, TOAST_MS, toast } from '../../shared/ui/toast.svelte';
+import { toast } from '../../shared/ui/toast.svelte';
 
 export const TORRENT_TOPICS = ['effects'] as const;
 const PAGE = 100;
@@ -233,42 +233,4 @@ export function controlToast(torrent: MediaTorrent, action: 'pause' | 'resume', 
           .finally(() => refreshTorrents(client)),
     },
   });
-}
-
-export interface HeldRemoval {
-  hash: string;
-  until: number;
-  timer: number;
-  toast: number;
-}
-
-export const held = $state<Record<string, HeldRemoval>>({});
-
-export function holdRemoval(torrent: MediaTorrent, client: QueryClient, onproblem: (problem: Problem) => void): void {
-  const send = (): void => {
-    delete held[torrent.hash];
-    dismissToast(id);
-    handleControl(torrent.hash, 'remove', true)
-      .then(() => toast(`Removed ${torrent.name} and deleted its files.`))
-      .catch((error: unknown) => onproblem(problemOf(error)))
-      .finally(() => refreshTorrents(client));
-  };
-  const id = toast(`Removing ${torrent.name} and its files in 10 seconds.`, {
-    action: { label: 'Undo', run: () => undoRemoval(torrent) },
-  });
-  held[torrent.hash] = {
-    hash: torrent.hash,
-    until: Date.now() + TOAST_MS,
-    timer: window.setTimeout(send, TOAST_MS),
-    toast: id,
-  };
-}
-
-export function undoRemoval(torrent: MediaTorrent): void {
-  const hold = held[torrent.hash];
-  if (!hold) return;
-  clearTimeout(hold.timer);
-  dismissToast(hold.toast);
-  delete held[torrent.hash];
-  toast(`Nothing was removed. ${torrent.name} stays.`);
 }

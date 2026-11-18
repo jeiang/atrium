@@ -1,8 +1,6 @@
 <script lang="ts" module>
-  import { SvelteMap } from 'svelte/reactivity';
   import {
     ApiError,
-    OFFLINE_MESSAGE,
     ok,
     reviewApprove,
     reviewDismiss,
@@ -13,36 +11,14 @@
     reviewUndoable,
   } from '../../contract';
   import { stuckChoices, stuckOf } from '../../shared/assistant/stuck';
-  import { device, outcomeUnknown, unreachable } from '../../shared/device.svelte';
+  import { outcomeUnknown, unreachable } from '../../shared/device.svelte';
   import { queryClient } from '../../shared/query';
   import { toast } from '../../shared/ui/toast.svelte';
-
-  const deferred = new SvelteMap<number, number>();
 
   function failureText(error: unknown): string {
     if (outcomeUnknown(error)) return `The outcome is unknown. ${error.message} atrium did not try again.`;
     if (error instanceof ApiError) return error.message;
     return 'The outcome is unknown. The connection failed before atrium answered, so this may or may not have happened. atrium did not try again.';
-  }
-
-  async function handleDismissDue(id: number): Promise<void> {
-    deferred.delete(id);
-    try {
-      ok(await reviewDismiss(id, {}));
-    } catch (error) {
-      toast(failureText(error), { tone: 'error' });
-    }
-    await queryClient.invalidateQueries({ queryKey: ['proposal', id] });
-    await queryClient.invalidateQueries({ queryKey: ['thread'] });
-  }
-
-  export function declining(id: number): boolean {
-    return deferred.has(id);
-  }
-
-  export function release(id: number): void {
-    clearTimeout(deferred.get(id));
-    deferred.delete(id);
   }
 </script>
 
@@ -55,8 +31,6 @@
     proposalOutcome,
     proposalToApproval,
   } from '../../shared/assistant/proposalApproval';
-  import { UNDO_MS } from '../../shared/assistant/ReceiptLine.svelte';
-  import type { Decision } from '../../shared/assistant/types';
   import Button from '../../shared/ui/Button.svelte';
   import ViewState from '../../shared/ui/ViewState.svelte';
 
@@ -144,20 +118,18 @@
     ondecided();
   }
 
-  function onDecline(): void {
-    if (!device.online) refuse(new ApiError(0, { error: { code: 'offline', message: OFFLINE_MESSAGE } }));
-    deferred.set(
-      id,
-      window.setTimeout(() => void handleDismissDue(id), UNDO_MS),
-    );
+  async function onDecline(): Promise<void> {
+    try {
+      ok(await reviewDismiss(id, {}));
+    } catch (error) {
+      void queryClient.invalidateQueries({ queryKey: ['proposal', id] });
+      refuse(error);
+    }
+    await queryClient.invalidateQueries({ queryKey: ['proposal', id] });
+    void queryClient.invalidateQueries({ queryKey: ['thread'] });
   }
 
-  async function onUndo(decision: Decision): Promise<void> {
-    if (decision === 'decline') {
-      clearTimeout(deferred.get(id));
-      deferred.delete(id);
-      return;
-    }
+  async function onUndo(): Promise<void> {
     const entries = ok(await reviewUndoable({ run_id: String(run) })).items;
     for (const entry of entries.filter((item) => item.undoable && !item.undone_at)) ok(await reviewUndo(entry.id));
     ondecided();
@@ -190,12 +162,19 @@
   {:else}
     <ViewState kind="loading" title="Loading the ask" />
   {/if}
-{:else if proposal.data.status !== 'pending' && !deferred.has(id)}
+{:else if proposal.data.status !== 'pending'}
   <ViewState kind="partial" title={settledTitle} level={4} action={canUndo ? undoAction : undefined}>
     {proposal.data.title}
   </ViewState>
 {:else}
-  <ApprovalCard {approval} level={4} onapprove={onApprove} ondecline={onDecline} onundo={onUndo} />
+  <ApprovalCard
+    {approval}
+    level={4}
+    undoable={['approve']}
+    onapprove={onApprove}
+    ondecline={onDecline}
+    onundo={onUndo}
+  />
 {/if}
 
 {#snippet undoAction()}

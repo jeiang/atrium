@@ -32,11 +32,7 @@
   const hold = $derived(presentation === 'hold');
   const shown = $derived(hold ? `Hold to ${label.charAt(0).toLowerCase()}${label.slice(1)}` : label);
   const blocked = $derived(disabled || phase === 'sent');
-  const how = $derived(
-    hold
-      ? 'Press and hold to send. With a keyboard, press Enter and confirm.'
-      : 'Sends after 10 seconds unless you press Undo.',
-  );
+  const describedBy = $derived([gated && `${uid}-cue`, hold && `${uid}-how`].filter(Boolean).join(' ') || undefined);
 
   function duration(): number {
     return matchMedia('(prefers-reduced-motion: reduce)').matches ? HOLD_REDUCED_MS : HOLD_MS;
@@ -168,7 +164,7 @@
     data-phase={phase}
     data-gated={gated || undefined}
     aria-disabled={gated || blocked || undefined}
-    aria-describedby={gated ? `${uid}-cue ${uid}-how` : `${uid}-how`}
+    aria-describedby={describedBy}
     onpointerdown={onPointerDown}
     onpointerleave={cancel}
     onkeydown={onKeyDown}
@@ -181,7 +177,11 @@
     {/if}
     <span class="hold__label">{shown}</span>
   </button>
-  <span class="visually-hidden" id="{uid}-how">{how}</span>
+  {#if hold}
+    <span class="visually-hidden" id="{uid}-how"
+      >Press and hold to send. With a keyboard, press Enter and confirm.</span
+    >
+  {/if}
   {#if gated}
     <span class="hold-cue" id="{uid}-cue">More below. Read to the end to send</span>
   {:else if note}

@@ -57,7 +57,6 @@
       >Open a forward</Button
     >
   </div>
-  <ReceiptLine tone="pending" title="Sending to Odile Marsh in 7 s" onundo={() => undefined} />
   <ReceiptLine
     title="Archived"
     at={Date.parse('2026-11-10T09:30:00Z')}

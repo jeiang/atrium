@@ -29,7 +29,6 @@
     consequence: { ...draftApproval.consequence, audience: '6 people on the book club list' },
     primary: 'Send email to 6 people',
     done: 'Sent to 6 people',
-    sending: 'Sending to 6 people',
   };
 
   const samples: ToolCall[] = [
