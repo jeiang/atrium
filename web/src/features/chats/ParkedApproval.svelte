@@ -1,6 +1,7 @@
 <script lang="ts" module>
   import {
     ApiError,
+    OFFLINE_MESSAGE,
     ok,
     reviewApprove,
     reviewDismiss,
@@ -11,7 +12,7 @@
     reviewUndoable,
   } from '../../contract';
   import { stuckChoices, stuckOf } from '../../shared/assistant/stuck';
-  import { outcomeUnknown, unreachable } from '../../shared/device.svelte';
+  import { device, outcomeUnknown, unreachable } from '../../shared/device.svelte';
   import { queryClient } from '../../shared/query';
   import { toast } from '../../shared/ui/toast.svelte';
 
@@ -119,6 +120,7 @@
   }
 
   async function onDecline(): Promise<void> {
+    if (!device.online) refuse(new ApiError(0, { error: { code: 'offline', message: OFFLINE_MESSAGE } }));
     try {
       ok(await reviewDismiss(id, {}));
     } catch (error) {

@@ -73,6 +73,7 @@
   let resolving = $state(false);
   let phase = $state<'open' | 'busy' | 'decided'>('open');
   let busyOn = $state<Decision>();
+  let attempt = $state(0);
   let receipt = $state<{ decision: Decision; title: string; at: Date; note?: string; undoUntil?: number }>();
   let armTimer: number | undefined;
   let cardHeight = $state(0);
@@ -213,6 +214,7 @@
       await handler();
     } catch {
       phase = 'open';
+      attempt += 1;
       busyOn = undefined;
       return;
     }
@@ -372,15 +374,17 @@
       {:else if blocked}
         <Button variant="primary" onclick={onrepair}>{blocked.repair}</Button>
       {:else if approval.irreversible}
-        <HoldButton
-          label={approval.primary}
-          presentation={mode}
-          {gated}
-          disabled={phase !== 'open'}
-          onreveal={onReveal}
-          onconfirm={onConfirmOpen}
-          onsend={onSend}
-        />
+        {#key attempt}
+          <HoldButton
+            label={approval.primary}
+            presentation={mode}
+            {gated}
+            disabled={phase !== 'open'}
+            onreveal={onReveal}
+            onconfirm={onConfirmOpen}
+            onsend={onSend}
+          />
+        {/key}
       {:else}
         <Button variant="primary" pending={busyOn === 'approve'} onclick={onApprove}>{approval.primary}</Button>
       {/if}
