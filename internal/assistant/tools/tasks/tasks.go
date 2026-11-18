@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strconv"
 	"time"
@@ -48,7 +49,7 @@ func Tools(svc func(*tool.Context) *tasksapp.Service, items func(*tool.Context) 
 		},
 		{
 			Name:        "task_update",
-			Description: "Update a task's title, notes, due date, reminder time or priority by ref (task:<id> from commitment_list). Commitments from mail cannot be edited. Undoable.",
+			Description: "Update a task's title, notes, due date, reminder time or priority by ref (task:<id> from commitment_list). A commitment from mail has no editable fields; use task_close to change its status. Undoable.",
 			InputSchema: json.RawMessage(updateSchema),
 			Handler:     update(svc),
 			Effect:      tool.WriteUndo, Undo: tasksapp.UndoRestore,
@@ -58,9 +59,9 @@ func Tools(svc func(*tool.Context) *tasksapp.Service, items func(*tool.Context) 
 		},
 		{
 			Name:        "task_close",
-			Description: "Close an open task by ref (task:<id> from commitment_list): outcome done (the default) or dismissed. Commitments from mail are closed by the operator. Undoable.",
+			Description: "Close an open task or commitment by ref (task:<id> or commitment:<id> from commitment_list): outcome done (the default) or dismissed. Closing a commitment from mail waits for the operator's approval. Undoable.",
 			InputSchema: json.RawMessage(closeSchema),
-			Handler:     closeTask(svc),
+			Handler:     closeTask(svc, items),
 			Effect:      tool.WriteUndo, Undo: tasksapp.UndoRestore,
 			Annotated: true,
 			Channel:   tool.ChannelOwn,
@@ -177,17 +178,25 @@ func list(svc func(*tool.Context) *commitmentsapp.Service) tool.Handler {
 	}
 }
 
-func taskRef(args tool.Args) (int64, error) {
+func refOf(args tool.Args) (string, string, int64, error) {
 	ref, ok, err := tool.TextArg(args, "ref", true)
 	if err != nil || !ok {
-		return 0, tool.Error("ref is required")
+		return "", "", 0, tool.Error("ref is required")
 	}
 	source, id, err := commitmentsapp.ParseRef(ref)
 	if err != nil {
-		return 0, fail(err)
+		return "", "", 0, fail(err)
+	}
+	return ref, source, id, nil
+}
+
+func taskRef(args tool.Args) (int64, error) {
+	ref, source, id, err := refOf(args)
+	if err != nil {
+		return 0, err
 	}
 	if source != commitmentsapp.SourceTask {
-		return 0, tool.Error(ref + " is a commitment from mail; the assistant cannot change it. Ask the operator to mark it done or dismissed.")
+		return 0, tool.Error(ref + " is a commitment from mail; its fields cannot be edited. Use task_close to mark it done or dismissed.")
 	}
 	return id, nil
 }
@@ -239,9 +248,9 @@ func update(svc func(*tool.Context) *tasksapp.Service) tool.Handler {
 	}
 }
 
-func closeTask(svc func(*tool.Context) *tasksapp.Service) tool.Handler {
+func closeTask(svc func(*tool.Context) *tasksapp.Service, items func(*tool.Context) *commitmentsapp.Service) tool.Handler {
 	return func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-		id, err := taskRef(args)
+		ref, from, id, err := refOf(args)
 		if err != nil {
 			return nil, err
 		}
@@ -249,24 +258,58 @@ func closeTask(svc func(*tool.Context) *tasksapp.Service) tool.Handler {
 		if err != nil {
 			return nil, err
 		}
+		if outcome == "" {
+			outcome = "done"
+		}
+		if outcome != "done" && outcome != "dismissed" {
+			return nil, tool.Error("outcome must be done or dismissed")
+		}
 		if err := ledgerReady(tc); err != nil {
 			return nil, err
 		}
+		if from == commitmentsapp.SourceCommitment {
+			return closeCommitment(ctx, tc, items(tc), ref, outcome)
+		}
 		in := tasksapp.IDInput{Source: source(tc), ID: id}
 		var closed application.Change[tasksapp.Changed]
-		switch outcome {
-		case "", "done":
+		if outcome == "done" {
 			closed, err = svc(tc).Done(ctx, in)
-		case "dismissed":
+		} else {
 			closed, err = svc(tc).Dismiss(ctx, in)
-		default:
-			return nil, tool.Error("outcome must be done or dismissed")
 		}
 		if err != nil {
 			return nil, fail(err)
 		}
 		return map[string]any{"ref": taskRefOf(id), "status": closed.Data.Status, "effect_id": closed.EffectIDs[0]}, nil
 	}
+}
+
+func closeCommitment(ctx context.Context, tc *tool.Context, items *commitmentsapp.Service, ref, outcome string) (any, error) {
+	in := commitmentsapp.RefInput{Source: source(tc), Ref: ref}
+	if !tool.Approved(ctx) {
+		item, err := items.Get(ctx, in)
+		if err != nil {
+			return nil, fail(err)
+		}
+		if item.Data.Status != "open" {
+			return nil, tool.Error(fmt.Sprintf("%s is %s, not open", ref, item.Data.Status))
+		}
+		verb := map[string]string{"done": "Mark done", "dismissed": "Dismiss"}[outcome]
+		return nil, &tool.NeedsApproval{Change: tool.Change{Title: verb + ": " + ref, Subject: item.Data.Title,
+			Rule:   ref + " is a commitment from mail",
+			Fields: []tool.ChangeField{{Name: "Status", Before: item.Data.Status, After: outcome}}}}
+	}
+	var closed application.Change[commitmentsapp.Changed]
+	var err error
+	if outcome == "done" {
+		closed, err = items.DoneAs(ctx, commitmentsapp.DoneName, in)
+	} else {
+		closed, err = items.DismissAs(ctx, commitmentsapp.DismissName, in)
+	}
+	if err != nil {
+		return nil, fail(err)
+	}
+	return map[string]any{"ref": ref, "status": closed.Data.Status, "effect_id": closed.EffectIDs[0]}, nil
 }
 
 func taskRefOf(id int64) string {

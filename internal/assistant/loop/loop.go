@@ -619,14 +619,25 @@ func (s *state) settlePending(ctx context.Context) error {
 		return err
 	}
 	results := make([]json.RawMessage, len(pending))
+	var parked *tool.Park
 	for i, use := range pending {
 		call, err := journal.GetToolCall(ctx, s.d.Read, deref(last.RunID), use.ID)
 		if err != nil {
 			return err
 		}
-		if results[i], err = s.x.settle(ctx, use, call); err != nil {
+		var park *tool.Park
+		results[i], err = s.x.settle(ctx, use, call)
+		switch {
+		case errors.As(err, &park):
+			if parked == nil {
+				parked = park
+			}
+		case err != nil:
 			return err
 		}
+	}
+	if parked != nil {
+		return parked
 	}
 	_, err = journal.AppendMessage(ctx, s.d, s.thread.ID, &s.run.ID, journal.User, results, s.now(), nil)
 	return err

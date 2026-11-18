@@ -51,7 +51,7 @@ func DefaultTable() Table {
 		{Allowed, Allowed, Allowed, Allowed, Allowed, Allowed},
 		{Allowed, Allowed, Allowed, Allowed, Allowed, Allowed},
 		{Ask, Ask, Ask, Ask, Ask, Ask},
-		{Allowed, Ask, Denied, Ask, Denied, Allowed},
+		{Allowed, Ask, Ask, Ask, Ask, Allowed},
 	}
 }
 

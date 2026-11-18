@@ -821,6 +821,25 @@
         ],
         "type": "object"
       },
+      "Ask": {
+        "properties": {
+          "proposal_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "run_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "run_id"
+        ],
+        "type": "object"
+      },
       "Attention": {
         "properties": {
           "groups": {
@@ -10817,6 +10836,16 @@
             },
             "type": "array"
           },
+          "change": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProposalChange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "kind": {
             "const": "permission",
             "type": "string"
@@ -10848,7 +10877,8 @@
         },
         "required": [
           "kind",
-          "args"
+          "args",
+          "change"
         ],
         "type": "object"
       },
@@ -11163,6 +11193,25 @@
         ],
         "type": "object"
       },
+      "PreviewChangeField": {
+        "properties": {
+          "after": {
+            "type": "string"
+          },
+          "before": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "before",
+          "after"
+        ],
+        "type": "object"
+      },
       "PreviewCondition": {
         "properties": {
           "field": {
@@ -11337,6 +11386,41 @@
           "terms",
           "subjects",
           "messages"
+        ],
+        "type": "object"
+      },
+      "PreviewGuardedChange": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewChangeField"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "const": "guarded_change",
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "rule": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "subject",
+          "rule",
+          "fields",
+          "note"
         ],
         "type": "object"
       },
@@ -11654,6 +11738,7 @@
             "calendar_update": "#/components/schemas/PreviewCalendarUpdate",
             "deletion_rule": "#/components/schemas/PreviewDeletionRule",
             "gmail_label_merge": "#/components/schemas/PreviewLabelMerge",
+            "guarded_change": "#/components/schemas/PreviewGuardedChange",
             "inbox_backlog": "#/components/schemas/PreviewInboxBacklog",
             "mail_triage": "#/components/schemas/PreviewMailTriage",
             "rebalance_merge": "#/components/schemas/PreviewFolderMerge",
@@ -11678,6 +11763,9 @@
           },
           {
             "$ref": "#/components/schemas/PreviewLabelMerge"
+          },
+          {
+            "$ref": "#/components/schemas/PreviewGuardedChange"
           },
           {
             "$ref": "#/components/schemas/PreviewInboxBacklog"
@@ -17350,6 +17438,12 @@
               }
             ]
           },
+          "asks": {
+            "items": {
+              "$ref": "#/components/schemas/Ask"
+            },
+            "type": "array"
+          },
           "cost_usd": {
             "type": "number"
           },
@@ -17405,6 +17499,7 @@
         "required": [
           "thread",
           "queued",
+          "asks",
           "cost_usd",
           "meter",
           "items"

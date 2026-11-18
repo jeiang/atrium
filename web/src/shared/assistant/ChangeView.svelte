@@ -32,6 +32,7 @@
     'rebalance_merge',
     'rebalance_split',
     'reminder',
+    'guarded_change',
     'tool_call',
   ]);
   const shown = $derived(change && known.has(change.kind) ? change : null);
@@ -214,6 +215,36 @@
       <span class="change__meta">Remind at {formatDayTime(shown.remind_at)} · due {shown.due} · {shown.owner}</span>
       <span class="change__meta">From the mail “{shown.subject}”</span>
     </div>
+  {:else if shown?.kind === 'guarded_change'}
+    <p class="change__subject">{shown.subject}</p>
+    <p class="change__meta">{shown.rule}</p>
+    {#each shown.fields as field (field.name)}
+      <dl class="change__move" aria-label={field.name}>
+        <div>
+          <dt>{field.name}</dt>
+          <dd>
+            {#if field.before}
+              <del class="change__body">{field.before}</del>
+            {:else}
+              <span class="change__meta">Empty</span>
+            {/if}
+          </dd>
+        </div>
+        <div>
+          <dt>Becomes</dt>
+          <dd>
+            {#if field.after}
+              <ins class="change__body">{field.after}</ins>
+            {:else}
+              <span class="change__meta">Empty</span>
+            {/if}
+          </dd>
+        </div>
+      </dl>
+    {/each}
+    {#if shown.note}
+      <p>Reason: {shown.note}</p>
+    {/if}
   {:else if shown?.kind === 'tool_call'}
     <pre class="change__code"><code>{shown.tool}({text(shown.args)})</code></pre>
   {:else}

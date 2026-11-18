@@ -39,6 +39,7 @@ interface MockThread {
   cost: number;
   question?: { run_id: number; text: string } | null;
   held?: Held | null;
+  asks?: { proposal_id: number; run_id: number }[];
 }
 
 const BASE = Date.UTC(2026, 10, 16, 9, 0) / 1000;
@@ -250,6 +251,14 @@ function seed(): Map<number, MockThread> {
     queued: [],
     cost: 0.03,
   });
+  add({
+    thread: thread(14, 'Tidy the house notes', 10),
+    items: [item(1, 'user', 'Update the house notes with the new details.', { run_id: 108 })],
+    active: runOf(108, 'parked'),
+    queued: [],
+    cost: 0.03,
+    asks: [601, 602, 603].map((id) => ({ proposal_id: id, run_id: 108 })),
+  });
   for (let index = 0; index < 33; index++) {
     add({
       thread: thread(300 + index, `Notes on the allotment, week ${index + 1}`, 600 + index * 240),
@@ -322,6 +331,42 @@ const proposals = new Map<number, ProposalDetail>([
       },
     },
   ],
+  ...(
+    [
+      [601, 'Water shutoff', 'Under the stairs.', 'Behind the boiler.'],
+      [602, 'Bin day', 'Tuesday.', 'Wednesday.'],
+      [603, 'Gate code', '1234.', '4321.'],
+    ] as const
+  ).map(
+    ([id, subject, before, after]): [number, ProposalDetail] => [
+      id,
+      {
+        id,
+        kind: 'permission',
+        title: `Edit K${id - 500}`,
+        status: 'pending',
+        actions: [],
+        blocked: false,
+        undoable: false,
+        created_at: BASE - 200,
+        link_thread_id: 14,
+        payload: {
+          kind: 'permission',
+          args: [],
+          thread_id: 14,
+          run_id: 108,
+          change: {
+            kind: 'guarded_change',
+            title: `Edit K${id - 500}`,
+            subject,
+            rule: `K${id - 500} is operator-owned`,
+            fields: [{ name: 'Body', before, after }],
+            note: '',
+          },
+        },
+      },
+    ],
+  ),
 ]);
 
 let connections = 0;
@@ -644,9 +689,11 @@ function decide(id: number, status: string, reply: string): Response | undefined
     actions: undoable ? ['undo'] : [],
   });
   const value = proposal.link_thread_id ? threads.get(proposal.link_thread_id) : undefined;
-  if (value?.active) {
+  const open = value?.asks?.some((ask) => proposals.get(ask.proposal_id)?.status === 'pending') ?? false;
+  if (value?.active && !open) {
     value.items.push(item(nextSeq(value), 'assistant', reply, { run_id: value.active.id }));
     value.active = null;
+    value.asks = [];
   }
   publishReview();
   return HttpResponse.json({
@@ -845,6 +892,7 @@ export const chatHandlers = [
       next_cursor: first && older.length > page.length ? String(first.seq) : null,
       question: value.question ?? null,
       held: value.held ?? null,
+      asks: value.asks ?? [],
     };
     return HttpResponse.json(body);
   }),

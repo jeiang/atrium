@@ -895,8 +895,8 @@ the same verbs, so they can be undone too. A commitment
 from mail cannot be edited or deleted, because the next mail scan would bring it
 back. The assistant lists both with `commitment_list` (commitments only in
 chat, scheduled and subagent runs), and in chat it can edit, complete or
-dismiss a task with `task_update` and `task_close`. It never changes a
-commitment from mail.
+dismiss a task with `task_update` and `task_close`. Closing a commitment from
+mail with `task_close` asks you first with a card that shows the status change.
 
 Assistant runs use the Anthropic connection and a static supported-model
 catalog. A missing key or refused budget prevents a paid start before a new
@@ -932,19 +932,31 @@ Tool permissions, run-kind limits, and approval are enforced in code. A fixed
 untrusted-data preamble comes before the editable system prompt. Each tool has
 a channel: none, own accounts, notify, other people, or internet. Own-account
 and notify actions act at once and appear on Done with Undo. Other people
-always asks. Internet allows, asks or denies depending on what the thread
-holds; once untrusted text is present, other people and internet can only ask
-or deny, and editing the table cannot loosen that. An ask creates a permission
-request and parks the run without calling the tool; Deny resumes with a
-refusal. Approval re-checks the current table, tool settings and thread marks
-before the call. Scheduled, nightly and subagent runs never park, so an ask
-there is a deny. `web_fetch` reaches only URLs the operator typed or a verified
-`search_web` citation added; it uses no proxy and connects only to public
-addresses, checked on every redirect.
+always asks. Internet allows a clean thread and asks once the thread holds
+anything marked (an isolated subagent still allows); a stored deny in the
+table still applies. Once untrusted text is present, other people and
+internet can only ask or deny, and editing the table cannot loosen that. An
+ask creates a permission request and parks the run without calling the tool;
+Deny resumes with a refusal. Approval re-checks the current table, tool
+settings and thread marks before the call. Several asks from one step park
+together and show in the chat as one gallery you scroll sideways, with a
+decision on each card plus Approve all and Deny all; the run continues once,
+after the last decision. Anything the assistant cannot do on its own asks the
+same way, with a card that shows what changes: editing or retracting a
+confirmed, operator-written, imported, private or standing-instructions
+knowledge record (title and before and after, or the retraction and reason),
+closing a commitment from mail, and fetching a URL you did not type. Changes
+to its own guard rails (the permission table, spend caps, mail mode, go-live
+and baseline, credentials and connection settings) stay refused. Scheduled,
+nightly and subagent runs never park, so an ask there is a deny. `web_fetch`
+fetches URLs you typed or a verified `search_web` citation added directly;
+it uses no proxy and connects only to public addresses, checked on every
+redirect.
 
 Knowledge is the durable memory store. Records have scope, marks, and source
-provenance; an edit can only add marks. Confirmed and operator/import-written
-records are protected from agent edits and retraction. Confirmation clears
+provenance; an edit can only add marks. Agent edits and retractions of
+confirmed and operator/import-written records wait for your approval in chat.
+Confirmation clears
 `untrusted` but keeps `pii` and `messages`, so such records stay out of the
 profile. Eligible pinned, confirmed, unmarked records form the assistant
 profile. Private spaces restrict their content to that space, and nightly

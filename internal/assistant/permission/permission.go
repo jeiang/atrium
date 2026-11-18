@@ -20,7 +20,8 @@ type Payload struct {
 }
 
 type Preview struct {
-	Args tool.Args `json:"args"`
+	Args   tool.Args    `json:"args"`
+	Change *tool.Change `json:"change,omitempty"`
 }
 
 func NewPayload(name string, tc *tool.Context, args tool.Args) (Payload, error) {
@@ -45,3 +46,10 @@ func FingerprintOf(name string, runID int64, args tool.Args) (string, error) {
 }
 
 func Title(name string) string { return "Allow " + name }
+
+func TitleOf(name string, change *tool.Change) string {
+	if change != nil && change.Title != "" {
+		return change.Title
+	}
+	return Title(name)
+}

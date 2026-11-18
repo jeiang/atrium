@@ -115,6 +115,7 @@
   const userTexts = $derived(new Set(visible.filter((entry) => entry.kind === 'user').map((entry) => entry.text)));
   const queued = $derived(first?.queued ?? []);
   const question = $derived(first?.question ?? undefined);
+  const asks = $derived(first?.asks ?? []);
   const waiting = $derived(
     optimistic.filter(
       (entry) =>
@@ -432,6 +433,16 @@
     return items.findLast((entry) => entry.kind === 'proposal' && entry.run_id === run && entry.proposal_id);
   }
 
+  function batchOf(entry: TranscriptItem): number[] {
+    const index = visible.indexOf(entry);
+    const same = (other: TranscriptItem | undefined): other is TranscriptItem =>
+      other?.kind === 'proposal' && other.seq === entry.seq && other.run_id === entry.run_id && !!other.proposal_id;
+    if (same(visible[index - 1])) return [];
+    const ids: number[] = [];
+    for (let at = index; same(visible[at]); at++) ids.push(visible[at]?.proposal_id ?? 0);
+    return ids;
+  }
+
   function statusOf(stream: RunStream): { text: string; tone: 'neutral' | 'warn' | 'error' | 'accent' } | undefined {
     if (stream.status === 'busy') return { text: 'Too many chats are streaming. Trying again soon', tone: 'warn' };
     if (stream.status === 'retrying') return { text: 'Connection lost. Reconnecting', tone: 'warn' };
@@ -609,6 +620,23 @@
   {/await}
 {/snippet}
 
+{#snippet batch(
+    ids: number[],
+    run: number,
+  )}
+  {#if ids.length === 1}
+    {@render parked(ids[0] ?? 0, run)}
+  {:else}
+    {#await import('./ApprovalGallery.svelte')}
+      <ViewState kind="loading" title="Loading the asks" />
+    {:then { default: ApprovalGallery }}
+      <ApprovalGallery {ids} {run} thread={title} ondecided={onDecided} />
+    {:catch}
+      <ViewState kind="error" title="The asks could not be loaded" level={4}>Open the Inbox to decide them.</ViewState>
+    {/await}
+  {/if}
+{/snippet}
+
 {#snippet tools(
     calls: ToolCall[],
     run?: number,
@@ -709,9 +737,12 @@
             <li class="turn">{@render tools(calls)}</li>
           {/if}
         {:else if entry.kind === 'proposal' && entry.proposal_id && entry.run_id != null}
-          <li class="turn">
-            {@render parked(entry.proposal_id, entry.run_id)}
-          </li>
+          {const ids = $derived(batchOf(entry))}
+          {#if ids.length > 0}
+            <li class="turn">
+              {@render batch(ids, entry.run_id)}
+            </li>
+          {/if}
         {:else if entry.kind === 'compaction'}
           <li class="turn turn--divider">Earlier messages were summarized</li>
         {:else if entry.text}
@@ -753,6 +784,9 @@
           <li class="turn turn--status"><StatusSlot text={status.text} tone={status.tone} /></li>
         {/if}
       {/each}
+      {#if asks.length > 0}
+        <li class="turn">{@render batch(asks.map((ask) => ask.proposal_id), asks[0]?.run_id ?? 0)}</li>
+      {/if}
       {#if question}
         <li class="turn turn--question">
           <span class="eyebrow">Question for you</span>

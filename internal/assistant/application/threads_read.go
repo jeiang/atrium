@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"math/bits"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/memory"
+	"github.com/jeiang/atrium/internal/assistant/permission"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/subagents"
@@ -72,6 +74,7 @@ type Transcript struct {
 	BranchedFrom    *threads.Thread `json:"branched_from"`
 	Question        *Question       `json:"question"`
 	Held            *service.Held   `json:"held"`
+	Asks            []Ask           `json:"asks"`
 	History         bool            `json:"-"`
 	Earlier         int64           `json:"-"`
 	EarlierKeep     int             `json:"-"`
@@ -82,6 +85,11 @@ type Question struct {
 	RunID     int64  `json:"run_id"`
 	ToolUseID string `json:"tool_use_id"`
 	Text      string `json:"text"`
+}
+
+type Ask struct {
+	ProposalID int64 `json:"proposal_id"`
+	RunID      int64 `json:"run_id"`
 }
 
 type Queued struct {
@@ -323,7 +331,31 @@ func transcript(ctx context.Context, q db.Querier, in TranscriptInput) (Transcri
 		out.Items = out.Items[cut:]
 	}
 	out.History = hasHistory(ctx, q, in.ID)
-	return out, nil
+	out.Asks, err = asks(ctx, q, out.Active)
+	return out, err
+}
+
+func asks(ctx context.Context, q db.Querier, active *journal.Run) ([]Ask, error) {
+	if active == nil || active.State != journal.Parked {
+		return []Ask{}, nil
+	}
+	parked := 0.0
+	if active.EndedAt != nil {
+		parked = *active.EndedAt
+	}
+	rows, err := q.QueryContext(ctx, "SELECT id FROM proposals WHERE kind = ? AND json_extract(payload, '$.run_id') = ? "+
+		"AND (status = ? OR decided_ts >= ?) ORDER BY created_ts, id", permission.Kind, active.ID, proposals.Pending, parked)
+	if err != nil {
+		return nil, err
+	}
+	out, err := db.Collect(rows, func(r *sql.Rows) (Ask, error) {
+		a := Ask{RunID: active.ID}
+		return a, r.Scan(&a.ProposalID)
+	})
+	if out == nil {
+		out = []Ask{}
+	}
+	return out, err
 }
 
 func (s *Service) Transcript(ctx context.Context, in TranscriptInput) (application.Read[Transcript], error) {

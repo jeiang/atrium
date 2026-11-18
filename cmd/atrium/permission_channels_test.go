@@ -154,7 +154,7 @@ func TestDisabledAssistantPermissionDismissalDoesNotResume(t *testing.T) {
 	}
 }
 
-func TestContactIdentifiersBlockTheInternetButKeepTasksAndNotify(t *testing.T) {
+func TestContactIdentifiersAskBeforeTheInternetButKeepTasksAndNotify(t *testing.T) {
 	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	contactsDir := filepath.Join(dir, "contacts")
@@ -171,31 +171,32 @@ func TestContactIdentifiersBlockTheInternetButKeepTasksAndNotify(t *testing.T) {
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("t1", "task_add", map[string]any{"title": "Email Alice"})),
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("n1", "notify", map[string]any{"title": "Alice", "body": "Found her"})),
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": "https://example.com/"})),
-		anthropictest.Reply("end_turn", anthropictest.Text("done")),
 	)
 	if ran := runApp(t, "agent", "run", "--text", "find Alice and email her"); ran.code != cli.ExitOK {
 		t.Fatalf("run: %d %s", ran.code, ran.stderr)
 	}
 	requests := api.Requests()[start:]
-	if len(requests) != 5 {
-		t.Fatalf("%d model requests, want 5", len(requests))
+	if len(requests) != 4 {
+		t.Fatalf("%d model requests, want 4", len(requests))
 	}
-	if after := requestTools(t, requests[1]); !slices.Contains(after, "task_add") || !slices.Contains(after, "notify") {
-		t.Errorf("own and notify tools dropped after a pii read: %v", after)
+	if after := requestTools(t, requests[1]); !slices.Contains(after, "task_add") || !slices.Contains(after, "notify") || !slices.Contains(after, "web_fetch") {
+		t.Errorf("own, notify and internet tools after a pii read: %v", after)
 	}
 	for _, id := range []string{"t1", "n1"} {
 		if result := toolResultFor(t, requests[len(requests)-1], id); result["is_error"] == true {
 			t.Errorf("%s failed after a pii read: %v", id, result)
 		}
 	}
-	refusal := toolResultFor(t, requests[len(requests)-1], "f1")
-	if refusal["is_error"] != true || !strings.Contains(fmt.Sprint(refusal["content"]), "web_fetch is not allowed in this thread by the permission table") {
-		t.Errorf("web_fetch after a pii read returned %v, want a refusal", refusal)
-	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	if marks := threadMarkSet(t, dir, latestThread(t, dir)); marks != int64(tool.PII) {
 		t.Errorf("thread marks = %d, want pii", marks)
+	}
+	thread := latestThread(t, dir)
+	waitRunState(t, d, thread, "parked")
+	var asked string
+	if err := d.Read.QueryRow("SELECT json_extract(payload, '$.tool') FROM proposals WHERE id = ?", permissionProposal(t, d)).Scan(&asked); err != nil || asked != "web_fetch" {
+		t.Errorf("permission request for %q, %v, want web_fetch", asked, err)
 	}
 	var tasks, notifications int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM tasks WHERE title = 'Email Alice'").Scan(&tasks); err != nil || tasks != 1 {

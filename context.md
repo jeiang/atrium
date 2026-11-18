@@ -170,8 +170,12 @@ claims about the running application. Operator contracts are in
   edit can only add marks. `search_threads` reads the summaries of threads
   outside private projects and of the reader's own project; an explicit
   project id only narrows, and a deleted thread is never read. A record is
-  confirmed by the operator, and confirmed records and records written by
-  the operator or the import cannot be edited or retracted by the agent; a
+  confirmed by the operator. In a chat run, an agent edit or retraction of
+  a confirmed, operator-written, imported, private or standing-instructions
+  record waits for the operator's approval (a `permission` card that shows
+  the record title and the field before and after, or the retraction and
+  its reason); other run kinds refuse it, and a retracted record cannot be
+  edited. The approved write stays undoable. A
   retract must name a record in the writer thread's project. Pinned,
   confirmed, unmarked records outside a private project, or in the reader's
   own project, form the system prompt's profile block within
@@ -1761,10 +1765,11 @@ claims about the running application. Operator contracts are in
   offered; untrusted text with any kind; untrusted text in an isolated
   subagent run. The permission table maps the channel and situation to
   allow, ask or deny. Own and notify always allow; people always asks;
-  internet allows, asks or denies by situation. Code floors keep people
-  and internet at ask or deny whenever untrusted text is present, so
-  editing the table can only tighten those cells. The 24 cells are
-  `permission_<channel>_<situation>` enum settings, edited in the
+  internet allows clean threads and asks in every other situation except
+  isolated subagents, which allow (a stored deny still applies). Code
+  floors keep people and internet at ask or deny whenever untrusted text
+  is present, so editing the table can only tighten those cells. The 24
+  cells are `permission_<channel>_<situation>` enum settings, edited in the
   Permissions group on Settings › Assistant; a save is validated against the key's choices (the
   untrusted people and internet cells offer only ask or deny), and the
   table load clamps every cell to its floor and treats an unknown value as
@@ -1776,7 +1781,19 @@ claims about the running application. Operator contracts are in
   while the request is pending or after it is dismissed. Settlement reuses
   the recorded result of every call that already completed in the parked
   response and authorizes only the unfinished calls, so a resume continues
-  at the parked call. An approval card's apply re-authorizes the
+  at the parked call. Every call of a parked response runs or files its
+  request before the run parks, so several requests from one step park
+  together; the run resumes once, after the last of them is decided. A
+  call whose handler finds a protected target (a protected knowledge
+  record, a commitment from mail closed with `task_close`, a `web_fetch`
+  URL the operator did not type and `search_web` did not return) files the
+  same `permission` request with a `guarded_change` preview and performs
+  the call once on approval; changes to the agent's own guard rails
+  (permission table, spend caps, mail mode, go-live and baseline,
+  credentials and connection settings) stay refused. The chat transcript
+  lists the parked run's requests as `asks`, and the chat shows several
+  requests or approval cards from one step as one scrolling gallery with
+  Approve all and Deny all. An approval card's apply re-authorizes the
   originating thread against the current tool settings, permission table
   and marks at execution time, whichever entry point approved it (web
   card or `atrium proposals approve`); a disabled tool or a

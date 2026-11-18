@@ -127,6 +127,15 @@ export interface PreviewToolCall {
   args: unknown;
 }
 
+export interface PreviewGuardedChange {
+  kind: 'guarded_change';
+  title: string;
+  subject: string;
+  rule: string;
+  fields: { name: string; before: string; after: string }[];
+  note: string;
+}
+
 export type ProposalChange =
   | PreviewCalendarEvent
   | PreviewCalendarReply
@@ -138,7 +147,8 @@ export type ProposalChange =
   | PreviewFolderMerge
   | PreviewFolderSplit
   | PreviewReminder
-  | PreviewToolCall;
+  | PreviewToolCall
+  | PreviewGuardedChange;
 
 export interface MailDraftChange {
   kind: 'mail_draft';
