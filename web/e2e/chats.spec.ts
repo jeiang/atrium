@@ -873,6 +873,10 @@ test.describe('design checks', () => {
         if (layout.touch) await expectTouchTargets(page, 'main');
         await expectRoundedSurfaces(page, edgeSurfaces);
         await expectNoHorizontalScroll(page);
+        if (path === '/chat/7')
+          await page.evaluate(() =>
+            window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }),
+          );
         await expectNoSeriousAxeFindings(page);
       }
     });
