@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -620,6 +622,45 @@ func TestMailUndoneActionsDoNotRunAgain(t *testing.T) {
 			t.Fatalf("%d trash actions, want the undone one not repeated", n)
 		}
 	})
+}
+
+func TestMailWebUndoRefreshesTheFolders(t *testing.T) {
+	m := mailSafetyFixture(t, "live")
+	uid := m.add("INBOX", "Bank statement", "statements@bank.test", "target", "Your statement is ready.")
+	m.run(t, "sync")
+	id := m.messageID(t, "Bank statement")
+	m.run(t, "live", "rebaseline")
+	m.exec(t, "INSERT INTO corrections (message_id, account, folder, ts, source) VALUES (?, 'icloud', 'Bills', ?, 'operator')",
+		id, mail.WallClock()+60)
+	m.fake.Boxes["INBOX"].Box.SetFlags(uid, []string{`\Seen`}, nil)
+	m.run(t, "sync")
+	action := m.scalar(t, "SELECT CAST(id AS TEXT) FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'")
+	if state := m.scalar(t, "SELECT state FROM effects WHERE id = ?", action); state != "done" {
+		t.Fatalf("the correction action is %s, want done", state)
+	}
+	live := func() string {
+		return m.scalar(t, "SELECT COALESCE(group_concat(location, ','), '') FROM messages WHERE msgid LIKE '%target%' AND gone_at IS NULL")
+	}
+	if got := live(); got != "Bills" {
+		t.Fatalf("the message is in %q before the undo, want Bills", got)
+	}
+	base, _, _ := startServeApp(t, m.app, &lockedBuffer{})
+	client := webG3(t, base)
+	undone := dataG3(t, "web undo", client.do(http.MethodPost, "/web/v1/undo/write:"+action, nil))
+	if undone["undone"] != true || undone["sync_error"] != nil {
+		t.Fatalf("web undo = %v, want undone without a sync error", undone)
+	}
+	if n := len(m.fake.Boxes["INBOX"].Box.Messages); n != 1 {
+		t.Fatalf("the inbox holds %d messages after the undo, want 1", n)
+	}
+	if got := live(); got != "INBOX" {
+		t.Fatalf("the message is in %q after the web undo, want INBOX without a scheduled sync", got)
+	}
+	current := m.scalar(t, "SELECT CAST(id AS TEXT) FROM messages WHERE msgid LIKE '%target%' AND gone_at IS NULL")
+	hits := listG3(t, "inbox view", client.do(http.MethodGet, "/web/v1/mail/messages?account=icloud&folder=INBOX", nil), "items")
+	if len(hits) != 1 || fmt.Sprint(hits[0]["message_id"]) != current {
+		t.Fatalf("the inbox view after the web undo = %v, want message %s", hits, current)
+	}
 }
 
 func TestMailInterruptedExpungeAfterCopyIsUnknown(t *testing.T) {
