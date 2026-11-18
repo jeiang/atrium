@@ -110,6 +110,16 @@ extraRunScripts.push({
     { event: 'text', data: { run_id: 104, text: 'Two paints suit cedar: sage green and warm cream.' } },
   ]),
 });
+extraRunScripts.push({
+  thread: 14,
+  run: 108,
+  label: 'Three asks',
+  parked: true,
+  events: numbered([
+    start(14, 108, 'Tidy the house notes'),
+    { event: 'text', data: { run_id: 108, text: 'Three of these notes are yours, so I am asking first.' } },
+  ]),
+});
 
 const ORDER_THREAD = 12;
 const ORDER_RUN = 106;
