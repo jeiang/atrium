@@ -225,6 +225,59 @@ func TestFailedDAVRunRetriesAfterItsBackoff(t *testing.T) {
 	}
 }
 
+func TestAScheduledRunStoppedByAGracefulStopRunsAgainAfterTheRestartWithoutAFailure(t *testing.T) {
+	t.Parallel()
+	dir, srv := davFixture(t)
+	srv.SetObject(caldavtest.CalendarPath(0)+"dentist.ics", dentistICS)
+	held := newHeldDAV(t, srv.URL)
+	setEnv(t, davmirror.CalDAVEnv, held.URL+"/")
+	d := asstDB(t, dir)
+	declareJobsAndParkThem(t, d)
+
+	first := serveCLIProcess(t, dir)
+	asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE declaration_key = ?", float64(time.Now().Unix())-1, davJobKeys[0])
+	waitUntil(t, 60*time.Second, "the scheduled CalDAV run to reach the server", func() bool { return held.hits.Load() > 0 })
+	if code := first.stop(t, syscall.SIGTERM); code != cli.ExitOK {
+		t.Fatalf("first serve exit %d: %s", code, first.stderr.String())
+	}
+	if !strings.Contains(first.stderr.String(), "interrupted; its run resumes on restart") {
+		t.Fatalf("the stop did not interrupt the held run: %s", first.stderr.String())
+	}
+	if status, text := schedulerStatus(t, d, passrun.CalDAV); status != "running" {
+		t.Fatalf("the interrupted CalDAV run = %s %q, want running for the next start", status, text)
+	}
+	mirrored := filepath.Join(dir, "calendars", "cal0", "dentist.ics")
+	if _, err := os.Stat(mirrored); !os.IsNotExist(err) {
+		t.Fatalf("the interrupted run wrote the mirror: %v", err)
+	}
+
+	held.open()
+	hits := held.hits.Load()
+	second := serveCLIProcess(t, dir)
+	waitUntil(t, 60*time.Second, "the interrupted CalDAV run to settle", schedulerTerminal(d, passrun.CalDAV))
+	if code := second.stop(t, syscall.SIGTERM); code != cli.ExitOK {
+		t.Fatalf("second serve exit %d: %s", code, second.stderr.String())
+	}
+	if status, text := schedulerStatus(t, d, passrun.CalDAV); status != "ok" {
+		t.Fatalf("the CalDAV run after the restart = %s %q, want ok", status, text)
+	}
+	if n := schedulerRuns(t, d, passrun.CalDAV); n != 1 {
+		t.Fatalf("%d CalDAV runs, want the interrupted one resumed", n)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM job_runs WHERE error = 'worker lost'"); n != 0 {
+		t.Fatalf("%d runs ended worker lost after a graceful stop", n)
+	}
+	if n := titledNotices(t, d, "Failed: "); n != 0 {
+		t.Fatalf("%d failure notices after a graceful stop and restart", n)
+	}
+	if held.hits.Load() == hits {
+		t.Fatal("the restart did not run the interrupted CalDAV job again")
+	}
+	if data, err := os.ReadFile(mirrored); err != nil || !strings.Contains(string(data), "SUMMARY:Dentist") {
+		t.Fatalf("mirrored event after the restart %q, %v", data, err)
+	}
+}
+
 func TestDAVJobsWithoutAnICloudLoginRecordNoPass(t *testing.T) {
 	t.Parallel()
 	dir, _ := davFixture(t)
