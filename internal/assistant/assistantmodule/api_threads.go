@@ -110,6 +110,13 @@ type apiQuestion struct {
 	Text  string `json:"text"`
 }
 
+type apiHeld struct {
+	RunID     int64  `json:"run_id"`
+	ToolUseID string `json:"tool_use_id"`
+	Tool      string `json:"tool"`
+	Args      string `json:"args"`
+}
+
 type apiItem struct {
 	Seq        int64              `json:"seq"`
 	RunID      *int64             `json:"run_id"`
@@ -128,6 +135,7 @@ type apiTranscript struct {
 	ActiveRun  *apiRun       `json:"active_run"`
 	Queued     []apiQueued   `json:"queued"`
 	Question   *apiQuestion  `json:"question"`
+	Held       *apiHeld      `json:"held"`
 	CostUSD    float64       `json:"cost_usd"`
 	Meter      service.Meter `json:"meter"`
 	Items      []apiItem     `json:"items"`
@@ -833,6 +841,9 @@ func transcriptOut(v asstapp.Transcript, cursor api.Cursor) apiTranscript {
 	}
 	if v.Question != nil {
 		out.Question = &apiQuestion{RunID: v.Question.RunID, Text: v.Question.Text}
+	}
+	if v.Held != nil {
+		out.Held = &apiHeld{RunID: v.Held.RunID, ToolUseID: v.Held.ToolUseID, Tool: v.Held.Tool, Args: v.Held.Args}
 	}
 	return out
 }

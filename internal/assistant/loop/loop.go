@@ -41,6 +41,7 @@ const (
 
 	Verify              = "atrium was interrupted while this call was in flight; it may or may not have taken effect. Check the current state before retrying it."
 	CompletedUncaptured = "This call completed before an interruption but its result was not captured. Check the current state."
+	NotRun              = "This call did not run: the run ended before it started."
 )
 
 var log = logx.Logger("atrium.agent")
@@ -628,6 +629,29 @@ func (s *state) settlePending(ctx context.Context) error {
 		}
 	}
 	_, err = journal.AppendMessage(ctx, s.d, s.thread.ID, &s.run.ID, journal.User, results, s.now(), nil)
+	return err
+}
+
+func CloseAbandoned(ctx context.Context, d *db.DB, threadID, runID int64, now float64) error {
+	last, pending, err := PendingUses(ctx, d.Read, threadID)
+	if err != nil || len(pending) == 0 {
+		return err
+	}
+	results := make([]json.RawMessage, len(pending))
+	for i, use := range pending {
+		call, err := journal.GetToolCall(ctx, d.Read, deref(last.RunID), use.ID)
+		if err != nil {
+			return err
+		}
+		if call == nil {
+			results[i] = toolResult(use.ID, NotRun, true)
+			continue
+		}
+		if results[i], err = closeCall(ctx, d, use, call, now); err != nil {
+			return err
+		}
+	}
+	_, err = journal.AppendMessage(ctx, d, threadID, &runID, journal.User, results, now, nil)
 	return err
 }
 

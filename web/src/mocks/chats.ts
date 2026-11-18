@@ -1,5 +1,6 @@
 import { delay, HttpResponse, http, passthrough } from 'msw';
 import type {
+  Held,
   HistoryLine,
   ListedThread,
   ProposalDetail,
@@ -37,6 +38,7 @@ interface MockThread {
   queued: { id: number; text: string; created_at: number }[];
   cost: number;
   question?: { run_id: number; text: string } | null;
+  held?: Held | null;
 }
 
 const BASE = Date.UTC(2026, 10, 16, 9, 0) / 1000;
@@ -233,7 +235,8 @@ function seed(): Map<number, MockThread> {
     thread: thread(ORDER_THREAD, 'Order the cedar boards', 100),
     items: [item(1, 'user', 'Order twelve cedar boards for the shed.', { run_id: ORDER_RUN })],
     active: runOf(ORDER_RUN, 'interrupted'),
-    queued: [],
+    queued: [{ id: 1, text: 'Tell me the delivery date too.', created_at: BASE - 90 * 60 }],
+    held: { run_id: ORDER_RUN, tool_use_id: 'call-1', tool: 'order_supplies', args: '{"boards": 12}' },
     cost: 0.05,
   });
   add({
@@ -841,6 +844,7 @@ export const chatHandlers = [
       meter: { tokens: 1200, compact_at: 150_000, limit: 200_000, share: 0.006 },
       next_cursor: first && older.length > page.length ? String(first.seq) : null,
       question: value.question ?? null,
+      held: value.held ?? null,
     };
     return HttpResponse.json(body);
   }),
@@ -875,6 +879,10 @@ export const chatHandlers = [
       orderScript.events = orderEvents;
       orderScript.parked = false;
       orderScript.interrupted = false;
+      value.held = null;
+      for (const entry of value.queued)
+        value.items.push(item(nextSeq(value), 'user', entry.text, { run_id: ORDER_RUN }));
+      value.queued = [];
     }
     if (scenario().resumeFault) return HttpResponse.error();
     return HttpResponse.json({ thread_id: value.thread.id }, { status: 202 });

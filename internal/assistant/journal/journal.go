@@ -460,12 +460,19 @@ func FailUnsettled(ctx context.Context, q db.Querier, runs []int64, now float64,
 }
 
 func ClaimResume(ctx context.Context, q db.Querier, runID int64, owner string, now float64) (bool, error) {
+	return claimResume(ctx, q, "UPDATE runs SET state = ?, owner = ?, lease_until = ? WHERE id = ? AND state IN (?, ?)", runID, owner, now)
+}
+
+func ClaimOperatorResume(ctx context.Context, q db.Querier, runID int64, owner string, now float64) (bool, error) {
+	return claimResume(ctx, q, "UPDATE runs SET state = ?, owner = ?, lease_until = ?, stop_requested = 0 WHERE id = ? AND state IN (?, ?)", runID, owner, now)
+}
+
+func claimResume(ctx context.Context, q db.Querier, query string, runID int64, owner string, now float64) (bool, error) {
 	lease, err := leaseSeconds(ctx, q)
 	if err != nil {
 		return false, err
 	}
-	claimed, err := db.Changed(q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = ?, lease_until = ? WHERE id = ? AND state IN (?, ?)",
-		Running, owner, now+lease, runID, Interrupted, Parked))
+	claimed, err := db.Changed(q.ExecContext(ctx, query, Running, owner, now+lease, runID, Interrupted, Parked))
 	if claimed {
 		progress.Notify()
 	}

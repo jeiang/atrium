@@ -126,6 +126,7 @@
   const interrupted = $derived(
     activeRun?.state === 'interrupted' && !streams.get(activeRun.id)?.active ? activeRun : undefined,
   );
+  const held = $derived(interrupted && first?.held?.run_id === interrupted.id ? first.held : undefined);
   let resuming = $state(false);
   let resumeProblem = $state<{ tone: 'warn' | 'error'; title: string; text: string }>();
   const thread = $derived(first?.thread);
@@ -760,12 +761,20 @@
       {/if}
       {#if interrupted || resumeProblem}
         <li class="turn turn--resume">
-          {#if interrupted}
-            <Notice tone="warn" variant="inline" title="This run was interrupted">
-              It stopped while a step was in flight. Resuming lets the assistant check what happened before it
-              continues.
+          {#if interrupted && held}
+            <Notice tone="warn" variant="inline" title="This run stopped during a change">
+              <span class="held__call">{held.tool} {held.args}</span>
+              It is unknown whether this change happened. Continue has the assistant check first; it does not repeat the
+              change on its own.
               {#snippet action()}
-                <Button variant="secondary" pending={resuming} onclick={onResume}>Resume run</Button>
+                <Button variant="secondary" pending={resuming} onclick={onResume}>Continue</Button>
+              {/snippet}
+            </Notice>
+          {:else if interrupted}
+            <Notice tone="warn" variant="inline" title="This run was interrupted">
+              It stopped while a step was in flight. Continue lets the assistant check what happened before it goes on.
+              {#snippet action()}
+                <Button variant="secondary" pending={resuming} onclick={onResume}>Continue</Button>
               {/snippet}
             </Notice>
           {/if}
@@ -775,7 +784,7 @@
         </li>
       {/if}
       {#each queued as entry (entry.id)}
-        {@render bubble(entry.text, 'Queued')}
+        {@render bubble(entry.text, activeRun ? 'Queued' : 'Sends with your next message')}
       {/each}
       {#each waiting as entry (entry.key)}
         {@render bubble(entry.text, 'Sending')}

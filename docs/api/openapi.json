@@ -5434,6 +5434,31 @@
         ],
         "type": "object"
       },
+      "Held": {
+        "properties": {
+          "args": {
+            "type": "string"
+          },
+          "run_id": {
+            "format": "int64",
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "tool": {
+            "type": "string"
+          },
+          "tool_use_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "tool_use_id",
+          "tool",
+          "args"
+        ],
+        "type": "object"
+      },
       "History": {
         "properties": {
           "leaf": {
@@ -17327,6 +17352,16 @@
           },
           "cost_usd": {
             "type": "number"
+          },
+          "held": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Held"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "items": {
             "items": {

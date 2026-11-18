@@ -71,6 +71,7 @@ type Transcript struct {
 	LastOperatorSeq *int64          `json:"last_operator_seq"`
 	BranchedFrom    *threads.Thread `json:"branched_from"`
 	Question        *Question       `json:"question"`
+	Held            *service.Held   `json:"held"`
 	History         bool            `json:"-"`
 	Earlier         int64           `json:"-"`
 	EarlierKeep     int             `json:"-"`
@@ -278,7 +279,7 @@ func transcriptOf(v *service.ThreadView) (Transcript, error) {
 		question = &Question{CallID: v.Question.CallID, RunID: v.Question.RunID, ToolUseID: v.Question.ToolUseID, Text: v.Question.Text}
 	}
 	return Transcript{ModelLabel: label, Thread: v.Thread, Items: items, Runs: runs, Active: v.Active, Queued: queued,
-		Cost: v.Cost, Meter: v.Meter, LastOperatorSeq: v.LastOperatorSeq, BranchedFrom: v.BranchedFrom, Question: question}, nil
+		Cost: v.Cost, Meter: v.Meter, LastOperatorSeq: v.LastOperatorSeq, BranchedFrom: v.BranchedFrom, Question: question, Held: v.Held}, nil
 }
 
 func hasHistory(ctx context.Context, q db.Querier, threadID int64) bool {

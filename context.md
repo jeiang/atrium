@@ -467,6 +467,21 @@ claims about the running application. Operator contracts are in
   a question is consumed; send, edit and regenerate check the thread first
   (unknown 404, subagent thread `read_only_thread`) and then the connection.
   Stopping in an unknown thread answers 404 on the chat page as in the API.
+  A run interrupted while a write tool call was `started` stays
+  `interrupted`: startup and claim recovery skip it
+  (`service.NeedsOperator`), and the transcript's additive `held` names the
+  call (`run_id`, `tool_use_id`, `tool`, `args` clipped like `tool_start`).
+  Only the operator's resume (`assistant.run.resume`, the chat's Continue)
+  continues it; resume finishes the call `unknown` with a result telling the
+  model it may or may not have taken effect, and replays it only when a
+  permission request for that call exists. Every operator resume (resume,
+  answer, approval) clears a stop requested before it. Queued messages left
+  when a run ends without draining them (a stop or a failure) are consumed by
+  the next run `Prepare` starts on the thread, ahead of its new message.
+  Before them, `Prepare` gives every tool use such a run left without a
+  result one (`loop.CloseAbandoned`), never running it: a stored result, the
+  stored error, `unknown` with the same verify text for a started call, or
+  "did not run" for a call that never started.
   An action that changed state and then failed is audited `failed`.
   Space file uploads and deletes, and agent `file_write`, each write one
   `operation_audit` row (`knowledge.space.file.upload|delete`,
