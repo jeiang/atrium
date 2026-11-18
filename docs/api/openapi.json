@@ -15185,6 +15185,10 @@
           "brand_url": {
             "type": "string"
           },
+          "chats_running": {
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
           "footer": {
             "items": {
               "$ref": "#/components/schemas/ShellLink"
@@ -15253,6 +15257,7 @@
           "footer",
           "brand_url",
           "needs_you",
+          "chats_running",
           "notify_failing",
           "modules",
           "version",

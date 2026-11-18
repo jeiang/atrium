@@ -131,6 +131,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			Module: func(_ chi.Router, d *web.Deps) {
 				svc := sync.OnceValue(func() *asstapp.Service { return pageAssistant(m.Jobs.Service)(d) })
 				threadAPI(d, svc, runEvents(d, svc))
+				d.OnShell(func(ctx context.Context, s *web.ShellState) error {
+					n, err := threads.RunningChats(ctx, d.DB.Read)
+					s.ChatsRunning = n
+					return err
+				})
 			},
 			Nav: []web.NavItem{
 				{Group: "Assistant", Label: "Chat", URL: "/chat", Icon: "messages-square", Page: "chat", Brand: true, Order: 10},

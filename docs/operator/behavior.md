@@ -857,6 +857,16 @@ services as their dedicated views. `/chat/agenda` returns 404 when the calendar
 module is off and 503 when the calendar cannot be listed, for example when none
 is configured. Full page navigations are not conditional fragment responses.
 
+In a chat, the assistant's thinking appears in a Thinking disclosure: open while
+that step streams, closed once it ends, and collapsed in place in the finished
+transcript. A status row stays up for the whole run and says what it is doing:
+Thinking, Running and the tool name, Writing, or Waiting for you. While any chat
+run works, the avatar menu's Chats item (and the avatar) or the phone Chats tab
+shows a dot; `GET /shell` reports the count as `chats_running`. The model menu
+in the chat composer and on Home sets model, effort and context size; a chat
+started from Home uses them, and a change in an open chat applies from the next
+message.
+
 The Needs you count is the size of the one inbox: questions the assistant is
 waiting on, permission requests, pending proposals and those with an unknown
 outcome, drafts to send or resolve, and overdue, due-soon or needs-decision

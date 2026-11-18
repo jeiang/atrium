@@ -4,7 +4,7 @@ import { API_BASE } from '../contract';
 import { type AppsScenario, appHandlers } from './apps';
 import { type AssistantScenario, assistantHandlers } from './assistant';
 import { type CalendarScenario, calendarHandlers } from './calendar';
-import { type ChatScenario, chatHandlers } from './chats';
+import { type ChatScenario, chatHandlers, chatsRunning } from './chats';
 import { type ConnectionsScenario, connectionHandlers } from './connections';
 import { fileHandlers } from './files';
 import { type HomeScenario, homeHandlers } from './home';
@@ -119,6 +119,7 @@ function shell(state: MockScenario): Shell {
     settings: [],
     settings_url: '/settings',
     needs_you: state.needsYou ?? inboxCount(),
+    chats_running: chatsRunning(),
     notify_failing: [],
     mail: state.mail ?? { mode: 'live', paused: false },
     pause: state.pause ?? { paused: false },

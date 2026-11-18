@@ -94,7 +94,11 @@ test.describe('chat list', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Check the shed roof' })).toBeVisible();
     await expect(transcript(page).getByText('Does the shed roof need new sheets?')).toBeVisible();
     await expect(transcript(page).getByText('roof sheets need replacing.', { exact: false })).toBeVisible();
-    await expect(transcript(page).getByRole('listitem')).toHaveCount(2);
+    await expect(transcript(page).getByRole('listitem')).toHaveCount(3);
+    const thought = transcript(page).locator('details.thinking');
+    await expect(thought).toHaveJSProperty('open', false);
+    await thought.getByText('Thinking').click();
+    await expect(thought.getByText('Two sheets are cracked in the photos.')).toBeVisible();
     await expect(page.getByText('Loading the chat')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Sonnet 5.5 · high' })).toBeVisible();
     expect(options).toEqual([]);
@@ -301,6 +305,61 @@ test.describe('streaming', () => {
     await page.waitForTimeout(500);
     await expect(messages.getByText(finalText)).toHaveCount(1);
     await expect(messages.getByRole('button', { name: /search_web/ })).toHaveCount(1);
+  });
+
+  test('live thinking opens while it streams, the status row names every phase and settled thinking stays collapsed', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const seen: string[] = [];
+      Reflect.set(globalThis, 'atriumPhases', seen);
+      const sample = (): void => {
+        const text = document.querySelector('.transcript .status-slot')?.textContent?.trim() ?? '';
+        if (seen.at(-1) !== text) seen.push(text);
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+    });
+    await openChat(page, '/chat/7', { speed: 1 });
+    const messages = transcript(page);
+    const thought = messages.locator('details.thinking');
+    await expect(thought).toHaveJSProperty('open', true);
+    await expect(thought.getByText('Checking the saved supplier list.')).toBeVisible();
+    await expect(messages.locator('.status-slot')).toHaveText('Thinking');
+    await expect(messages.locator('.status-slot')).toHaveText('Running search_web');
+    await expect(thought).toHaveJSProperty('open', false);
+    await expect(messages.locator('.tool[data-state="running"] .tool__mark')).toHaveCSS('animation-name', 'pulse');
+    await expect(messages.getByText(finalText)).toBeVisible({ timeout: 15_000 });
+    await settled(page);
+    const phases = (await page.evaluate(() => Reflect.get(globalThis, 'atriumPhases'))) as string[];
+    expect(phases.slice(phases.indexOf('Thinking'))).toEqual(['Thinking', 'Running search_web', 'Thinking', 'Writing', '']);
+    await expect(messages.locator('details.thinking')).toHaveCount(1);
+    await expect(messages.locator('details.thinking')).toHaveJSProperty('open', false);
+  });
+
+  test('the account menu marks Chats while a run works and clears it after', async ({ page }) => {
+    await page.setViewportSize({ width: desktop.width, height: desktop.height });
+    await openChat(page, '/chat/7', { speed: 2 });
+    const account = page.getByRole('button', { name: /^Account: Operator/ });
+    await expect(account).toHaveAccessibleName('Account: Operator, a chat is working');
+    await account.click();
+    await expect(page.getByRole('menuitem', { name: /^Chats/ })).toHaveAccessibleName(/a chat is working/);
+    await page.keyboard.press('Escape');
+    await expect(transcript(page).getByText(finalText)).toBeVisible({ timeout: 15_000 });
+    await settled(page);
+    await expect(account).toHaveAccessibleName('Account: Operator');
+  });
+
+  test('the phone Chats tab marks a working run and clears it after', async ({ page }) => {
+    const phone = layouts[0] ?? { name: 'phone', width: 390, height: 844, touch: true };
+    await page.setViewportSize({ width: phone.width, height: phone.height });
+    await openChat(page, '/chat/7', { speed: 2 });
+    const tab = page.getByRole('navigation', { name: 'Tabs' }).getByRole('link', { name: /^Chats/ });
+    await expect(tab).toHaveAccessibleName(/a chat is working/);
+    await expect(tab.locator('.run-dot')).toBeVisible();
+    await expect(transcript(page).getByText(finalText)).toBeVisible({ timeout: 15_000 });
+    await settled(page);
+    await expect(tab.locator('.run-dot')).toHaveCount(0);
   });
 
   test('a dropped stream resumes from the last event without duplicates', async ({ page }) => {
@@ -542,13 +601,34 @@ test.describe('composer', () => {
     await page.getByRole('button', { name: 'Sonnet 5.5 · high' }).click();
     await page.getByRole('menuitem', { name: /^Opus 5\.5/ }).click();
     await expect(
-      page.getByRole('button', { name: 'Opus 5.5 · high, from the next message, $75 per million output tokens' }),
+      page.getByRole('button', {
+        name: 'Opus 5.5 · high · 200k, from the next message, $75 per million output tokens',
+      }),
     ).toBeVisible();
     expect(patches).toEqual([]);
     await composer(page).fill('Compare the two shops');
     await page.getByRole('button', { name: 'Send' }).click();
-    await expect(page.getByRole('button', { name: 'Opus 5.5 · high', exact: true })).toBeVisible();
-    expect(patches).toEqual([{ model: 'claude-opus-5-5', effort: 'high' }]);
+    await expect(page.getByRole('button', { name: 'Opus 5.5 · high · 200k', exact: true })).toBeVisible();
+    expect(patches).toEqual([{ model: 'claude-opus-5-5', effort: 'high', context_limit: 200_000 }]);
+  });
+
+  test('the context size is chosen from the composer and applies from the next message', async ({ page }) => {
+    await page.setViewportSize({ width: desktop.width, height: desktop.height });
+    const patches: unknown[] = [];
+    page.on('request', (request) => {
+      if (request.method() === 'PATCH' && request.url().includes('/threads/9/options')) {
+        patches.push(request.postDataJSON());
+      }
+    });
+    await openChat(page, '/chat/9');
+    await expect(transcript(page).getByText('Answer 40:', { exact: false })).toBeVisible();
+    await page.getByRole('button', { name: 'Sonnet 5.5 · high · 200k' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Context 90k' })).toBeVisible();
+    await page.getByRole('menuitem', { name: 'Context 1M' }).click();
+    await composer(page).fill('Read the whole manual');
+    await page.getByRole('button', { name: 'Send' }).click();
+    await expect(page.getByRole('button', { name: 'Sonnet 5.5 · high · 1M', exact: true })).toBeVisible();
+    expect(patches).toEqual([{ model: 'claude-sonnet-5-5', effort: 'high', context_limit: 1_000_000 }]);
   });
 
   test('a new chat starts from the composer and opens its page', async ({ page }) => {
@@ -788,6 +868,18 @@ test.describe('design checks', () => {
         await expectNoHorizontalScroll(page);
         await expectNoSeriousAxeFindings(page);
       }
+    });
+
+    test(`${layout.name}: a working run with live thinking passes the design and axe checks`, async ({ page }) => {
+      test.setTimeout(60_000);
+      await page.setViewportSize({ width: layout.width, height: layout.height });
+      await openChat(page, '/chat/7', { speed: 0.2 });
+      await expect(transcript(page).locator('details.thinking')).toHaveJSProperty('open', true, { timeout: 15_000 });
+      await expect(transcript(page).locator('.status-slot')).toHaveText('Thinking');
+      if (layout.touch) await expectTouchTargets(page, 'main');
+      await expectRoundedSurfaces(page, edgeSurfaces);
+      await expectNoHorizontalScroll(page);
+      await expectNoSeriousAxeFindings(page);
     });
 
     if (layout.touch && layout.width < 861) {

@@ -532,6 +532,12 @@ func ReadAuthority(ctx context.Context, q db.Querier, threadID int64) (Authority
 
 func EffortFixed(thinking string) bool { return thinking == "between_tools" || thinking == "disabled" }
 
+func RunningChats(ctx context.Context, q db.Querier) (int, error) {
+	var n int
+	err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM runs r JOIN threads t ON t.id = r.thread_id WHERE r.state = 'running' AND t.kind = ? AND t.deleted_at IS NULL", Chat).Scan(&n)
+	return n, err
+}
+
 type Switch struct {
 	Changed          bool
 	ThinkingAdjusted bool

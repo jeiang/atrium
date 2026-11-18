@@ -5,6 +5,7 @@ import type {
   RunStreamEventRunDone,
   RunStreamEventRunError,
   RunStreamEventText,
+  RunStreamEventThinking,
   RunStreamEventToolStart,
   RunStreamEventUser,
 } from '../../contract';
@@ -15,6 +16,7 @@ import type { ToolCall } from '../../shared/assistant/types';
 
 export type Segment =
   | { kind: 'text'; text: string }
+  | { kind: 'thinking'; text: string }
   | { kind: 'tools'; ids: string[] }
   | { kind: 'user'; text: string };
 
@@ -65,6 +67,13 @@ export class RunStream {
 
   get resumable(): boolean {
     return this.#ended && (this.status === 'parked' || this.status === 'interrupted');
+  }
+
+  get phase(): string {
+    if (this.status === 'parked') return 'Waiting for you';
+    const running = this.calls.findLast((call) => call.state === 'running');
+    if (running) return `Running ${running.name}`;
+    return this.segments.at(-1)?.kind === 'text' ? 'Writing' : 'Thinking';
   }
 
   start(): void {
@@ -175,7 +184,10 @@ export class RunStream {
       if (data.run_id !== undefined && data.run_id !== this.run) continue;
       switch (event.event) {
         case 'text':
-          this.#text((event as RunStreamEventText).data.text);
+          this.#append('text', (event as RunStreamEventText).data.text);
+          break;
+        case 'thinking':
+          this.#append('thinking', (event as RunStreamEventThinking).data.text);
           break;
         case 'tool_start':
           this.#tool((event as RunStreamEventToolStart).data.id);
@@ -210,10 +222,10 @@ export class RunStream {
     if (ended) this.#end(ended);
   }
 
-  #text(chunk: string): void {
+  #append(kind: 'text' | 'thinking', chunk: string): void {
     const last = this.segments.at(-1);
-    if (last?.kind === 'text') last.text += chunk;
-    else this.segments.push({ kind: 'text', text: chunk });
+    if (last?.kind === kind) last.text += chunk;
+    else this.segments.push({ kind, text: chunk });
   }
 
   #tool(id: string): void {

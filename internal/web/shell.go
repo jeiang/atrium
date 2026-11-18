@@ -10,6 +10,7 @@ type ShellFrame struct {
 	Footer        []ShellLink    `json:"footer"`
 	BrandURL      string         `json:"brand_url"`
 	NeedsYou      int            `json:"needs_you"`
+	ChatsRunning  int            `json:"chats_running"`
 	NotifyFailing []string       `json:"notify_failing"`
 	Mail          *ShellMail     `json:"mail"`
 }
@@ -45,6 +46,7 @@ type ShellState struct {
 	Mode          string
 	Paused        bool
 	NeedsYou      int
+	ChatsRunning  int
 	NotifyFailing []string
 }
 
@@ -77,7 +79,8 @@ func (rd *Renderer) Shell(ctx context.Context) ShellFrame {
 	state := rd.shellState(ctx)
 	out := ShellFrame{
 		Groups: []ShellGroup{}, Sections: []ShellSection{}, Settings: shellLinks(nav.settings), SettingsURL: nav.settingsURL,
-		Footer: shellLinks(nav.footer), BrandURL: nav.brandURL, NeedsYou: state.NeedsYou, NotifyFailing: append([]string{}, state.NotifyFailing...),
+		Footer: shellLinks(nav.footer), BrandURL: nav.brandURL, NeedsYou: state.NeedsYou, ChatsRunning: state.ChatsRunning,
+		NotifyFailing: append([]string{}, state.NotifyFailing...),
 	}
 	for _, g := range nav.groups {
 		if g.Label == "" && len(g.Items) > 0 && g.Items[0].Section == "" && nav.isHub(g.Items[0].Page) {

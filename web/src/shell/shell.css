@@ -459,6 +459,40 @@
     font-weight: 700;
   }
 
+  .run-dot {
+    flex: none;
+    inline-size: 8px;
+    block-size: 8px;
+    border-radius: var(--r-pill);
+    background: var(--moss);
+    animation: pulse 1.2s var(--ease) infinite alternate;
+  }
+
+  .account__avatar {
+    position: relative;
+    display: inline-grid;
+    flex: none;
+  }
+
+  .account__avatar > .run-dot {
+    position: absolute;
+    inset-block-start: -1px;
+    inset-inline-end: -1px;
+    inline-size: 10px;
+    block-size: 10px;
+    box-shadow: 0 0 0 2px var(--leaf);
+  }
+
+  .account__item > .run-dot {
+    margin-inline-start: auto;
+  }
+
+  @media (--reduced-motion) {
+    .run-dot {
+      animation: none;
+    }
+  }
+
   @media (--coarse) {
     .rail-link,
     .brand,
@@ -596,6 +630,12 @@
       font-variant-numeric: tabular-nums;
       color: var(--leaf);
       background: var(--honey);
+    }
+
+    .tabbar__dot {
+      position: absolute;
+      inset-block-start: 8px;
+      inset-inline-start: calc(50% + 8px);
     }
   }
 
