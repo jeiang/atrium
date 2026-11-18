@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { newPlace } from '../../shell/manifest';
   import { plural, webHref } from './format';
   import type { DigestLine } from './types';
   import './assistant.css';
@@ -29,7 +28,7 @@
 
   function href(url: string | undefined): string | undefined {
     if (!url) return undefined;
-    if (url.startsWith('/') && !url.startsWith('//')) return newPlace(url) ?? url;
+    if (url.startsWith('/') && !url.startsWith('//')) return url;
     return webHref(url);
   }
 </script>

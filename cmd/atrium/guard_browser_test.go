@@ -48,7 +48,7 @@ func driveSignIn(t *testing.T, web, engine string) {
 	wimServeIn(t, dir, "--listen-fd", fd, "--auth", "oidc", "--allowed-host", "localhost")
 	elsewhere := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = fmt.Fprintf(w, `<!doctype html><html lang="en"><title>Mail</title><a href="%s/settings/auth?from=mail">Open in Atrium</a></html>`, base)
+		_, _ = fmt.Fprintf(w, `<!doctype html><html lang="en"><title>Mail</title><a href="%s/third-party-notices.txt?from=mail">Open in Atrium</a></html>`, base)
 	}))
 	t.Cleanup(elsewhere.Close)
 	cmd := exec.Command(filepath.Join(web, "node_modules", ".bin", "playwright"), "test", "--config", "playwright.live.config.ts", "--project", engine)

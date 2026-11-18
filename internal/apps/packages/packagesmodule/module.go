@@ -102,7 +102,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Bindings:    append(bindings, routes(nil, nil)...),
 		Pages: []web.Page{{
 			Module: func(_ chi.Router, d *web.Deps) { routes(d, m.pageService(d)) },
-			Nav:    []web.NavItem{{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30}},
+			Nav:    []web.NavItem{{Section: "review", Label: "Packages", URL: "/apps/packages", Icon: "package", Page: "watches", Order: 30}},
 		}},
 	}
 }

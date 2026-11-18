@@ -39,8 +39,7 @@ func (s *Set) Pages() []web.Page {
 			pages = append(pages, p)
 		}
 	}
-	groups, generic, control := s.settingPages()
-	return append(pages, settingspage.Page(groups, generic, control, s.cat.Sections()))
+	return pages
 }
 
 func (s *Set) settingState(ctx context.Context, q db.Querier, name string) (settings.ModuleView, error) {
@@ -117,18 +116,17 @@ func (s *Set) settingMark(name string) string {
 }
 
 func (s *Set) OfferedSetting(key string) (settingspage.Section, bool) {
-	groups, _, _ := s.settingPages()
+	groups, _ := s.settingPages()
 	return settingspage.Offered(groups, s.cat.Sections(), key)
 }
 
 func (s *Set) SettingsLayout() ([]settingspage.Group, settingspage.Sections, []settingspage.Module) {
-	groups, _, control := s.settingPages()
+	groups, control := s.settingPages()
 	return groups, s.cat.Sections(), control.Modules
 }
 
-func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic, settingspage.Control) {
+func (s *Set) settingPages() ([]settingspage.Group, settingspage.Control) {
 	var groups []settingspage.Group
-	var generic []settingspage.Generic
 	control := settingspage.Control{State: s.settingState, Mark: s.settingMark}
 	for _, r := range s.decls {
 		if !r.Core {
@@ -140,14 +138,10 @@ func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic, sett
 				}
 			}
 		}
-		home, tabs := "", map[string]string{}
+		home := ""
 		for _, p := range r.Pages {
 			for _, item := range p.Nav {
-				if !item.Settings {
-					continue
-				}
-				tabs[item.URL] = item.Page
-				if home == "" {
+				if item.Settings && home == "" {
 					home = item.URL
 				}
 			}
@@ -160,20 +154,15 @@ func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic, sett
 				at.URL, own = home, true
 				if home == "" {
 					at.URL = "/settings/" + r.Name
-					tabs[at.URL] = "module:" + r.Name
 				}
 			}
-			at.Tab = tabs[at.URL]
 			groups = append(groups, at)
 		}
-		if own && home == "" {
-			generic = append(generic, settingspage.Generic{Module: r.Name, URL: "/settings/" + r.Name, Tab: "module:" + r.Name})
-			if !r.Core {
-				control.Modules = append(control.Modules, settingspage.Module{Name: r.Name, URL: "/settings/" + r.Name})
-			}
+		if own && home == "" && !r.Core {
+			control.Modules = append(control.Modules, settingspage.Module{Name: r.Name, URL: "/settings/" + r.Name})
 		}
 	}
-	return groups, generic, control
+	return groups, control
 }
 
 func (s *Set) gatePage(owner string, p web.Page) web.Page {

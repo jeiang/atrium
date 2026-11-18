@@ -241,8 +241,8 @@ func lines(result attention.Result, dream dreaming) (today, push []block.DigestL
 			counts = append(counts, fmt.Sprintf("%d %s", group.Count, strings.ToLower(group.Label)))
 		}
 		text := strings.Join(counts, ", ")
-		today = append(today, block.DigestLine{Text: text, URL: "/review"})
-		push = append(push, block.DigestLine{Text: text, URL: "/review"})
+		today = append(today, block.DigestLine{Text: text, URL: "/inbox"})
+		push = append(push, block.DigestLine{Text: text, URL: "/inbox"})
 	}
 	shown := 0
 	for _, group := range result.Groups {
@@ -254,14 +254,14 @@ func lines(result attention.Result, dream dreaming) (today, push []block.DigestL
 			if markedKind(item.Kind) {
 				marked[item.Kind]++
 				if len(push) < lineCap {
-					push = append(push, block.DigestLine{Text: item.Title, URL: "/review"})
+					push = append(push, block.DigestLine{Text: item.Title, URL: "/inbox"})
 				}
 				continue
 			}
 			if shown == 4 {
 				continue
 			}
-			line := block.DigestLine{Text: item.Title, URL: "/review"}
+			line := block.DigestLine{Text: item.Title, URL: "/inbox"}
 			today = append(today, line)
 			push = append(push, line)
 			shown++
@@ -275,19 +275,19 @@ func lines(result attention.Result, dream dreaming) (today, push []block.DigestL
 			if shown == 4 {
 				break
 			}
-			line := block.DigestLine{Text: fmt.Sprintf("%d %s", marked[kind], label(kind)), URL: "/review"}
+			line := block.DigestLine{Text: fmt.Sprintf("%d %s", marked[kind], label(kind)), URL: "/inbox"}
 			today = append(today, line)
 			shown++
 		}
 	}
 	if n := dream.new + dream.edited + dream.retracted + dream.tasks; n > 0 {
 		text := fmt.Sprintf("Dreaming: %d new, %d edited, %d retracted, %d tasks", dream.new, dream.edited, dream.retracted, dream.tasks)
-		line := block.DigestLine{Text: text, URL: "/library/knowledge?state=unconfirmed"}
+		line := block.DigestLine{Text: text, URL: "/knowledge/review"}
 		today = append(today, line)
 		push = append(push, line)
 	}
 	if dream.marked > 0 {
-		line := block.DigestLine{Text: fmt.Sprintf("%d records from marked sources", dream.marked), URL: "/library/knowledge?state=unconfirmed"}
+		line := block.DigestLine{Text: fmt.Sprintf("%d records from marked sources", dream.marked), URL: "/knowledge/review"}
 		today = append(today, line)
 		push = append(push, line)
 	}
@@ -299,12 +299,12 @@ func lines(result attention.Result, dream dreaming) (today, push []block.DigestL
 		if c.thread != nil {
 			text += fmt.Sprintf(" (thread %d)", *c.thread)
 		}
-		line := block.DigestLine{Text: text, URL: fmt.Sprintf("/library/knowledge/%d", c.id)}
+		line := block.DigestLine{Text: text, URL: fmt.Sprintf("/knowledge/%d", c.id)}
 		today = append(today, line)
 		push = append(push, line)
 	}
 	if dream.lessons > 0 {
-		line := block.DigestLine{Text: fmt.Sprintf("Lessons added: %d", dream.lessons), URL: "/library/knowledge?state=unconfirmed"}
+		line := block.DigestLine{Text: fmt.Sprintf("Lessons added: %d", dream.lessons), URL: "/knowledge/review"}
 		today = append(today, line)
 		push = append(push, line)
 	}

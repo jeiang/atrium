@@ -55,9 +55,9 @@ export function seedApps(): MockApp[] {
       depends: [],
       needs: [need('mail', 'mail/garden-club', 'imap', true)],
       nav: [
-        { label: 'Mail decisions', url: '/triage', settings: false },
-        { label: 'Mail rules', url: '/rules', settings: false },
-        { label: 'Mail status', url: '/live', settings: false },
+        { label: 'Mail decisions', url: '/apps/mail/decisions', settings: false },
+        { label: 'Mail rules', url: '/apps/mail/rules', settings: false },
+        { label: 'Mail status', url: '/apps/mail/mode', settings: false },
         { label: 'Mail settings', url: '/settings/mail', settings: true },
       ],
     },
@@ -69,7 +69,7 @@ export function seedApps(): MockApp[] {
       pin: 'host',
       depends: [],
       needs: [need('calendar', 'google/default', 'calendar', true)],
-      nav: [],
+      nav: [{ label: 'Calendar settings', url: '/settings/calendar', settings: true }],
     },
     {
       id: 'torrents',
@@ -93,9 +93,9 @@ export function seedApps(): MockApp[] {
         need('media', 'media/qbittorrent', 'downloads', true),
       ],
       nav: [
-        { label: 'Downloads', url: '/apps/media/downloads', settings: false },
-        { label: 'Channels', url: '/apps/media/channels', settings: false },
-        { label: 'Library', url: '/apps/media/library', settings: false },
+        { label: 'Downloads', url: '/apps/torrents', settings: false },
+        { label: 'Channels', url: '/apps/media/following', settings: false },
+        { label: 'Library', url: '/apps/media', settings: false },
       ],
     },
     {
@@ -105,7 +105,7 @@ export function seedApps(): MockApp[] {
       switchable: true,
       depends: [],
       needs: [need('grafana', 'service/grafana', 'dashboards', true, { soft: true })],
-      nav: [{ label: 'Dashboards', url: '/apps/grafana', settings: false }],
+      nav: [],
     },
     {
       id: 'packages',
@@ -114,7 +114,7 @@ export function seedApps(): MockApp[] {
       switchable: true,
       depends: ['mail'],
       needs: [need('packages', 'service/ship24', 'tracking', true, { soft: true })],
-      nav: [{ label: 'Packages', url: '/watches', settings: false }],
+      nav: [{ label: 'Packages', url: '/apps/packages', settings: false }],
     },
     {
       id: 'orchard',
@@ -123,7 +123,7 @@ export function seedApps(): MockApp[] {
       switchable: true,
       depends: [],
       needs: [],
-      nav: [{ label: 'Trees', url: '/apps/orchard/trees', settings: false }],
+      nav: [],
     },
   ];
 }

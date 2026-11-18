@@ -89,8 +89,8 @@ refresh token as a write-only secret in the database.
 | Advanced Protection | XOAUTH2 | OAuth | App passwords are refused |
 
 The Gmail consent in the wizard stores a refresh token for the XOAUTH2 mail
-transport. Add the Gmail account on the Mail settings page (`/settings/mail`)
-and choose **Google OAuth (XOAUTH2)**; a personal account may use an app
+transport. Add the Gmail account with `POST /api/v1/mail/accounts` (preset
+`gmail`, `auth_method` `xoauth2`); a personal account may use an app
 password instead. An account declared in `services.atrium.accounts` uses
 password authentication.
 
@@ -183,8 +183,8 @@ capability for 1, 3, 6 and then 12 hours, as described in
 ## Knowledge export
 
 The knowledge base is written to one Markdown folder by the daily
-`knowledge-export` job. The **Markdown export** section on the Export settings
-page (`/settings/export`) shows the folder (`export_obsidian_dir`, declared by
+`knowledge-export` job. The Knowledge export settings page
+(`/settings/knowledge-export`) shows the folder (`export_obsidian_dir`, declared by
 the host through `services.atrium.knowledgeExport.obsidianDirectory`) or "Not
 configured"; its private switch stores the folder path in
 `export_obsidian_private_to`. The job fails while no folder is set or the

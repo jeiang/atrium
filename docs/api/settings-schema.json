@@ -5,7 +5,7 @@
       "module": "core",
       "name": "sessions",
       "title": "Sessions",
-      "url": "/settings/auth",
+      "url": "/settings/sign-in",
       "fields": [
         {
           "key": "oidc_session_idle_days",
@@ -46,7 +46,7 @@
       "module": "core",
       "name": "budget",
       "title": "Monthly budget",
-      "url": "/settings/usage",
+      "url": "/assistant/spend",
       "fields": [
         {
           "key": "monthly_budget_usd",
@@ -103,7 +103,7 @@
       "module": "core",
       "name": "general",
       "title": "General",
-      "url": "/settings/usage",
+      "url": "/settings/general",
       "fields": [
         {
           "key": "tz",
@@ -318,7 +318,7 @@
       "module": "assistant",
       "name": "spending",
       "title": "Spending",
-      "url": "/settings/assistant",
+      "url": "/assistant/behavior",
       "fields": [
         {
           "key": "thread_cost_cap_usd",
@@ -455,7 +455,7 @@
       "module": "assistant",
       "name": "background",
       "title": "Background work",
-      "url": "/settings/assistant",
+      "url": "/assistant/behavior",
       "fields": [
         {
           "key": "agent_effort_cron",
@@ -604,7 +604,7 @@
       "module": "assistant",
       "name": "schedules",
       "title": "Schedules",
-      "url": "/settings/assistant",
+      "url": "/assistant/behavior",
       "fields": [
         {
           "key": "digest_notify",
@@ -962,7 +962,7 @@
       "module": "assistant",
       "name": "assistant",
       "title": "assistant",
-      "url": "/settings/assistant",
+      "url": "/assistant/behavior",
       "fields": [
         {
           "key": "assistant_enabled",
