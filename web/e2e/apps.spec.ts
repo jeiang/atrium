@@ -78,6 +78,11 @@ test.describe('the apps hub', () => {
   test('an app the client does not know opens as a generic page', async ({ page }) => {
     await gotoShell(page, '/apps/orchard');
     await expect(page.getByRole('heading', { level: 1, name: 'Orchard' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Nothing to show here' })).toBeVisible();
+    await expect(page.getByText('Orchard works through the assistant. Ask for it in a chat.')).toBeVisible();
+    await page.getByRole('link', { name: 'App settings' }).click();
+    await expect(page).toHaveURL(/\/apps\/directory#app-orchard$/);
+    await expect(appSwitch(page, 'Orchard')).toBeVisible();
     await gotoShell(page, '/apps/grafana');
     await expect(page.getByRole('heading', { level: 1, name: 'Not found' })).toBeVisible();
   });
@@ -97,13 +102,13 @@ test.describe('the apps directory', () => {
   test('turning an app on and off updates the rail', async ({ page }) => {
     await gotoShell(page, '/apps/directory');
     const rail = page.getByRole('navigation', { name: 'Main' });
-    await expect(rail.getByRole('link', { name: 'Grafana' })).toHaveCount(0);
-    await appSwitch(page, 'Grafana').click();
-    await expect(appSwitch(page, 'Grafana')).toHaveAttribute('aria-checked', 'true');
-    await expect(rail.getByRole('link', { name: 'Grafana' })).toBeVisible();
-    await appSwitch(page, 'Grafana').click();
-    await expect(appSwitch(page, 'Grafana')).toHaveAttribute('aria-checked', 'false');
-    await expect(rail.getByRole('link', { name: 'Grafana' })).toHaveCount(0);
+    await expect(rail.getByRole('link', { name: 'Server ops' })).toHaveCount(0);
+    await appSwitch(page, 'Server ops').click();
+    await expect(appSwitch(page, 'Server ops')).toHaveAttribute('aria-checked', 'true');
+    await expect(rail.getByRole('link', { name: 'Server ops' })).toBeVisible();
+    await appSwitch(page, 'Server ops').click();
+    await expect(appSwitch(page, 'Server ops')).toHaveAttribute('aria-checked', 'false');
+    await expect(rail.getByRole('link', { name: 'Server ops' })).toHaveCount(0);
   });
 
   test('the keyboard alone switches an app', async ({ page }) => {
@@ -145,22 +150,22 @@ test.describe('the apps directory', () => {
     for (const [code, title] of reasons) {
       await useScenario(page, { apps: { refuse: { code, message: `Refused as ${code}.` } } });
       await gotoShell(page, '/apps/directory');
-      await appSwitch(page, 'Grafana').click();
+      await appSwitch(page, 'Server ops').click();
       const grafana = card(page, 'grafana');
       await expect(grafana.getByText(title, { exact: true })).toBeVisible();
       await expect(grafana.getByText(`Refused as ${code}.`)).toBeVisible();
-      await expect(appSwitch(page, 'Grafana')).toHaveAttribute('aria-checked', 'false');
+      await expect(appSwitch(page, 'Server ops')).toHaveAttribute('aria-checked', 'false');
     }
   });
 
   test('a stale revision reloads and says so', async ({ page }) => {
     await useScenario(page, { apps: { stale: true } });
     await gotoShell(page, '/apps/directory');
-    await appSwitch(page, 'Grafana').click();
+    await appSwitch(page, 'Server ops').click();
     await expect(card(page, 'grafana').getByText('This changed since it loaded')).toBeVisible();
-    await expect(appSwitch(page, 'Grafana')).toHaveAttribute('aria-checked', 'false');
-    await appSwitch(page, 'Grafana').click();
-    await expect(appSwitch(page, 'Grafana')).toHaveAttribute('aria-checked', 'true');
+    await expect(appSwitch(page, 'Server ops')).toHaveAttribute('aria-checked', 'false');
+    await appSwitch(page, 'Server ops').click();
+    await expect(appSwitch(page, 'Server ops')).toHaveAttribute('aria-checked', 'true');
   });
 });
 
@@ -169,11 +174,11 @@ test.describe('apps offline', () => {
 
   test('a switch is refused without sending', async ({ page }) => {
     await gotoShell(page, '/apps/directory');
-    await expect(appSwitch(page, 'Grafana')).toBeVisible();
+    await expect(appSwitch(page, 'Server ops')).toBeVisible();
     await goUnreachable(page);
-    await appSwitch(page, 'Grafana').click();
+    await appSwitch(page, 'Server ops').click();
     await expect(card(page, 'grafana').getByText('Cannot reach atrium. Nothing was sent.')).toBeVisible();
-    await expect(appSwitch(page, 'Grafana')).toHaveAttribute('aria-checked', 'false');
+    await expect(appSwitch(page, 'Server ops')).toHaveAttribute('aria-checked', 'false');
   });
 });
 
@@ -236,7 +241,7 @@ test.describe('apps design checks', () => {
         test(`${path} fits, rounds and passes axe`, async ({ page }) => {
           await useScenario(page, { pause: { paused: true } });
           await gotoShell(page, path);
-          await expect(page.locator('.app-grid, .card').first()).toBeVisible();
+          await expect(page.locator('.app-grid, .card, .statebox').first()).toBeVisible();
           await expectNoHorizontalScroll(page);
           await expectRoundedSurfaces(page, edges);
           if (layout.touch) await expectTouchTargets(page);

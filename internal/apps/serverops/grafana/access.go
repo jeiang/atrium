@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/config"
@@ -56,4 +57,24 @@ func Load(ctx context.Context, q db.Querier) (Access, error) {
 		URL: strings.TrimRight(strings.TrimSpace(base), "/"), Token: token, HTTP: client,
 		MetricsUID: cfg.MetricsUID, LogsUID: cfg.LogsUID, LogsType: cfg.LogsType, LogsQuery: cfg.LogsQuery,
 	}, nil
+}
+
+func Link(ctx context.Context, q db.Querier) (string, error) {
+	lease, err := connections.OpenRead(ctx, q, config.From(ctx).Host(), connections.ID(KindGrafana))
+	if errors.As(err, new(connections.UnknownID)) || errors.As(err, new(connections.DisabledConnection)) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	base, err := lease.Endpoint("url")
+	if err != nil {
+		return "", nil
+	}
+	u, err := url.Parse(strings.TrimSpace(base))
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return "", nil
+	}
+	u.User, u.RawQuery, u.Fragment = nil, "", ""
+	return strings.TrimRight(u.String(), "/"), nil
 }

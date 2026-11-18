@@ -1213,7 +1213,7 @@ claims about the running application. Operator contracts are in
   location settings (keys and their `assistant` settings module unchanged;
   the `weather` group now sits on the app's own settings page), the
   `weather` tool (operation `weather.forecast`) and the Home weather card.
-  It is tool-only: no page, job or table. With Weather off the tool leaves
+  It has a page at `/apps/weather` but no job or table. With Weather off the tool leaves
   the catalog, `/home` answers the card as `off` without reading settings
   or starting a refresh, and the built-in `service/weather` row is disabled
   by the row lifecycle with the reason "its app is off" (never deleted);
@@ -2003,7 +2003,20 @@ claims about the running application. Operator contracts are in
   Weather app off the card is `off` and no refresh starts. A finished
   refresh bumps the `assistant` app-event topic so the client refetches. A
   location change discards the held reading, so the next `/home` answers
-  `loading` and refreshes for the new place.
+  `loading` and refreshes for the new place. A reading holds the current
+  conditions, 24 hourly steps and 7 days. `GET /weather` (operation
+  `weather.page`, the Weather app's page) serves the same held reading with
+  the same states, its `hours` and all `days` (temperatures in degrees
+  Celsius, wind in km/h), never waits for the weather service, and answers
+  an ETag. `GET /ops` (operation `ops.overview`, the Server ops page) reads
+  only the database and the Grafana connection record, never Grafana: the
+  latest sampler pass of each host (up, CPU, memory, root disk, failed
+  units and the firing alert names from `alerts_firing`), up to 20 live
+  ops findings (`kb_records` with scope `ops` and origin `ops:<fact>`, not
+  retracted or expired, newest first, severity and fact split from the
+  body) and `grafana_url`, the connection URL without credentials, query
+  or fragment, or null. It answers an ETag. Both routes answer 404 while
+  their app is off.
 - The embedded web client is served at `/` on every listener, the
   emergency listener included. A GET or HEAD that no route matches and that
   accepts HTML gets the client's `index.html` (`no-cache`). Files under

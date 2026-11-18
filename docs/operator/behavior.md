@@ -609,6 +609,26 @@ tool is not offered, the Home weather card shows `off`, no forecast is
 fetched, and the built-in weather connection is disabled with the reason "its
 app is off" (the row, its settings and the three location keys stay).
 Turning Weather on again re-enables that connection as untested.
+With Weather on, its page (`/apps/weather`, linked from its card on the Apps
+page) shows the current conditions, the next 12 hours and the next 7 days for
+the configured location in degrees Celsius and km/h, with "Change location"
+opening the weather connection page. It reads `GET /weather`, which serves
+the same held reading as the Home card and never waits for Open-Meteo: it
+answers `loading` until the first reading arrives, `unconfigured` without a
+location, `off` when the forecast is turned off, and `failed` or `stale` as
+the Home card does.
+
+With Server ops on, its page (`/apps/grafana`) shows the latest sample of
+each watched host (up or down, CPU, memory, root disk, failed units and the
+alerts firing at that sample), the live ops findings newest first with their
+severity and a link to each knowledge page, and "Open Grafana" when the
+Grafana connection has a URL. It reads `GET /ops`, which only reads what
+the sampler and the server-ops worker stored and never calls Grafana. Before
+the first sample the page says so and links to the Grafana connection.
+
+An app that is on but has no page of its own and nothing to repair opens to
+a short line that it works through the assistant, with a link to its
+connection, or to its switch on the All apps page when it has none.
 
 Packages is its own app, switched by `packages_enabled`, and needs Mail on.
 It is opt-in: the first start of a version with the Packages app turns it on

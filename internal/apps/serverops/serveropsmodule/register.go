@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/jeiang/atrium/internal/apps/serverops"
 	opsapp "github.com/jeiang/atrium/internal/apps/serverops/application"
 	grafanatools "github.com/jeiang/atrium/internal/apps/serverops/grafana"
@@ -14,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/unit"
+	"github.com/jeiang/atrium/internal/web"
 )
 
 type Module struct {
@@ -56,7 +59,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Tools:       ToolDefinitions(),
 		Connections: grafanatools.Connections(),
 		Operations:  operations,
-		Bindings:    bindings,
+		Bindings:    append(bindings, routes(nil)...),
+		Pages: []web.Page{{
+			Module: func(_ chi.Router, d *web.Deps) { routes(d) },
+			Nav:    []web.NavItem{{Section: "apps", Label: "Server ops", URL: "/apps/grafana", Icon: "server", Page: "server_ops", Order: 10}},
+		}},
 	}
 }
 
