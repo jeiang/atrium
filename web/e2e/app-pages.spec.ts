@@ -46,15 +46,21 @@ test.describe('the weather page', () => {
     await expect(page).toHaveURL(new RegExp(`${location}$`));
   });
 
-  test('a forecast that is off or failed says so', async ({ page }) => {
+  test('a forecast that is off says so', async ({ page }) => {
     await useScenario(page, { ...weatherOn, weather: { state: 'off' } });
     await gotoShell(page, '/apps/weather');
     await expect(page.getByRole('heading', { name: 'The forecast is off' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Weather connection' })).toHaveAttribute('href', location);
+  });
+
+  test('a failed forecast says why', async ({ page }) => {
     await useScenario(page, { ...weatherOn, weather: { state: 'failed' } });
     await gotoShell(page, '/apps/weather');
     await expect(page.getByRole('heading', { name: 'The forecast did not load' })).toBeVisible();
     await expect(page.getByText('The weather service took too long to answer.')).toBeVisible();
+  });
+
+  test('a stale forecast shows its age', async ({ page }) => {
     await useScenario(page, { ...weatherOn, weather: { state: 'stale' } });
     await gotoShell(page, '/apps/weather');
     await expect(page.getByText('Last updated 3 hours ago.')).toBeVisible();
