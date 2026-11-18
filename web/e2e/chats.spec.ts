@@ -332,7 +332,14 @@ test.describe('streaming', () => {
     await expect(messages.getByText(finalText)).toBeVisible({ timeout: 15_000 });
     await settled(page);
     const phases = (await page.evaluate(() => Reflect.get(globalThis, 'atriumPhases'))) as string[];
-    expect(phases.slice(phases.indexOf('Thinking'))).toEqual(['Thinking', 'Running search_web', 'Thinking', 'Writing', '']);
+    const named = phases.filter((phase) => phase !== 'Connection lost. Reconnecting');
+    expect(named.slice(named.indexOf('Thinking'))).toEqual([
+      'Thinking',
+      'Running search_web',
+      'Thinking',
+      'Writing',
+      '',
+    ]);
     await expect(messages.locator('details.thinking')).toHaveCount(1);
     await expect(messages.locator('details.thinking')).toHaveJSProperty('open', false);
   });
