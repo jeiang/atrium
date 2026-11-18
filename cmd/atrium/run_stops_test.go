@@ -8,13 +8,12 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
-	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
-	"github.com/jeiang/atrium/internal/unit"
 )
 
 func loopRequests(t *testing.T, requests []anthropictest.Request) []map[string]any {
@@ -34,20 +33,41 @@ func loopRequests(t *testing.T, requests []anthropictest.Request) []map[string]a
 	return out
 }
 
-func pauseMemoryWork(t *testing.T, s *apiSite, token, dir string) {
+func patientDo(t *testing.T, s *apiSite, method, path, token string, body any) apiReply {
 	t.Helper()
-	var id int64
-	if err := asstDB(t, dir).Read.QueryRow("SELECT id FROM jobs WHERE declaration_key = ?", unit.Assistant+"/"+assistant.MemoryWorkName).Scan(&id); err != nil {
-		t.Fatalf("memory work job: %v", err)
+	deadline := time.Now().Add(2 * time.Minute)
+	for {
+		reply := s.do(method, path, token, body)
+		if reply.status != http.StatusTooManyRequests || time.Now().After(deadline) {
+			return reply
+		}
+		wait, err := strconv.Atoi(reply.header.Get("Retry-After"))
+		if err != nil || wait < 1 {
+			wait = 1
+		}
+		time.Sleep(time.Duration(wait) * time.Second)
 	}
-	if paused := s.do(http.MethodPut, "/api/v1/schedules/"+strconv.FormatInt(id, 10)+"/enabled", token, map[string]any{"enabled": false}); paused.status != http.StatusOK {
-		t.Fatalf("pause memory work: %d %s", paused.status, paused.body)
+}
+
+func settleThread(t *testing.T, s *apiSite, token string, id int64) apiReply {
+	t.Helper()
+	deadline := time.Now().Add(time.Minute)
+	for {
+		view := patientDo(t, s, http.MethodGet, threadPath(id, ""), token, nil)
+		queued, _ := view.json["queued"].([]any)
+		if view.status == http.StatusOK && view.json["active_run"] == nil && len(queued) == 0 {
+			return view
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("thread %d never settled: %s", id, view.body)
+		}
+		time.Sleep(500 * time.Millisecond)
 	}
 }
 
 func startThread(t *testing.T, s *apiSite, token string, body map[string]any) int64 {
 	t.Helper()
-	started := s.do(http.MethodPost, "/api/v1/threads", token, body)
+	started := patientDo(t, s, http.MethodPost, "/api/v1/threads", token, body)
 	if started.status != http.StatusCreated || started.json["run_id"] == nil {
 		t.Fatalf("start: %d %s", started.status, started.body)
 	}
@@ -105,11 +125,10 @@ func TestRunStopLeavesATranscriptItemAndContinueStartsANewRun(t *testing.T) {
 	warm(t, api)
 	s := startAPISite(t, dir, api)
 	owner := s.token("owner")
-	pauseMemoryWork(t, s, owner, dir)
 
 	api.Push(asstProbes("s", loop.TuningMaxStepsChat, true)...)
 	id := startThread(t, s, owner, map[string]any{"text": "sort the receipts", "web_search": false})
-	view := waitThreadSettled(t, s, owner, id)
+	view := settleThread(t, s, owner, id)
 	want := fmt.Sprintf("The run stopped after %d steps, the most one chat run may take.", loop.TuningMaxStepsChat)
 	var stop map[string]any
 	for _, item := range transcriptItems(view) {
@@ -120,18 +139,18 @@ func TestRunStopLeavesATranscriptItemAndContinueStartsANewRun(t *testing.T) {
 	if stop == nil || stop["text"] != want || stop["run_id"] == nil {
 		t.Fatalf("no stop item %q in the transcript: %s", want, view.body)
 	}
-	run := s.do(http.MethodGet, threadPath(id, "/runs/"+strconv.FormatInt(number(t, stop["run_id"]), 10)), owner, nil)
+	run := patientDo(t, s, http.MethodGet, threadPath(id, "/runs/"+strconv.FormatInt(number(t, stop["run_id"]), 10)), owner, nil)
 	if run.status != http.StatusOK || run.json["state"] != "failed" || !strings.Contains(fmt.Sprint(run.json["error"]), "step cap reached") {
 		t.Fatalf("stopped run: %d %s", run.status, run.body)
 	}
 
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("picked up where it stopped")))
 	before := len(api.Requests())
-	sent := s.do(http.MethodPost, threadPath(id, "/messages"), owner, map[string]any{"text": "Continue."})
+	sent := patientDo(t, s, http.MethodPost, threadPath(id, "/messages"), owner, map[string]any{"text": "Continue."})
 	if sent.status != http.StatusAccepted || sent.json["run_id"] == nil || number(t, sent.json["run_id"]) == number(t, stop["run_id"]) {
 		t.Fatalf("continue: %d %s", sent.status, sent.body)
 	}
-	view = waitThreadSettled(t, s, owner, id)
+	view = settleThread(t, s, owner, id)
 	items := transcriptItems(view)
 	if tail := items[len(items)-1]; tail["kind"] != "assistant" || tail["text"] != "picked up where it stopped" {
 		t.Fatalf("after continue: %s", view.body)
@@ -162,7 +181,6 @@ func TestChatRequestsCarryContextEditsAndReplayCompaction(t *testing.T) {
 	warm(t, api)
 	s := startAPISite(t, dir, api)
 	owner := s.token("owner")
-	pauseMemoryWork(t, s, owner, dir)
 
 	compaction := anthropictest.Compaction("Summary of the earlier turns.", "opaque-compaction-1")
 	api.Push(
@@ -171,7 +189,7 @@ func TestChatRequestsCarryContextEditsAndReplayCompaction(t *testing.T) {
 	)
 	before := len(api.Requests())
 	haiku := startThread(t, s, owner, map[string]any{"text": "look it up", "web_search": false})
-	view := waitThreadSettled(t, s, owner, haiku)
+	view := settleThread(t, s, owner, haiku)
 	if got := threadLimit(t, view); got != 200_000 {
 		t.Fatalf("new Haiku thread limit %d, want the model default 200000", got)
 	}
@@ -193,26 +211,26 @@ func TestChatRequestsCarryContextEditsAndReplayCompaction(t *testing.T) {
 
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("second done")))
 	before = len(api.Requests())
-	if sent := s.do(http.MethodPost, threadPath(haiku, "/messages"), owner, map[string]any{"text": "and again"}); sent.status != http.StatusAccepted {
+	if sent := patientDo(t, s, http.MethodPost, threadPath(haiku, "/messages"), owner, map[string]any{"text": "and again"}); sent.status != http.StatusAccepted {
 		t.Fatalf("send: %d %s", sent.status, sent.body)
 	}
-	waitThreadSettled(t, s, owner, haiku)
+	settleThread(t, s, owner, haiku)
 	requests = loopRequests(t, api.Requests()[before:])
 	if len(requests) != 1 || !carriesBlock(t, requests[0], compaction) {
 		t.Fatalf("the next run does not replay the compaction block: %d requests", len(requests))
 	}
 
-	if changed := s.do(http.MethodPatch, threadPath(haiku, "/options"), owner, map[string]any{"model": pricing.SonnetID}); changed.status != http.StatusOK {
+	if changed := patientDo(t, s, http.MethodPatch, threadPath(haiku, "/options"), owner, map[string]any{"model": pricing.SonnetID}); changed.status != http.StatusOK {
 		t.Fatalf("switch model: %d %s", changed.status, changed.body)
 	}
-	if got := threadLimit(t, s.do(http.MethodGet, threadPath(haiku, ""), owner, nil)); got != 200_000 {
+	if got := threadLimit(t, patientDo(t, s, http.MethodGet, threadPath(haiku, ""), owner, nil)); got != 200_000 {
 		t.Fatalf("switching the model changed the thread limit to %d", got)
 	}
 
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("sonnet done")))
 	before = len(api.Requests())
 	sonnet := startThread(t, s, owner, map[string]any{"text": "hello", "model": pricing.SonnetID, "web_search": false})
-	view = waitThreadSettled(t, s, owner, sonnet)
+	view = settleThread(t, s, owner, sonnet)
 	if got := threadLimit(t, view); got != 500_000 {
 		t.Fatalf("new Sonnet thread limit %d, want the model default 500000", got)
 	}
