@@ -73,6 +73,7 @@ func (s *service) test(a *cli.Args) cli.Handler {
 				return cli.Fail(e, err)
 			}
 			_, _ = fmt.Fprintf(e.Stdout, "result: %s %s %s\n", result.Capability, result.State, reasonOr(result.Reason, "-"))
+			_, _ = fmt.Fprintf(e.Stdout, "saved: nothing, the connection keeps its earlier state; run atrium connections test %s to record a result\n", *id)
 			if result.State == "failing" || result.State == "needs_reauth" {
 				return cli.ExitError
 			}

@@ -486,9 +486,12 @@ path segments and numbers of five or more digits are masked as `<user:…>`,
 value under the same app password, so two masked ids can be compared across
 traces; the app password itself shows as `<password>`. `--repeat <n>` (1 to 5)
 then sends the last refused request again `n` times, 3 seconds apart, and ends
-with `repeat: the <step> request failed <k> of <n> times`. The last line is
-`result: <capability> <state> <reason>`, and the command exits 1 when that state
-is failing or needs reauth. `--trace` with `--all` or `--json`, and `--repeat`
+with `repeat: the <step> request failed <k> of <n> times`. It ends with
+`result: <capability> <state> <reason>` and then
+`saved: nothing, the connection keeps its earlier state; run atrium connections test <id> to record a result`:
+a trace never records a result or a pause, so the row keeps the state it had.
+The command exits 1 when the traced result is failing or needs reauth.
+`--trace` with `--all` or `--json`, and `--repeat`
 without `--trace` or outside 1 to 5, are usage errors.
 
 Mail and iCloud connections also learn from real use while `serve` runs. An
