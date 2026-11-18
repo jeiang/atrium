@@ -860,7 +860,8 @@ is configured. Full page navigations are not conditional fragment responses.
 The Needs you count is the size of the one inbox: questions the assistant is
 waiting on, permission requests, pending proposals and those with an unknown
 outcome, drafts to send or resolve, and overdue, due-soon or needs-decision
-items such as commitments, tasks and open loops. Items of a module that is off
+items such as commitments, tasks and open loops. A thread plan is never an
+inbox item; it stays in the chat work panel. Items of a module that is off
 are not counted. Clients list the same items, in the same order, from
 `GET /api/v1/queue`, and `GET /api/v1/home` returns the count and the first
 three of them as `needs_you`. The Needs you page still lists only proposals and
