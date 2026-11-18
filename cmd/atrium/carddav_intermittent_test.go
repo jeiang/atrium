@@ -368,3 +368,29 @@ func TestAChallengeLessCardDAVRefusalFailsWithoutBlamingThePasswordAndLeavesCalD
 		t.Errorf("after the syncs and the check caldav is %s and carddav %s %+v, want ok beside the held failing carddav", calState, after, hold)
 	}
 }
+
+func TestAPassingConnectionTestEndsADAVHoldWhileAPassingTraceSavesNothing(t *testing.T) {
+	dir, dav := partitionedICloud(t)
+	dav.set(func(p *partitionedDAV) { p.partitionRefuses = true })
+	testICloudConnection(t)
+	state, reason, hold := storedCardDAV(t, dir)
+	if state != "failing" || hold.Refusals != 1 {
+		t.Fatalf("the refused test stored %s %q %+v, want one refusal held", state, reason, hold)
+	}
+	dav.set(func(p *partitionedDAV) { p.partitionRefuses = false })
+
+	if got := runApp(t, "connections", "test", "icloud/icloud", "--trace", "carddav"); got.code != cli.ExitOK {
+		t.Fatalf("traced test after the refusal cleared = %d %q %q, want a pass", got.code, got.stdout, got.stderr)
+	}
+	if after, afterReason, afterHold := storedCardDAV(t, dir); after != state || afterReason != reason || afterHold != hold {
+		t.Errorf("a passing trace stored %s %q %+v, want the held %s %q %+v kept", after, afterReason, afterHold, state, reason, hold)
+	}
+
+	view := testICloudConnection(t)
+	if card, cardReason := capabilityResult(view, davmirror.CapabilityCardDAV); card != "ok" {
+		t.Errorf("connections test after the refusal cleared = %s %q, want ok", card, cardReason)
+	}
+	if after, afterReason, afterHold := storedCardDAV(t, dir); after != "ok" || afterHold.Refusals != 0 {
+		t.Errorf("a passing connections test stored %s %q %+v, want ok with no hold", after, afterReason, afterHold)
+	}
+}
