@@ -421,12 +421,19 @@ func TestConcurrentConnectionTestsRecordOneNotification(t *testing.T) {
 	waitFor(t, func() bool { return connectionNotices(t, dir, "Grafana") > 0 })
 	okG3(t, "grafana test", connTestG3(t, s, "service/grafana", "", map[string]string{"api_key": "glsa_good"}))
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	failingNotices := func() int {
+		var n int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM notifications WHERE title = 'atrium: Grafana failing'").Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
 	for i := 0; i < 5; i++ {
 		status.Store(http.StatusOK)
 		if got := runApp(t, "connections", "test", "service/grafana"); got.code != cli.ExitOK {
 			t.Fatalf("passing test %d: exit %d stdout %q stderr %q", i, got.code, got.stdout, got.stderr)
 		}
-		before := connectionNotices(t, dir, "Grafana")
+		before := failingNotices()
 		lapsed := time.Now().Add(-7 * time.Hour).UTC().Format(time.RFC3339)
 		if _, err := d.Write.Exec("UPDATE connections SET notice_json = json_object('told_at', ?, 'open', json('false')) WHERE id = 'service/grafana'", lapsed); err != nil {
 			t.Fatal(err)
@@ -450,8 +457,8 @@ func TestConcurrentConnectionTestsRecordOneNotification(t *testing.T) {
 		if state := connectionState(t, dir, "service/grafana"); state != "failing" {
 			t.Fatalf("state after concurrent failing tests %d = %q", i, state)
 		}
-		if after := connectionNotices(t, dir, "Grafana"); after != before+1 {
-			t.Fatalf("%d notices after concurrent failing tests %d, want %d", after-before, i, 1)
+		if after := failingNotices(); after != before+1 {
+			t.Fatalf("%d failing notices after concurrent failing tests %d, want %d", after-before, i, 1)
 		}
 	}
 }
