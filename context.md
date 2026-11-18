@@ -1834,7 +1834,7 @@ claims about the running application. Operator contracts are in
   mail or other sites and the return after sign-in land signed in instead of
   looping through `/login`. Real-browser coverage is
   `TestGuardBrowserSignInReturnsAcrossSites`, which runs
-  `web/e2e-live` in the engines named by `ATRIUM_E2E_BROWSERS`.
+  `web/e2e/live` in the engines named by `ATRIUM_E2E_BROWSERS`.
 - The public web service accepts an authenticating reverse proxy
   (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Proxy
   identity headers count only when the socket peer is in the trusted proxy
