@@ -68,7 +68,10 @@ export const models: Model[] = [
     max_output: 64_000,
     rates: rates(3, 15),
     run_cap_usd: 10,
-    thinking: [],
+    thinking: [
+      { type: 'adaptive', max_effort: '' },
+      { type: 'between_tools', max_effort: 'high' },
+    ],
   },
   {
     id: 'claude-opus-5-5',
@@ -79,18 +82,21 @@ export const models: Model[] = [
     max_output: 64_000,
     rates: rates(15, 75),
     run_cap_usd: 10,
-    thinking: [],
+    thinking: [{ type: 'adaptive', max_effort: '' }],
   },
   {
     id: 'claude-haiku-5-5',
     name: 'Haiku 5.5',
-    context_window: 200_000,
-    efforts: ['low', 'medium', 'high'],
+    context_window: 1_000_000,
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
     forced_tools: false,
     max_output: 32_000,
     rates: rates(1, 5),
     run_cap_usd: 10,
-    thinking: [],
+    thinking: [
+      { type: 'adaptive', max_effort: '' },
+      { type: 'disabled', max_effort: 'high' },
+    ],
   },
 ];
 
@@ -479,13 +485,13 @@ export function configuration(): ModelConfiguration {
     models,
     defaults,
     efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-    context_limits: [200_000, 1_000_000],
+    context_limits: [90_000, 200_000, 500_000, 1_000_000],
     composer: {
       ...defaults,
       cliff: false,
       coding: false,
       context: 0,
-      context_limits: [200_000, 1_000_000],
+      context_limits: [90_000, 200_000, 500_000, 1_000_000],
       effort_fixed: false,
       efforts: ['low', 'medium', 'high'].map((value) => ({ Value: value, Disabled: false })),
       known: true,

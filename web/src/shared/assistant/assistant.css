@@ -328,6 +328,11 @@
     color: var(--ink-3);
   }
 
+  .tool[data-state="running"] .tool__mark {
+    color: var(--moss);
+    animation: pulse 1.2s var(--ease) infinite alternate;
+  }
+
   .tool[data-state="done"] .tool__mark {
     color: var(--moss);
   }
@@ -515,6 +520,10 @@
     min-block-size: 0;
   }
 
+  .status-slot--live .mark__dot {
+    animation: pulse 1.2s var(--ease) infinite alternate;
+  }
+
   .scope {
     display: inline-grid;
     justify-items: start;
@@ -569,6 +578,11 @@
 
     .tool__toggle > .icon:last-child {
       transition: none;
+    }
+
+    .tool[data-state="running"] .tool__mark,
+    .status-slot--live .mark__dot {
+      animation: none;
     }
   }
 }

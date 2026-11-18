@@ -1,16 +1,17 @@
 <script lang="ts">
   import type { ModelConfiguration } from '../../contract';
   import Menu, { type MenuItem } from '../../shared/ui/Menu.svelte';
+  import { contextChoices, contextLabel, type Scope, snapContext } from './scope';
 
   interface Props {
     options: ModelConfiguration | undefined;
-    model: string;
-    effort: string;
-    staged: boolean;
-    onchange: (model: string, effort: string) => void;
+    value: Scope;
+    fixed?: boolean;
+    staged?: boolean;
+    onchange: (next: Scope) => void;
   }
 
-  let { options, model, effort, staged, onchange }: Props = $props();
+  let { options, value: scope, fixed = false, staged = false, onchange }: Props = $props();
 
   let phone = $state(false);
 
@@ -24,22 +25,33 @@
     return () => query.removeEventListener('change', update);
   });
 
-  const current = $derived(options?.models.find((entry) => entry.id === model));
+  const current = $derived(options?.models.find((entry) => entry.id === scope.model));
+  const contexts = $derived(contextChoices(options, current));
   const price = $derived(current ? `$${current.rates.output} per million output tokens` : '');
-  const label = $derived(`${current?.name ?? model} · ${effort}${staged ? `, from the next message, ${price}` : ''}`);
+  const label = $derived(
+    `${current?.name ?? scope.model} · ${scope.effort} · ${contextLabel(scope.context)}${staged ? `, from the next message, ${price}` : ''}`,
+  );
   const items = $derived<MenuItem[]>([
     ...(options?.models ?? []).map(
       (entry): MenuItem => ({
         value: `model:${entry.id}`,
         label: `${entry.name}, $${entry.rates.output} per million out`,
-        icon: entry.id === model ? 'check' : undefined,
+        icon: entry.id === scope.model ? 'check' : undefined,
       }),
     ),
     ...(current?.efforts ?? []).map(
       (value): MenuItem => ({
         value: `effort:${value}`,
         label: `Effort ${value}`,
-        icon: value === effort ? 'check' : undefined,
+        icon: value === scope.effort ? 'check' : undefined,
+        disabled: fixed && value !== scope.effort,
+      }),
+    ),
+    ...contexts.map(
+      (value): MenuItem => ({
+        value: `context:${value}`,
+        label: `Context ${contextLabel(value)}`,
+        icon: value === scope.context ? 'check' : undefined,
       }),
     ),
   ]);
@@ -48,10 +60,13 @@
     const [kind, choice = ''] = value.split(':');
     if (kind === 'model') {
       const next = options?.models.find((entry) => entry.id === choice);
-      const nextEffort = next && !next.efforts.includes(effort) ? (next.efforts.at(-1) ?? effort) : effort;
-      onchange(choice, nextEffort);
+      const effort =
+        next && !next.efforts.includes(scope.effort) ? (next.efforts.at(-1) ?? scope.effort) : scope.effort;
+      onchange({ model: choice, effort, context: snapContext(contextChoices(options, next), scope.context) });
+    } else if (kind === 'effort') {
+      onchange({ ...scope, effort: choice });
     } else {
-      onchange(model, choice);
+      onchange({ ...scope, context: Number(choice) });
     }
   }
 </script>

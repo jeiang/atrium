@@ -472,6 +472,11 @@ function listed(value: MockThread): ListedThread {
   };
 }
 
+export function chatsRunning(): number {
+  return [...threads.values()].filter((value) => value.active?.state === 'running' && value.thread.id !== G3_THREAD)
+    .length;
+}
+
 function lastOperator(value: MockThread): TranscriptItem | undefined {
   return value.items.findLast((entry) => entry.kind === 'user');
 }
@@ -806,7 +811,13 @@ export const chatHandlers = [
     return HttpResponse.json(run);
   }),
   http.post(`*${API_BASE}/threads`, async ({ request }) => {
-    const body = (await request.json()) as { text?: string; model?: string; effort?: string };
+    const body = (await request.json()) as {
+      text?: string;
+      model?: string;
+      effort?: string;
+      context_limit?: number;
+      thinking?: string;
+    };
     const text = body.text?.trim() ?? '';
     if (!text) return problem(422, 'invalid', 'Write a message first.');
     const created: MockThread = {
@@ -814,6 +825,8 @@ export const chatHandlers = [
         ...thread(nextThread++, text.slice(0, 48), 0),
         model: body.model ?? 'claude-sonnet-5-5',
         effort: body.effort ?? 'high',
+        context_limit: body.context_limit ?? 200_000,
+        thinking: body.thinking ?? 'adaptive',
       },
       items: [],
       active: null,
@@ -914,9 +927,10 @@ export const chatHandlers = [
   http.patch(`*${API_BASE}/threads/:thread/options`, async ({ request, params }) => {
     const value = threads.get(Number(params.thread));
     if (!value) return problem(404, 'not_found', 'This chat does not exist.');
-    const body = (await request.json()) as { model?: string; effort?: string };
+    const body = (await request.json()) as { model?: string; effort?: string; context_limit?: number };
     if (body.model) value.thread.model = body.model;
     if (body.effort) value.thread.effort = body.effort;
+    if (body.context_limit) value.thread.context_limit = body.context_limit;
     return HttpResponse.json({ thread_id: value.thread.id });
   }),
   http.get(`*${API_BASE}/composer-options`, ({ request }) => {

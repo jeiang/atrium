@@ -97,9 +97,6 @@
 </script>
 
 <form class="composer" class:composer--scoped={scope !== undefined} onsubmit={onSubmit}>
-  {#if scope}
-    <div class="composer__scope">{@render scope()}</div>
-  {/if}
   <label class="visually-hidden" for={id}>{label}</label>
   <textarea
     {id}
@@ -114,6 +111,9 @@
     aria-describedby={failed ? `${id}-error` : undefined}
     onkeydown={onKeydown}
   ></textarea>
+  {#if scope}
+    <div class="composer__scope">{@render scope()}</div>
+  {/if}
   <div class="composer__actions">
     {#if onstop && running}
       <Button variant="secondary" pending={stopping} onclick={onStop}>Stop run</Button>

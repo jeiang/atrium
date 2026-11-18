@@ -28,6 +28,7 @@
 
   const frame = $derived(signedIn ? shell.data : undefined);
   const waiting = $derived(frame?.needs_you ?? 0);
+  const chatting = $derived((frame?.chats_running ?? 0) > 0);
   const apps = useApps(() => signedIn !== undefined);
   const appRows = $derived(signedIn ? openApps(apps.data) : []);
   const paused = $derived(frame?.pause?.paused === true);
@@ -177,7 +178,7 @@
     </ul>
     <div class="rail__foot">
       {#if signedIn}
-        <AccountMenu session={signedIn} version={frame?.version} placement="rail" />
+        <AccountMenu session={signedIn} version={frame?.version} placement="rail" running={chatting} />
       {/if}
     </div>
   </nav>
@@ -193,7 +194,7 @@
     >
     <div class="topbar__account">
       {#if signedIn}
-        <AccountMenu session={signedIn} version={frame?.version} placement="topbar" />
+        <AccountMenu session={signedIn} version={frame?.version} placement="topbar" running={chatting} />
       {/if}
     </div>
   </header>
@@ -230,7 +231,13 @@
         <span class="visually-hidden">, {waiting} waiting</span>
       {/if}
     </a>
-    <a href={p('/chat')} aria-current={current('/chat')}><Icon name={chats.icon} /><span>{chats.label}</span></a>
+    <a href={p('/chat')} aria-current={current('/chat')}>
+      <Icon name={chats.icon} /><span>{chats.label}</span>
+      {#if chatting}
+        <span class="run-dot tabbar__dot" aria-hidden="true"></span>
+        <span class="visually-hidden">, a chat is working</span>
+      {/if}
+    </a>
     <a href={p('/apps')} aria-current={appsCurrent}><Icon name="apps" /><span>Apps</span></a>
   </nav>
 </div>

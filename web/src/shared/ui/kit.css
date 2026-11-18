@@ -1364,3 +1364,9 @@
     opacity: 0;
   }
 }
+
+@keyframes pulse {
+  to {
+    opacity: 0.35;
+  }
+}
