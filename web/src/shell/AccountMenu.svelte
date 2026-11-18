@@ -13,9 +13,10 @@
     session: WebSession;
     version?: string;
     placement: 'rail' | 'topbar';
+    running?: boolean;
   }
 
-  let { session, version, placement }: Props = $props();
+  let { session, version, placement, running = false }: Props = $props();
 
   const id = $props.id();
   let open = $state(false);
@@ -103,9 +104,14 @@
     onclick={onToggle}
     onkeydown={onKeydown}
   >
-    <span class="avatar" aria-hidden="true">{initials || '?'}</span>
+    <span class="account__avatar" aria-hidden="true">
+      <span class="avatar">{initials || '?'}</span>
+      {#if running}
+        <span class="run-dot"></span>
+      {/if}
+    </span>
     <span class="account__name" aria-hidden="true">{name}</span>
-    <span class="visually-hidden">Account: {name}</span>
+    <span class="visually-hidden">Account: {name}{running ? ', a chat is working' : ''}</span>
   </button>
   <div class="account__popup" {id} hidden={!open}>
     <p class="account__who">
@@ -117,6 +123,10 @@
     <div class="account__menu" role="menu" aria-label="Account" tabindex="-1" onkeydown={onKeydown}>
       <a role="menuitem" class="account__item" href={p(chats.path)} onclick={() => close(false)}>
         <Icon name={chats.icon} /><span>{chats.label}</span>
+        {#if running}
+          <span class="run-dot" aria-hidden="true"></span>
+          <span class="visually-hidden">, a chat is working</span>
+        {/if}
       </a>
       <a role="menuitem" class="account__item" href={p(settings.path)} onclick={() => close(false)}>
         <Icon name={settings.icon} /><span>{settings.label}</span>

@@ -44,6 +44,7 @@
   import ChatFiles from './ChatFiles.svelte';
   import { failureText } from './manage';
   import ScopeMenu from './ScopeMenu.svelte';
+  import { effortFixed, type Scope, startOptions } from './scope';
   import { RunStream, type StreamStatus } from './stream.svelte';
   import { threadQuery } from './thread';
   import WorkPanel from './WorkPanel.svelte';
@@ -66,7 +67,7 @@
   let following = $state(true);
   let unseen = $state(false);
   let stopping = $state(false);
-  let staged = $state<{ model: string; effort: string }>();
+  let staged = $state<Scope>();
   let optimistic = $state<{ key: number; text: string; after: number }[]>([]);
   let restored = false;
   let sentCount = 0;
@@ -133,8 +134,15 @@
   let resuming = $state(false);
   let resumeProblem = $state<{ tone: 'warn' | 'error'; title: string; text: string }>();
   const thread = $derived(first?.thread);
-  const model = $derived(staged?.model ?? thread?.model ?? options.data?.defaults.model ?? '');
-  const effort = $derived(staged?.effort ?? thread?.effort ?? options.data?.defaults.effort ?? '');
+  const chosen = $derived<Scope>(
+    staged ?? {
+      model: thread?.model ?? options.data?.defaults.model ?? '',
+      effort: thread?.effort ?? options.data?.defaults.effort ?? '',
+      context: thread?.context_limit ?? options.data?.defaults.context_limit ?? 0,
+    },
+  );
+  const scopeModel = $derived(options.data?.models.find((entry) => entry.id === chosen.model));
+  const fixed = $derived(thread !== undefined && effortFixed(scopeModel, thread.thinking));
   const title = $derived(id === undefined ? 'New chat' : thread?.title || (thread ? 'Untitled chat' : 'Chat'));
   const ready = $derived(id === undefined || first !== undefined);
   const lastUser = $derived(visible.findLast((entry) => entry.kind === 'user'));
@@ -165,6 +173,7 @@
   function refresh(): void {
     void queryClient.invalidateQueries({ queryKey: ['thread', id] });
     void queryClient.invalidateQueries({ queryKey: ['threads'] });
+    void queryClient.invalidateQueries({ queryKey: ['shell'] });
   }
 
   function onEditStart(text: string): void {
@@ -270,8 +279,7 @@
 
   function onStreamEnd(status: StreamStatus, run: number): void {
     if (status === 'expired') streams.delete(run);
-    void queryClient.invalidateQueries({ queryKey: ['thread', id] });
-    void queryClient.invalidateQueries({ queryKey: ['threads'] });
+    refresh();
   }
 
   function follow(run: number, resume: boolean): void {
@@ -287,6 +295,7 @@
     });
     streams.set(run, stream);
     stream.start();
+    void queryClient.invalidateQueries({ queryKey: ['shell'] });
   }
 
   $effect(() => {
@@ -418,17 +427,29 @@
     };
   });
 
-  function toolCalls(steps: Step[] | null): ToolCall[] {
-    return (steps ?? [])
-      .filter((step) => step.kind !== 'note' && step.kind !== 'thinking' && step.id)
-      .map((step) => ({
-        id: step.id ?? step.name,
+  type Part = { kind: 'thinking'; text: string } | { kind: 'tools'; calls: ToolCall[] };
+
+  function activity(steps: Step[] | null): Part[] {
+    const parts: Part[] = [];
+    for (const step of steps ?? []) {
+      if (step.kind === 'thinking') {
+        if (step.text.trim()) parts.push({ kind: 'thinking', text: step.text });
+        continue;
+      }
+      if (step.kind === 'note' || !step.id) continue;
+      const call: ToolCall = {
+        id: step.id,
         name: step.name,
         args: step.args,
         state: step.is_error ? 'failed' : step.state === 'running' ? 'running' : 'done',
         preview: step.error ?? step.result ?? undefined,
         results: step.results.map((result) => ({ title: result.title || result.url, url: result.url })),
-      }));
+      };
+      const last = parts.at(-1);
+      if (last?.kind === 'tools') last.calls.push(call);
+      else parts.push({ kind: 'tools', calls: [call] });
+    }
+    return parts;
   }
 
   function proposalFor(run: number): TranscriptItem | undefined {
@@ -445,13 +466,15 @@
     return ids;
   }
 
-  function statusOf(stream: RunStream): { text: string; tone: 'neutral' | 'warn' | 'error' | 'accent' } | undefined {
+  function statusOf(
+    stream: RunStream,
+  ): { text: string; tone: 'neutral' | 'warn' | 'error' | 'accent'; live?: boolean } | undefined {
     if (stream.status === 'busy') return { text: 'Too many chats are streaming. Trying again soon', tone: 'warn' };
     if (stream.status === 'retrying') return { text: 'Connection lost. Reconnecting', tone: 'warn' };
     if (stream.status === 'failed') return { text: stream.error ?? 'The run failed', tone: 'error' };
     if (stream.status === 'stopped') return { text: 'Stopped. Steps already done stay done', tone: 'neutral' };
     if (stream.status === 'parked') return { text: 'Waiting for you', tone: 'warn' };
-    if (stream.active && stream.segments.length === 0) return { text: 'Starting', tone: 'accent' };
+    if (stream.active) return { text: stream.phase, tone: 'accent', live: true };
     return undefined;
   }
 
@@ -466,9 +489,7 @@
   async function onSend(text: string, now = false): Promise<void> {
     if (id === undefined) {
       try {
-        const started = ok(
-          await assistantThreadStart({ text, model: model || undefined, effort: effort || undefined }),
-        );
+        const started = ok(await assistantThreadStart({ text, ...startOptions(options.data, chosen) }));
         await navigate('/chat/:id', { params: { id: String(started.thread.id) }, replace: true });
       } catch (error) {
         throw new Error(message(error));
@@ -492,7 +513,13 @@
     }
     try {
       if (staged) {
-        ok(await assistantThreadOptions(id, staged));
+        ok(
+          await assistantThreadOptions(id, {
+            model: staged.model,
+            effort: staged.effort,
+            context_limit: staged.context,
+          }),
+        );
         staged = undefined;
       }
       optimistic.push({ key, text, after: lastSeq });
@@ -591,9 +618,10 @@
     }
   }
 
-  function onScope(nextModel: string, nextEffort: string): void {
-    const sameAsThread = nextModel === thread?.model && nextEffort === thread?.effort;
-    staged = sameAsThread ? undefined : { model: nextModel, effort: nextEffort };
+  function onScope(next: Scope): void {
+    const sameAsThread =
+      next.model === thread?.model && next.effort === thread?.effort && next.context === thread?.context_limit;
+    staged = sameAsThread ? undefined : next;
   }
 
   function onJump(): void {
@@ -699,6 +727,18 @@
   </div>
 {/snippet}
 
+{#snippet thought(
+    text: string,
+    live: boolean,
+  )}
+  <li class="turn">
+    <details class="thinking" open={live}>
+      <summary class="thinking__summary">Thinking</summary>
+      <div class="thinking__body"><Markdown {text} /></div>
+    </details>
+  </li>
+{/snippet}
+
 <div class="chat" bind:this={root}>
   <header class="chat__head">
     <a class="chat__back link" href={p('/chat')}><Icon name="chevron" />All chats</a>
@@ -776,10 +816,13 @@
         {:else if entry.kind === 'user'}
           {@render bubble(entry.text, undefined, entry === lastUser && settledTurn)}
         {:else if entry.kind === 'activity'}
-          {const calls = $derived(toolCalls(entry.steps))}
-          {#if calls.length > 0}
-            <li class="turn">{@render tools(calls)}</li>
-          {/if}
+          {#each activity(entry.steps) as part, index (index)}
+            {#if part.kind === 'thinking'}
+              {@render thought(part.text, false)}
+            {:else}
+              <li class="turn">{@render tools(part.calls)}</li>
+            {/if}
+          {/each}
         {:else if entry.kind === 'proposal' && entry.proposal_id && entry.run_id != null}
           {const ids = $derived(batchOf(entry))}
           {#if ids.length > 0}
@@ -816,6 +859,8 @@
             {#if !userTexts.has(segment.text)}
               {@render bubble(segment.text)}
             {/if}
+          {:else if segment.kind === 'thinking'}
+            {@render thought(segment.text, stream.active && index === stream.segments.length - 1)}
           {:else if segment.kind === 'text'}
             <li class="turn"><Markdown text={segment.text} /></li>
           {:else}
@@ -825,7 +870,9 @@
         {/each}
         {const status = $derived(statusOf(stream))}
         {#if status}
-          <li class="turn turn--status"><StatusSlot text={status.text} tone={status.tone} /></li>
+          <li class="turn turn--status">
+            <StatusSlot text={status.text} tone={status.tone} live={status.live} />
+          </li>
         {/if}
       {/each}
       {#if asks.length > 0}
@@ -892,7 +939,7 @@
         onstop={onStop}
       >
         {#snippet scope()}
-          <ScopeMenu options={options.data} {model} {effort} staged={staged !== undefined} onchange={onScope} />
+          <ScopeMenu options={options.data} value={chosen} {fixed} staged={staged !== undefined} onchange={onScope} />
         {/snippet}
       </Composer>
     {/if}

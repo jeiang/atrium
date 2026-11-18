@@ -217,6 +217,31 @@ func TestStreamRevokedBearerStops(t *testing.T) {
 	free()
 }
 
+func TestShellCountsRunningChats(t *testing.T) {
+	t.Parallel()
+	s := newStreamSite(t)
+	running := func() int64 {
+		got := s.do(http.MethodGet, "/api/v1/shell", s.token, nil)
+		if got.status != http.StatusOK {
+			t.Fatalf("shell: %d %s", got.status, got.body)
+		}
+		return number(t, got.json["chats_running"])
+	}
+	if n := running(); n != 0 {
+		t.Fatalf("an idle instance counts %d running chats", n)
+	}
+	free := s.hold()
+	s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
+	threadID, runID := s.start("count me")
+	waitRunning(t, s.d, runID)
+	if n := running(); n != 1 {
+		t.Fatalf("a working chat counts %d", n)
+	}
+	free()
+	s.events(s.token, threadID, runID, "")
+	waitUntil(t, 20*time.Second, "the finished run to leave the count", func() bool { return running() == 0 })
+}
+
 func TestStreamCaps(t *testing.T) {
 	t.Parallel()
 	s := newStreamSite(t)

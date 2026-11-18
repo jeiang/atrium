@@ -14,6 +14,9 @@
   import { useShell } from '../../shell/frame';
   import { moduleOn } from '../../shell/nav';
   import { navigate, p } from '../../shell/router';
+  import { useConfiguration } from '../assistant/assistant';
+  import ScopeMenu from '../chats/ScopeMenu.svelte';
+  import { type Scope, startOptions } from '../chats/scope';
   import { homeQuery, pendingQuery } from './queries';
   import { ageText, failureText } from './weather';
   import './home.css';
@@ -76,9 +79,19 @@
 
   const offline = unreachable;
 
+  const options = useConfiguration(() => assistantOn);
+  let picked = $state<Scope>();
+  const chosen = $derived<Scope>(
+    picked ?? {
+      model: options.data?.defaults.model ?? '',
+      effort: options.data?.defaults.effort ?? '',
+      context: options.data?.defaults.context_limit ?? 0,
+    },
+  );
+
   let draft = $state('');
   async function onSubmit(text: string): Promise<void> {
-    const started = ok(await assistantThreadStart({ text }));
+    const started = ok(await assistantThreadStart({ text, ...(picked ? startOptions(options.data, picked) : {}) }));
     void client.invalidateQueries({ queryKey: ['home'] });
     await navigate('/chat/:id', { params: { id: String(started.thread.id) } });
   }
@@ -89,7 +102,13 @@
 
   {#if assistantOn}
     <div class="home__composer">
-      <Composer bind:value={draft} placeholder="Ask atrium anything" onsubmit={onSubmit} />
+      <Composer bind:value={draft} placeholder="Ask atrium anything" onsubmit={onSubmit}>
+        {#snippet scope()}
+          {#if options.data}
+            <ScopeMenu options={options.data} value={chosen} onchange={(next) => (picked = next)} />
+          {/if}
+        {/snippet}
+      </Composer>
     </div>
   {:else}
     <div class="home__off">

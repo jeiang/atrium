@@ -42,8 +42,8 @@
   const rows = $derived(threads.data?.pages.flatMap((page) => page.items) ?? []);
 
   function runMark(thread: ListedThread): { label: string; tone: 'accent' | 'warn' } | undefined {
-    if (thread.run_state === 'running' || thread.run_state === 'interrupted')
-      return { label: 'Running', tone: 'accent' };
+    if (thread.run_state === 'running') return { label: 'Running', tone: 'accent' };
+    if (thread.run_state === 'interrupted') return { label: 'Interrupted', tone: 'warn' };
     if (thread.run_state === 'parked') return { label: 'Waiting for you', tone: 'warn' };
     return undefined;
   }
@@ -119,7 +119,9 @@
         >
           {#snippet end()}
             {#if mark}
-              <StatusMark tone={mark.tone}>{mark.label}</StatusMark>
+              <span class="chats-run" class:chats-run--live={thread.run_state === 'running'}>
+                <StatusMark tone={mark.tone}>{mark.label}</StatusMark>
+              </span>
             {/if}
             <Menu
               label="Actions for {chatTitle(thread.title)}"

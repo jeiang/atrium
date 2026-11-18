@@ -187,6 +187,41 @@
     min-inline-size: 0;
   }
 
+  .thinking {
+    max-inline-size: 40rem;
+    color: var(--ink-2);
+  }
+
+  .thinking__summary {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--s-2);
+    min-block-size: var(--target);
+    font-size: var(--t-sm);
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .thinking__body {
+    padding-inline-start: var(--s-3);
+    border-inline-start: 2px solid var(--line);
+    font-size: var(--t-sm);
+  }
+
+  .chats-run {
+    display: inline-flex;
+  }
+
+  .chats-run--live .mark__dot {
+    animation: pulse 1.2s var(--ease) infinite alternate;
+  }
+
+  @media (--reduced-motion) {
+    .chats-run--live .mark__dot {
+      animation: none;
+    }
+  }
+
   .chat .prose {
     max-inline-size: 40rem;
   }

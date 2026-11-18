@@ -84,6 +84,27 @@ test.describe('home on desktop', () => {
     expect(started[0].idempotencyKey).toBeTruthy();
   });
 
+  test('a chat started from Home uses the chosen model and context size', async ({ page }) => {
+    await gotoHome(page);
+    await page.getByRole('button', { name: 'Sonnet 5.5 · high · 200k' }).click();
+    await page.getByRole('menuitem', { name: /^Opus 5\.5/ }).click();
+    await page.getByRole('button', { name: 'Opus 5.5 · high · 200k' }).click();
+    await page.getByRole('menuitem', { name: 'Context 1M' }).click();
+    await expect(page.getByRole('button', { name: 'Opus 5.5 · high · 1M' })).toBeVisible();
+    await page.getByRole('textbox', { name: 'Message' }).fill('Read the whole shed manual');
+    await page.getByRole('button', { name: 'Send' }).click();
+    await expect(page).toHaveURL(/\/chat\/\d+$/);
+    const started = await page.evaluate(() => Reflect.get(globalThis, 'atriumMockStarted'));
+    expect(started[0].body).toEqual({
+      text: 'Read the whole shed manual',
+      model: 'claude-opus-5-5',
+      effort: 'high',
+      context_limit: 1_000_000,
+      thinking: 'adaptive',
+    });
+    await expect(page.getByRole('button', { name: 'Opus 5.5 · high · 1M', exact: true })).toBeVisible();
+  });
+
   test('weather card from the /home model', async ({ page }) => {
     await gotoHome(page);
     const card = page.locator('.home__weather');

@@ -29,11 +29,12 @@ export interface Outcome {
   text: string;
 }
 
-export function useConfiguration() {
+export function useConfiguration(enabled: () => boolean = () => true) {
   return createQuery(() => ({
     queryKey: ['assistant', 'configuration'],
     queryFn: async ({ signal }) => ok(await assistantConfiguration({ signal })),
     meta: { topics: SPEND_TOPICS },
+    enabled: enabled(),
   }));
 }
 

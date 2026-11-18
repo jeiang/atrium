@@ -7,13 +7,14 @@
   interface Props {
     text?: string;
     tone?: Tone;
+    live?: boolean;
     action?: { label: string; run: () => void };
   }
 
-  let { text, tone = 'neutral', action }: Props = $props();
+  let { text, tone = 'neutral', live = false, action }: Props = $props();
 </script>
 
-<div class="status-slot" role="status">
+<div class="status-slot" class:status-slot--live={live} role="status">
   {#if text}
     <StatusMark {tone}>{text}</StatusMark>
     {#if action}
