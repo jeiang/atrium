@@ -74,12 +74,14 @@ claims about the running application. Operator contracts are in
   writes) stay in `internal/safety` and the pause check in `internal/pause`.
   The draft card kind and the live-action rows reach Review through the Mail
   declaration's review kinds. Mail is one navigation entry, the `mail_app`
-  hub labelled Mail, with Decisions (`/triage`, where message pages also
-  belong) and Rules (`/rules`) as its tabs; Mail settings stay at
+  hub labelled Mail at `/apps/mail`, with Messages, Decisions
+  (`/apps/mail/decisions`), Rules (`/apps/mail/rules`), Mode
+  (`/apps/mail/mode`) and Accounts as its tabs and message pages at
+  `/apps/mail/message/<id>`; Mail settings stay at
   `/settings/mail`. With Mail off the entry, its tabs and its pages are
   gone.
 - The core `signals` unit (`internal/signals` for the domain,
-  `internal/signals/signalsmodule` for its service, API routes, Loops page,
+  `internal/signals/signalsmodule` for its service, API routes,
   `open_loops` tool and declaration) owns open loops, commitments and
   commitment reminders: the `open_loops`, `loop_overrides` and `commitments`
   tables, their attention sources, the `open_loops` queue, the reminder
@@ -854,8 +856,8 @@ claims about the running application. Operator contracts are in
 ### Audit and resolution
 - Every settings write and secret change appends
   a row to the append-only `settings_audit` table (old and new value, or
-  only `changed` for secrets; actor and source), listed read-only in
-  `/activity`. Known secret values are scrubbed from log output, exported
+  only `changed` for secrets; actor and source), listed read-only by
+  `GET /api/v1/activity`. Known secret values are scrubbed from log output, exported
   trace attributes and effect snapshots. An operator can settle a blocked unknown, partial
   or in-flight mail write or undo after checking the mailbox
   (`atrium proposals resolve`, `atrium live resolve`, or the web buttons); the
@@ -865,7 +867,7 @@ claims about the running application. Operator contracts are in
   A resolution source is `cli`, `ui`, `api`, `tool`, `job` or `import`; it
   is the entry point that made the decision, so an `/api/v1` approval
   records `api` and a web one `ui`. Rows recorded with source `phone` by the
-  retired phone action links stay in `/activity` as "phone action". Approve, dismiss, undo and
+  retired phone action links stay in `GET /api/v1/activity` as "phone action". Approve, dismiss, undo and
   resolve are the `review.*` operations shared by every entry point, each
   audited in `operation_audit` after the ledger settles, even after caller
   cancellation. Audit provenance comes only from the trusted invocation.
@@ -956,7 +958,8 @@ claims about the running application. Operator contracts are in
   path for module pages, commands, tools, settings, connections, hooks,
   metrics, checks, proposals, effect handlers, review kinds and scheduled
   jobs; module enablement gates the applicable runtime projections. The
-  review hub (`/review`, `/proposals/*`, `/activity*`, the queue) lives in
+  review core (`/api/v1/queue`, `/api/v1/proposals`, `/api/v1/activity`,
+  behind the client Inbox at `/inbox`, `/proposals/<id>` and `/drafts/<id>`) lives in
   `internal/review`, which imports no unit: mail contributes its mode,
   drafts and live actions and the `mail` activity category, and the
   assistant contributes ops findings, through `ReviewKinds` and
@@ -1206,7 +1209,7 @@ claims about the running application. Operator contracts are in
   and `package_events` tables, the hourly job, the `packages`,
   `track_package` and `untrack_package` tools, the `/packages` API
   (list with `ship24_connected` and the monthly `quota`, add, track,
-  untrack, dismiss, poll), the `/watches` page, the `packages` attention
+  untrack, dismiss, poll), the client Packages page (`/apps/packages`), the `packages` attention
   source and the `package:` resolver. Persisted names are unchanged: the job
   key `mail/package-tracking` (kept through `scheduler.Definition.KeyOwner`),
   its carried setting `agent_schedule_package_tracking`, the
@@ -1529,8 +1532,8 @@ claims about the running application. Operator contracts are in
   go-live eligibility, verification, caps, and the effect ledger. The mode is
   the operator `mail_mode` setting, changed with
   `atrium settings set mail_mode shadow|live` (audited) and shown on the Mail
-  page; it is not a settings-page field. The Mail status page (`/live`,
-  `mail.status`) can also switch to live through a two-step confirm
+  Mode tab; it is not a settings-page field. The Mode tab (`/apps/mail/mode`,
+  `GET /api/v1/mail/status`, `mail.status`) can also switch to live through a two-step confirm
   (`mail.status-confirm` returns the effect and a single-use token bound to
   mode, accounts and cap; `mail.go-live` and `mail.status-rebaseline` need
   it). These operations, and settings writes of `mail_mode` (a `NoAgent`
@@ -1578,8 +1581,9 @@ claims about the running application. Operator contracts are in
   or agent) create local drafts with no thread and no effect. A reply
   addresses Reply-To or the sender, quotes the body and keeps
   `in_reply_to`/`refs`; a forward needs `to` and lists attachment names
-  instead of carrying attachments, because drafts store no attachments. The
-  Loops page links to the message instead of starting a draft-reply run.
+  instead of carrying attachments, because drafts store no attachments. An
+  open loop reaches the Inbox as a `loop` item, and its message page links to
+  it; neither starts a draft-reply run.
 - Calendar writes record an effect in the ledger before the external call. A
   write whose outcome is unknown stays blocked; further writes to the same
   calendar are refused until the operator resolves it with `atrium effects
