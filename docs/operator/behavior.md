@@ -729,8 +729,9 @@ stored rules and decisions are not rewritten.
   threading headers kept. A forward does not carry attachments: drafts have no
   attachment storage, so the forwarded body lists the attachment names
   instead. The operator can also start a new draft with `POST /drafts`.
-- The Loops page links each loop to its message instead of starting a paid
-  assistant run to draft a reply.
+- An open loop reaches the Inbox as a `loop` item, and its message page
+  (`/apps/mail/message/<id>`) links to it with Open in Inbox; neither starts a
+  paid assistant run to draft a reply.
 
 ### Long passes and busy work
 
@@ -854,7 +855,8 @@ To do and Waiting come from one list, `GET /api/v1/commitments`: your tasks and
 the commitments from mail that you owe (To do), and the commitments other
 people owe you (Waiting). An item's `ref` is `task:<id>` or `commitment:<id>`,
 the same id the one inbox uses. Tasks disappear while the assistant is off.
-Commitments, open loops and the Loops page stay available while mail is off,
+Commitments (Waiting, `/plan/waiting`) and open loops (Inbox `loop` items)
+stay available while mail is off,
 showing what was found before; they show no message subject or sender then,
 and refreshing them waits for mail to be on. Done, dismiss and reopen work on both and can be
 undone; a reopened commitment is not proposed as a reminder again. Only an open
