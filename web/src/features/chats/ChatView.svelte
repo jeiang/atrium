@@ -509,6 +509,7 @@
       const unsent = ok(
         await assistantMessageUnsend(id, queuedId, { headers: { 'Idempotency-Key': crypto.randomUUID() } }),
       );
+      optimistic = optimistic.filter((entry) => entry.text !== unsent.text);
       draft = draft.trim() ? `${unsent.text}\n\n${draft}` : unsent.text;
     } catch (error) {
       if (error instanceof ApiError) {
