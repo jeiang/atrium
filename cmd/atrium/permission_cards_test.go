@@ -16,8 +16,7 @@ import (
 
 func denyMarkedInternet(t *testing.T) {
 	t.Helper()
-	setEnv(t, settingEnv("permission_internet_pii"), "deny")
-	setEnv(t, settingEnv("permission_internet_untrusted_kinds"), "deny")
+	seedSettings(t, map[string]string{"permission_internet_pii": "deny", "permission_internet_untrusted_kinds": "deny"})
 }
 
 func pendingPermissions(t *testing.T, d *db.DB, run int64) []int64 {
