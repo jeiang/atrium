@@ -168,11 +168,12 @@ func TestInboxAndDevicesAPI(t *testing.T) {
 		t.Fatalf("mark unread = %d", put.status)
 	}
 
-	rows := count("SELECT COUNT(*) FROM notifications")
-	before := push.count()
+	rows := count("SELECT COUNT(*) FROM notifications WHERE channel = 'assistant'")
+	title := fmt.Sprint(top["title"])
+	before := push.titled(t, browser, title)
 	resend := s.do(http.MethodPost, "/api/v1/inbox/"+strconv.FormatInt(newest, 10)+"/resend", token, nil)
-	if resend.status != http.StatusOK || resend.json["delivered"] != true || push.count() != before+1 || count("SELECT COUNT(*) FROM notifications") != rows {
-		t.Fatalf("resend = %d %s, %d pushes", resend.status, resend.body, push.count()-before)
+	if resend.status != http.StatusOK || resend.json["delivered"] != true || push.titled(t, browser, title) != before+1 || count("SELECT COUNT(*) FROM notifications WHERE channel = 'assistant'") != rows {
+		t.Fatalf("resend = %d %s, %d pushes of %q", resend.status, resend.body, push.titled(t, browser, title)-before, title)
 	}
 	if count("SELECT COUNT(*) FROM notifications WHERE id = ? AND delivered = 1", newest) != 1 {
 		t.Fatal("the resent row is not delivered")
