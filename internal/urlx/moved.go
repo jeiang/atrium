@@ -51,14 +51,14 @@ var moves = compileMoves([][2]string{
 	{"/settings/weather", "/settings/connections"},
 	{"/settings/connections/google", GoogleSetup},
 	{GoogleCallback, GoogleSetup},
-	{"/apps/media/downloads", "/apps/torrents"},
-	{"/apps/media/torrents", "/apps/torrents"},
-	{"/apps/media/add", "/apps/torrents"},
-	{"/apps/media/torrents/{hash}/files", "/apps/torrents"},
+	{"/apps/media/downloads", ClientTorrents},
+	{"/apps/media/torrents", ClientTorrents},
+	{"/apps/media/add", ClientTorrents},
+	{"/apps/media/torrents/{hash}/files", ClientTorrents},
 	{"/apps/media/channels", "/apps/media/following"},
-	{"/apps/media/library", "/apps/media"},
-	{"/apps/media/library/movie/{name}", "/apps/media"},
-	{"/apps/media/library/tv/{name}", "/apps/media"},
+	{"/apps/media/library", ClientMedia},
+	{"/apps/media/library/movie/{name}", ClientMedia},
+	{"/apps/media/library/tv/{name}", ClientMedia},
 })
 
 const (

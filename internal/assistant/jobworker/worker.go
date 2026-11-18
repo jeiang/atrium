@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/pause"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/unit"
+	"github.com/jeiang/atrium/internal/urlx"
 )
 
 type Env struct {
@@ -201,7 +202,7 @@ func notifyFailed(ctx context.Context, svc *service.Service, f scheduler.Failure
 		Title:      "Failed: " + f.Job.Name,
 		Body:       body,
 		Now:        func() float64 { return now },
-		Click:      fmt.Sprintf("/scheduled?run=%d", f.JobRunID),
+		Click:      urlx.ClientRoutine(f.Job.ID),
 		Occurrence: fmt.Sprintf("job-failed:%d", f.JobRunID),
 	}
 	if f.ThreadID != nil {

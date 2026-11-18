@@ -306,6 +306,9 @@ func TestPrivateSpaceKnowledgeStaysInItsSpace(t *testing.T) {
 	if got, _ := results[0].(map[string]any); got["body"] != "The boiler code is 4417." {
 		t.Errorf("inside kb_get body = %v", got["body"])
 	}
+	if work := browser.do(http.MethodGet, fmt.Sprintf("/web/v1/threads/%d/work", inside), nil); !strings.Contains(work.body, fmt.Sprintf(`"url":"/knowledge/%d"`, recordID)) {
+		t.Errorf("knowledge source url in the thread work, want /knowledge/%d: %d %s", recordID, work.status, work.body)
+	}
 
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("r1", "kb_retract", map[string]any{"id": recordID, "reason": "stale"})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("cannot")))

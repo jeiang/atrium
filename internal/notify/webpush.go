@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
-	"regexp"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -43,7 +42,6 @@ const (
 var (
 	pushLog     = logx.Logger("atrium.notify.webpush")
 	pushAllowed atomic.Pointer[func(netip.Addr) bool]
-	clientCard  = regexp.MustCompile(`^/(?:proposals|drafts|chat)/[0-9]+$`)
 	clientPages = map[string]bool{
 		pushInbox:          true,
 		connections.Screen: true,
@@ -252,7 +250,7 @@ func clientURL(stored string) string {
 	}
 	path, _, _ := strings.Cut(stored, "#")
 	path, _, _ = strings.Cut(path, "?")
-	if clientCard.MatchString(path) || clientPages[path] {
+	if urlx.ClientPage(path) || clientPages[path] {
 		return path
 	}
 	if target, _, moved := urlx.Moved(path, ""); moved {

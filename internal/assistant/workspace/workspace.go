@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/textx"
+	"github.com/jeiang/atrium/internal/urlx"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
@@ -258,7 +259,7 @@ func sourceOf(c journal.ToolCall, result map[string]any) (*Source, error) {
 			headers, _ := result["headers"].(map[string]any)
 			return &Source{
 				Kind: KindMail, Key: fmt.Sprintf("m%d", id), Title: first(str(headers, "Subject"), fmt.Sprintf("Message %d", id)),
-				URL: fmt.Sprintf("/messages/%d", id), MessageID: &id,
+				URL: urlx.ClientMailMessage(id), MessageID: &id,
 			}, nil
 		}
 	case KBGet:
@@ -270,7 +271,7 @@ func sourceOf(c journal.ToolCall, result map[string]any) (*Source, error) {
 						title = first(str(item, "title"), title)
 					}
 				}
-				return &Source{Kind: KindKnowledge, Key: fmt.Sprintf("k%d", id), Title: title, URL: fmt.Sprintf("/library/knowledge/%d", id), RecordID: &id}, nil
+				return &Source{Kind: KindKnowledge, Key: fmt.Sprintf("k%d", id), Title: title, URL: urlx.ClientKnowledge(id), RecordID: &id}, nil
 			}
 		}
 	}

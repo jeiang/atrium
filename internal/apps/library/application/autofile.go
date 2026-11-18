@@ -11,11 +11,10 @@ import (
 	"github.com/jeiang/atrium/internal/apps/torrents/contract"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/notify"
+	"github.com/jeiang/atrium/internal/urlx"
 )
 
 const RequestsName application.Name = "media.requests"
-
-const LibraryPage = "/apps/media/library"
 
 type RequestsInput struct{}
 
@@ -132,7 +131,7 @@ func (s *Service) tell(ctx context.Context, set library.Settings, plan FilingPre
 		m.ThreadID = *req.ThreadID
 	}
 	if set.PublicURL != "" {
-		m.Click = set.PublicURL + LibraryPage
+		m.Click = set.PublicURL + urlx.ClientMedia
 	}
 	if _, err := notify.Send(ctx, s.d.DB, m); err != nil {
 		logx.Logger("atrium.media").Warn("auto-file: notification failed", "err", err)
