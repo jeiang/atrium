@@ -309,7 +309,7 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 	stop()
 
 	fake.release(1000)
-	base, _, stop = startServeStoppable(t, dir)
+	_, _, stop = startServeStoppable(t, dir)
 	waitFor(t, func() bool {
 		_, _, page := embedProgress(t, path)
 		return strings.Contains(page, bigModel+" · 1024 dimensions") && !strings.Contains(page, "Re-embedding")
