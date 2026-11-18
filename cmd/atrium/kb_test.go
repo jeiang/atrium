@@ -349,6 +349,11 @@ func TestKnowledgeListRevision(t *testing.T) {
 	if list.status != http.StatusOK || !strings.HasPrefix(empty, `W/"`) {
 		t.Fatalf("empty list = %d etag %q: %.300s", list.status, empty, list.body)
 	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	defer func() { _ = d.Close() }()
+	if _, err := d.Write.Exec("INSERT INTO read_revisions(scope, value) VALUES ('effects', 1), ('assistant', 1), ('settings', 1) ON CONFLICT(scope) DO UPDATE SET value = value + 1"); err != nil {
+		t.Fatal(err)
+	}
 	if again := w.do(http.MethodGet, "/web/v1/knowledge", nil, "If-None-Match", empty); again.status != http.StatusNotModified || again.body != "" {
 		t.Fatalf("unchanged list with its etag = %d: %.300s", again.status, again.body)
 	}

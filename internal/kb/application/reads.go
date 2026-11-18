@@ -237,7 +237,7 @@ func (s *Service) List(ctx context.Context, in ListInput) (application.Read[List
 		return application.Read[List]{}, err
 	}
 	var found []kb.Record
-	rev, err := s.snapshot(ctx, string(ListName), pageScopes, in, func(q db.Querier) error {
+	rev, err := s.snapshot(ctx, string(ListName), []string{state.Knowledge}, in, func(q db.Querier) error {
 		found, err = kb.List(ctx, q, kb.ListFilter{Query: in.Query, Scope: in.Scope, State: in.State, Limit: in.Limit, After: in.After})
 		return err
 	})
