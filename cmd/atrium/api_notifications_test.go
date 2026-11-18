@@ -148,12 +148,18 @@ func TestInboxAndDevicesAPI(t *testing.T) {
 	s, stop = serve()
 	readAt := func() any {
 		t.Helper()
-		got := s.do(http.MethodGet, "/api/v1/inbox?limit=1", token, nil)
+		got := s.do(http.MethodGet, "/api/v1/inbox?limit=100", token, nil)
 		items, _ := got.json["items"].([]any)
-		if got.status != http.StatusOK || len(items) != 1 {
+		if got.status != http.StatusOK {
 			t.Fatalf("inbox = %d %s", got.status, got.body)
 		}
-		return items[0].(map[string]any)["read_at"]
+		for _, item := range items {
+			if fields := item.(map[string]any); number(t, fields["id"]) == newest {
+				return fields["read_at"]
+			}
+		}
+		t.Fatalf("inbox item %d is missing: %.500s", newest, got.body)
+		return nil
 	}
 	if readAt() == nil {
 		t.Fatal("read_at did not survive a restart")

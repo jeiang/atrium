@@ -516,14 +516,21 @@ func outcomePartial(err error) bool {
 	return errors.As(err, &partial) && partial.Partial()
 }
 
+func (r *Registry) Refresh(ctx context.Context, account string) error {
+	if r == nil || r.Sync == nil || account == "" {
+		return nil
+	}
+	if _, known := config.From(ctx).Account(account); !known {
+		return nil
+	}
+	return r.Sync(ctx, account)
+}
+
 func (p *Pipeline) sync(ctx context.Context, prop *Proposal) *string {
-	if p.Registry == nil || p.Registry.Sync == nil || prop.Account == nil {
+	if prop.Account == nil {
 		return nil
 	}
-	if _, known := config.From(ctx).Account(*prop.Account); !known {
-		return nil
-	}
-	if err := p.Registry.Sync(ctx, *prop.Account); err != nil {
+	if err := p.Registry.Refresh(ctx, *prop.Account); err != nil {
 		log.Error(fmt.Sprintf("post-apply sync failed for proposal %d", prop.ID), logx.Err, err.Error())
 		text := err.Error()
 		return &text

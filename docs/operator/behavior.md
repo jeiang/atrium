@@ -773,6 +773,10 @@ or interruption can leave the result unknown. atrium never treats that as
 permission to repeat the write. Review shows pending and blocked proposals;
 Activity shows recorded effects and available undo. Undo is a new guarded
 effect, not deletion of history, and can itself fail or become unknown.
+After a mail approval, or an undo of a mail effect through `atrium live undo`,
+the web client or the API, atrium syncs that account so its folders are
+current without waiting for the next scheduled sync. A failed sync leaves the
+approval or undo done; it is logged and returned as `sync_error`.
 
 Operator calendar event writes (create, edit and delete on iCloud or Google,
 through the API or the web client) are each one effect with undo: undoing a
