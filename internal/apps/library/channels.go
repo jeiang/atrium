@@ -20,10 +20,10 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/notify"
+	"github.com/jeiang/atrium/internal/urlx"
 )
 
 const (
-	DownloadsPage = "/apps/media/downloads"
 	NotifyChannel = "media"
 	Import        = "import"
 
@@ -410,7 +410,7 @@ func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, se
 			message := notify.Message{Title: title, Body: strings.Join(lines, "\n"), Now: func() float64 { return stamp }, Channel: NotifyChannel,
 				Occurrence: "media-added:" + strings.Join(hashes, ",")}
 			if settings.PublicURL != "" {
-				message.Click = settings.PublicURL + DownloadsPage
+				message.Click = settings.PublicURL + urlx.ClientTorrents
 			}
 			sent, err := notify.Send(ctx, d, message)
 			if err != nil {
