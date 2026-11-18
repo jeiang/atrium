@@ -128,10 +128,11 @@ web-build:
 web-lint:
   {{dev}} bash -c 'cd web && npm run lint && npm run check'
 
-# Build the production and mock clients and run the browser e2e headless in the engines of web/e2e/engines.json; args go to playwright test
+# Build the production and mock clients and run the browser e2e headless in the engines of web/e2e/engines.json, then the live sign-in spec against a real server; args go to playwright test
 [positional-arguments]
 web-test *args:
   {{dev}} bash -c 'cd web && npm run build && npm run build:mock && npm run e2e -- "$@"' web-test "$@"
+  {{dev}} bash -c 'ATRIUM_E2E_BROWSERS=$(node -p "require(\"./web/e2e/engines.json\").join()") just e2e TestGuardBrowserSignInReturnsAcrossSites'
 
 # Build the production client and check its brotli sizes against web/budgets.json
 web-size:
