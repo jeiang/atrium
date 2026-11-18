@@ -401,7 +401,10 @@ claims about the running application. Operator contracts are in
   that store, before closing the database. Serve stops in one bounded order
   of 120 s (105 s for work to finish, 15 s to settle effects and interrupted
   runs), then checkpoints and closes the database and releases the serve
-  lock last; any step that does not finish makes the exit nonzero. The
+  lock last; any step that does not finish makes the exit nonzero. A run
+  stopped by the drain is marked interrupted by its own process, with owner
+  and lease cleared, and resumes as soon as serve starts again; a run left
+  running by a crash resumes once its 30-minute journal lease expires. The
   monthly budget defaults to $150 with scheduled runs paused at 80% and chat at
   95%; the last 5% is reserved for classification. Every paid model call,
   memory summaries included, reserves its full cold prompt plus the request's

@@ -56,6 +56,8 @@ another invocation and nothing started, and 1 on an error.
 
 SIGTERM starts a bounded drain. New work and streams stop, running work has a
 105-second window, and effect/interrupted-run settlement has another 15 seconds.
+An assistant run stopped by the drain is marked interrupted and resumes as soon
+as serve starts again; after a crash it resumes once its 30-minute lease expires.
 The database is checkpointed and closed before the serve lock is released.
 A stop that cannot finish cleanly is a failure, not a successful restart point.
 

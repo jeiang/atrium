@@ -386,6 +386,15 @@ func RenewLease(ctx context.Context, q db.Querier, runID int64, owner string, no
 		now+lease, runID, owner, Running))
 }
 
+func ReleaseRun(ctx context.Context, q db.Querier, runID int64, owner string) (bool, error) {
+	released, err := db.Changed(q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = NULL, lease_until = NULL WHERE id = ? AND owner = ? AND state = ?",
+		Interrupted, runID, owner, Running))
+	if released {
+		progress.Notify()
+	}
+	return released, err
+}
+
 func MarkInterrupted(ctx context.Context, q db.Querier, now float64) (int64, error) {
 	lease, err := leaseSeconds(ctx, q)
 	if err != nil {
