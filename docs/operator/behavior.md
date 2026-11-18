@@ -953,6 +953,17 @@ dreaming skips their threads. Nightly dreaming can write unconfirmed records
 within its spending limits. Records imported from Notion keep their origin;
 Notion itself is no longer connected. There is no skills feature.
 
+A knowledge page's Links list the links stored with `knowledge.link` and, as
+`see_also` links marked `cited`, the records its text cites as `[K<id>]` or
+links to as `/knowledge/<id>` (a relative path, or an absolute address on the
+host's `public_url`). The page a record cites also lists it under What links
+here. Cited links are read from the current text, so an edit changes them at
+once; they have no remove button, and a stored link between the same two
+records replaces the cited one. Retracted records, unknown ids and citations
+inside code are ignored. In rendered Markdown, a `[K<id>]` token outside code
+is a link to `/knowledge/<id>`, labeled with the record title when the page
+already has it and `K<id>` otherwise.
+
 Standing instructions are one pinned knowledge page, created at service start
 and opened with `GET /api/v1/knowledge/instructions`. The operator edits it with
 the knowledge edit verb; its history shows each change, who made it and the

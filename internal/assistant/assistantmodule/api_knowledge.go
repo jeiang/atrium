@@ -223,6 +223,7 @@ type KnowledgeRelated struct {
 	TargetID   string `json:"target_id"`
 	Direction  string `json:"direction,omitempty" api:"enum=outgoing|incoming"`
 	LinkID     int64  `json:"link_id,omitempty"`
+	Cited      bool   `json:"cited"`
 	State      string `json:"state" api:"enum=live|retracted|done|dismissed|archived|missing|unavailable"`
 	Address    string `json:"address"`
 }
@@ -254,6 +255,7 @@ type KnowledgeLink struct {
 	RunID     *int64           `json:"run_id" api:"nullable"`
 	CreatedAt time.Time        `json:"created_at"`
 	Removed   bool             `json:"removed"`
+	Cited     bool             `json:"cited"`
 	Source    KnowledgeLinkEnd `json:"source"`
 	Target    KnowledgeLinkEnd `json:"target"`
 }
@@ -536,7 +538,7 @@ func knowledgeSubjectPage(p kbapp.SubjectPage) KnowledgeSubjectPage {
 	}
 	for i, r := range p.Related {
 		out.Related[i] = KnowledgeRelated{ID: r.ID, Title: r.Title, Kind: r.Kind, Relation: r.Relation, TargetKind: r.TargetKind, TargetID: r.TargetID,
-			Direction: r.Direction, LinkID: r.LinkID, State: r.State, Address: r.Address}
+			Direction: r.Direction, LinkID: r.LinkID, Cited: r.Cited, State: r.State, Address: r.Address}
 	}
 	return out
 }
@@ -546,7 +548,7 @@ func knowledgeLinkEnd(e kbapp.Endpoint) KnowledgeLinkEnd {
 }
 
 func knowledgeLink(l kbapp.Link) KnowledgeLink {
-	return KnowledgeLink{ID: l.ID, Relation: l.Relation, Writer: l.Writer, RunID: l.RunID, CreatedAt: seconds(l.CreatedAt), Removed: l.Retracted != nil,
+	return KnowledgeLink{ID: l.ID, Relation: l.Relation, Writer: l.Writer, RunID: l.RunID, CreatedAt: seconds(l.CreatedAt), Removed: l.Retracted != nil, Cited: l.Cited,
 		Source: knowledgeLinkEnd(l.Source), Target: knowledgeLinkEnd(l.Target)}
 }
 

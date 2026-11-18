@@ -3,7 +3,7 @@ export type Inline =
   | { t: 'code'; v: string }
   | { t: 'br' }
   | { t: 'strong' | 'em' | 'del'; c: Inline[] }
-  | { t: 'link'; href: string; title: string | undefined; external: boolean; c: Inline[] };
+  | { t: 'link'; href: string; title: string | undefined; external: boolean; cite?: number; c: Inline[] };
 
 export type Align = 'left' | 'center' | 'right' | null;
 

@@ -281,7 +281,7 @@ claims about the running application. Operator contracts are in
   deletes the subscription; other failures are counted per device, and a
   device with three consecutive failures raises a banner.
 - The attention query covers the enabled queues: proposals, drafts, open
-  loops, commitments, thread plans, packages, tasks and
+  loops, commitments, packages, tasks and
   unanswered `ask_operator` questions, listed until the operator answers.
   Packages (when the Packages app is on) come from shipping emails; a
   package the operator registers with `track_package` is polled through

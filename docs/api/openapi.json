@@ -6409,6 +6409,9 @@
       },
       "KnowledgeLink": {
         "properties": {
+          "cited": {
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "type": "string"
@@ -6456,6 +6459,7 @@
           "writer",
           "created_at",
           "removed",
+          "cited",
           "source",
           "target"
         ],
@@ -6859,6 +6863,9 @@
           "address": {
             "type": "string"
           },
+          "cited": {
+            "type": "boolean"
+          },
           "direction": {
             "enum": [
               "outgoing",
@@ -6917,6 +6924,7 @@
           "relation",
           "target_kind",
           "target_id",
+          "cited",
           "state",
           "address"
         ],
