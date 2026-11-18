@@ -13,6 +13,7 @@
     ApiError,
     assistantMessageEdit,
     assistantMessageSend,
+    assistantMessageUnsend,
     assistantReplyRegenerate,
     assistantRunAnswer,
     assistantRunResume,
@@ -79,6 +80,7 @@
   let regenerating = $state(false);
   let branching = $state<number>();
   let continuing = $state(false);
+  let unsending = $state<number>();
 
   const first = $derived(transcript.data?.pages[0]);
   const items = $derived(
@@ -464,7 +466,7 @@
     return 'The outcome is unknown. The connection failed before atrium answered, so this may or may not have happened. atrium reloaded the chat and did not try again. The message was kept.';
   }
 
-  async function onSend(text: string): Promise<void> {
+  async function onSend(text: string, now = false): Promise<void> {
     if (id === undefined) {
       try {
         const started = ok(
@@ -498,13 +500,43 @@
       }
       optimistic.push({ key, text, after: lastSeq });
       following = true;
-      const sent = ok(await assistantMessageSend(id, { text }));
+      const sent = ok(
+        await assistantMessageSend(id, now || activeRun?.state === 'parked' ? { text, now: true } : { text }),
+      );
       if (sent.run_id) follow(sent.run_id, true);
       void queryClient.invalidateQueries({ queryKey: ['thread', id] });
       void queryClient.invalidateQueries({ queryKey: ['threads'] });
     } catch (error) {
       optimistic = optimistic.filter((entry) => entry.key !== key);
       throw new Error(message(error));
+    }
+  }
+
+  function onSendNow(text: string): Promise<void> {
+    return onSend(text, true);
+  }
+
+  async function onUnsend(queuedId: number): Promise<void> {
+    if (id === undefined || unsending !== undefined) return;
+    unsending = queuedId;
+    try {
+      const unsent = ok(
+        await assistantMessageUnsend(id, queuedId, { headers: { 'Idempotency-Key': crypto.randomUUID() } }),
+      );
+      optimistic = optimistic.filter((entry) => entry.text !== unsent.text);
+      draft = draft.trim() ? `${unsent.text}\n\n${draft}` : unsent.text;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        toast(error.status === 409 ? 'The run already took this message.' : error.message, { tone: 'error' });
+      } else {
+        toast(
+          'The outcome is unknown. The connection failed before atrium answered, so the message may or may not have been withdrawn. atrium reloaded the chat and did not try again.',
+          { tone: 'error' },
+        );
+      }
+    } finally {
+      unsending = undefined;
+      void queryClient.invalidateQueries({ queryKey: ['thread', id] });
     }
   }
 
@@ -594,6 +626,7 @@
     text: string,
     note?: string,
     editable?: boolean,
+    queuedId?: number,
   )}
   <li class="turn turn--you">
     <div class="bubble">
@@ -605,6 +638,17 @@
     {#if editable}
       <div class="turn__actions">
         <Button size="sm" variant="quiet" onclick={() => onEditStart(text)}>Edit</Button>
+      </div>
+    {:else if queuedId !== undefined}
+      <div class="turn__actions">
+        <Button
+          size="sm"
+          variant="quiet"
+          pending={unsending === queuedId}
+          disabled={unsending !== undefined && unsending !== queuedId}
+          onclick={() => onUnsend(queuedId)}
+          >Unsend</Button
+        >
       </div>
     {/if}
   </li>
@@ -808,7 +852,12 @@
         </li>
       {/if}
       {#each queued as entry (entry.id)}
-        {@render bubble(entry.text, activeRun ? 'Queued' : 'Sends with your next message')}
+        {@render bubble(
+          entry.text,
+          entry.now ? 'Sending now' : activeRun ? 'Queued' : 'Sends with your next message',
+          false,
+          entry.id,
+        )}
       {/each}
       {#each waiting as entry (entry.key)}
         {@render bubble(entry.text, 'Sending')}
@@ -829,6 +878,7 @@
         {running}
         {stopping}
         onsubmit={onSend}
+        onsendnow={id === undefined ? undefined : onSendNow}
         onstop={onStop}
       >
         {#snippet scope()}

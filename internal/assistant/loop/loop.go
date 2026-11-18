@@ -260,6 +260,9 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 		finished, ferr := journal.GetRun(ctx, d.Read, runID)
 		s.observeRun(started, span, finished)
 		return finished, ferr
+	case ctx.Err() != nil && errors.Is(context.Cause(ctx), errInterrupted):
+		ctx = context.WithoutCancel(ctx)
+		errText = new("stopped: the operator interrupted the call that started this run")
 	case ctx.Err() != nil:
 		if stopping(o.Stop) {
 			s.release(ctx)
@@ -413,6 +416,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		},
 	}
 	s.x.drain = s.drainQueued
+	s.x.urgent = func(ctx context.Context) (bool, error) { return journal.Urgent(ctx, s.d.Read, s.thread.ID, s.run.ID) }
 	set, err := s.admit(ctx)
 	if err != nil {
 		return nil, err
@@ -660,11 +664,41 @@ func CloseAbandoned(ctx context.Context, d *db.DB, threadID, runID int64, now fl
 			results[i] = toolResult(use.ID, NotRun, true)
 			continue
 		}
-		if results[i], err = closeCall(ctx, d, use, call, now); err != nil {
+		if results[i], err = closeCall(ctx, d.Write, use, call, now); err != nil {
 			return err
 		}
 	}
 	_, err = journal.AppendMessage(ctx, d, threadID, &runID, journal.User, results, now, nil)
+	return err
+}
+
+func InterruptParked(ctx context.Context, q db.Querier, threadID, runID int64, now float64) error {
+	last, pending, err := PendingUses(ctx, q, threadID)
+	if err != nil || len(pending) == 0 {
+		return err
+	}
+	results := make([]json.RawMessage, len(pending))
+	for i, use := range pending {
+		call, err := journal.GetToolCall(ctx, q, deref(last.RunID), use.ID)
+		if err != nil {
+			return err
+		}
+		switch {
+		case call == nil:
+			results[i] = toolResult(use.ID, interruptedText(use, false), true)
+		case call.State == journal.Started:
+			text := interruptedText(use, false)
+			if err := journal.FinishToolCall(ctx, q, call.ID, journal.Error, now, &text, nil, nil); err != nil {
+				return err
+			}
+			results[i] = toolResult(use.ID, text, true)
+		default:
+			if results[i], err = closeCall(ctx, q, use, call, now); err != nil {
+				return err
+			}
+		}
+	}
+	_, err = journal.AppendMessageTx(ctx, q, threadID, &runID, journal.User, results, now, nil)
 	return err
 }
 

@@ -60,10 +60,31 @@ export function parse(source: string): Block[] {
     return [{ t: 'link', href: safe.href, title: target.title ?? undefined, external: safe.external, c: children }];
   };
 
-  const inlines = (nodes: (PhrasingContent | RowContent)[]): Inline[] =>
+  const cited = (value: string): Inline[] => {
+    const out: Inline[] = [];
+    let last = 0;
+    for (const match of value.matchAll(/\[K([1-9][0-9]{0,15})\]/g)) {
+      if (match.index > last) out.push({ t: 'text', v: value.slice(last, match.index) });
+      const id = Number(match[1]);
+      out.push({
+        t: 'link',
+        href: `/knowledge/${id}`,
+        title: undefined,
+        external: false,
+        cite: id,
+        c: [{ t: 'text', v: `K${id}` }],
+      });
+      last = match.index + match[0].length;
+    }
+    if (last < value.length) out.push({ t: 'text', v: value.slice(last) });
+    return out;
+  };
+
+  const inlines = (nodes: (PhrasingContent | RowContent)[], linked = false): Inline[] =>
     nodes.flatMap((node): Inline[] => {
       switch (node.type) {
         case 'text':
+          return linked ? [{ t: 'text', v: node.value }] : cited(node.value);
         case 'html':
           return [{ t: 'text', v: node.value }];
         case 'inlineCode':
@@ -71,15 +92,15 @@ export function parse(source: string): Block[] {
         case 'break':
           return [{ t: 'br' }];
         case 'emphasis':
-          return [{ t: 'em', c: inlines(node.children) }];
+          return [{ t: 'em', c: inlines(node.children, linked) }];
         case 'strong':
-          return [{ t: 'strong', c: inlines(node.children) }];
+          return [{ t: 'strong', c: inlines(node.children, linked) }];
         case 'delete':
-          return [{ t: 'del', c: inlines(node.children) }];
+          return [{ t: 'del', c: inlines(node.children, linked) }];
         case 'link':
-          return link(node, inlines(node.children));
+          return link(node, inlines(node.children, true));
         case 'linkReference':
-          return link(targets.get(node.identifier), inlines(node.children));
+          return link(targets.get(node.identifier), inlines(node.children, true));
         case 'image':
           return link(node, [{ t: 'text', v: node.alt || node.url }]);
         case 'imageReference': {

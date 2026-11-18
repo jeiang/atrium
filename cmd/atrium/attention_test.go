@@ -67,6 +67,9 @@ func TestAttentionToolOrdersGroupsSnoozesAndDropsDisabledModules(t *testing.T) {
 			t.Fatalf("attention result misses %q: %s", want, body)
 		}
 	}
+	if strings.Contains(body, "Thread plan") {
+		t.Fatalf("a thread plan is listed as attention: %s", body)
+	}
 	exec("INSERT INTO attention_snoozes (kind, source_id, until, created_ts) VALUES ('proposal', '1', ?, ?)", now+3600, now)
 	body = run()
 	if strings.Contains(body, "Call the dentist") {

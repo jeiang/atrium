@@ -35,7 +35,7 @@ interface MockThread {
   thread: Thread;
   items: TranscriptItem[];
   active: Run | null;
-  queued: { id: number; text: string; created_at: number }[];
+  queued: Transcript['queued'];
   cost: number;
   question?: { run_id: number; text: string } | null;
   held?: Held | null;
@@ -235,7 +235,7 @@ function seed(): Map<number, MockThread> {
     thread: thread(ORDER_THREAD, 'Order the cedar boards', 100),
     items: [item(1, 'user', 'Order twelve cedar boards for the shed.', { run_id: ORDER_RUN })],
     active: runOf(ORDER_RUN, 'interrupted'),
-    queued: [{ id: 1, text: 'Tell me the delivery date too.', created_at: BASE - 90 * 60 }],
+    queued: [{ id: 1, text: 'Tell me the delivery date too.', created_at: BASE - 90 * 60, now: false }],
     held: { run_id: ORDER_RUN, tool_use_id: 'call-1', tool: 'order_supplies', args: '{"boards": 12}' },
     cost: 0.05,
   });
@@ -338,7 +338,7 @@ let connections = 0;
 let sends = 0;
 let nextRun = 1000;
 let nextThread = 200;
-let nextQueued = 1;
+let nextQueued = 2;
 
 function nextSeq(value: MockThread): number {
   return (value.items.at(-1)?.seq ?? 0) + 1;
@@ -862,13 +862,30 @@ export const chatHandlers = [
     const value = threads.get(Number(params.thread));
     if (!value) return problem(404, 'not_found', 'This chat does not exist.');
     if (sends++ < (scenario().failSends ?? 0)) return problem(503, 'unavailable', 'The assistant is not answering.');
-    const { text } = (await request.json()) as { text: string };
+    const { text, now } = (await request.json()) as { text: string; now?: boolean };
+    if (value.active?.state === 'parked' && now) {
+      value.question = null;
+      value.active = null;
+      return HttpResponse.json({ run_id: startReply(value, text) }, { status: 202 });
+    }
     if (value.active) {
-      const queued = { id: nextQueued++, text, created_at: BASE };
+      const queued = { id: nextQueued++, text, created_at: BASE, now: now === true };
       value.queued.push(queued);
       return HttpResponse.json({ queued_id: queued.id }, { status: 202 });
     }
     return HttpResponse.json({ run_id: startReply(value, text) }, { status: 202 });
+  }),
+  http.delete(`*${API_BASE}/threads/:thread/queued/:queued`, ({ params }) => {
+    const value = threads.get(Number(params.thread));
+    if (!value) return problem(404, 'not_found', 'This chat does not exist.');
+    const id = Number(params.queued);
+    const found = value.queued.find((entry) => entry.id === id);
+    if (!found) {
+      if (id < nextQueued) return problem(409, 'conflict', 'The run already took this message.');
+      return problem(404, 'not_found', 'No such queued message in this thread.');
+    }
+    value.queued = value.queued.filter((entry) => entry.id !== id);
+    return HttpResponse.json({ id: found.id, text: found.text });
   }),
   http.post(`*${API_BASE}/threads/:thread/answer`, async ({ request, params }) => {
     const value = threads.get(Number(params.thread));

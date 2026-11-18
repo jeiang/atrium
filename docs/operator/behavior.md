@@ -609,6 +609,26 @@ tool is not offered, the Home weather card shows `off`, no forecast is
 fetched, and the built-in weather connection is disabled with the reason "its
 app is off" (the row, its settings and the three location keys stay).
 Turning Weather on again re-enables that connection as untested.
+With Weather on, its page (`/apps/weather`, linked from its card on the Apps
+page) shows the current conditions, the next 12 hours and the next 7 days for
+the configured location in degrees Celsius and km/h, with "Change location"
+opening the weather connection page. It reads `GET /weather`, which serves
+the same held reading as the Home card and never waits for Open-Meteo: it
+answers `loading` until the first reading arrives, `unconfigured` without a
+location, `off` when the forecast is turned off, and `failed` or `stale` as
+the Home card does.
+
+With Server ops on, its page (`/apps/grafana`) shows the latest sample of
+each watched host (up or down, CPU, memory, root disk, failed units and the
+alerts firing at that sample), the live ops findings newest first with their
+severity and a link to each knowledge page, and "Open Grafana" when the
+Grafana connection has a URL. It reads `GET /ops`, which only reads what
+the sampler and the server-ops worker stored and never calls Grafana. Before
+the first sample the page says so and links to the Grafana connection.
+
+An app that is on but has no page of its own and nothing to repair opens to
+a short line that it works through the assistant, with a link to its
+connection, or to its switch on the All apps page when it has none.
 
 Packages is its own app, switched by `packages_enabled`, and needs Mail on.
 It is opt-in: the first start of a version with the Packages app turns it on
@@ -846,6 +866,22 @@ queued when a run stops or fails are sent with your next message, ahead of
 it; the chat labels them that way. Tool calls such a run left unfinished are
 not run again: the assistant is told whether each one had started.
 
+While a chat run works, the composer offers Queue and Send now. Queue keeps
+the message until the run reaches its next step; running tool calls finish
+first. Send now asks the same run to take it at once: a running tool call
+that only reads is cancelled, and the assistant gets an error for it that
+says it was interrupted by you and names the call; a call that writes is
+never cut off, it finishes and its real result is kept. Calls the assistant
+had planned but not started do not run and get the same note. Then the run
+continues with your message as the next turn. When the model is still
+writing, the message joins at the next step. A run waiting for your answer
+to a question takes the message as the answer; a run waiting on a
+permission request takes it in place of a decision: the request is closed
+as dismissed, the held call does not run, and the run continues with your
+message. Each queued message has Unsend until a run takes it: it is
+withdrawn and its text returns to the composer. Once a run took it, Unsend
+says so and nothing changes.
+
 When a run stops on one of its own limits (the step cap, the same tool call
 repeated three times with the same result, a spending limit, or a
 conversation past the model's context window), the chat keeps a line saying
@@ -879,7 +915,8 @@ is configured. Full page navigations are not conditional fragment responses.
 The Needs you count is the size of the one inbox: questions the assistant is
 waiting on, permission requests, pending proposals and those with an unknown
 outcome, drafts to send or resolve, and overdue, due-soon or needs-decision
-items such as commitments, tasks and open loops. Items of a module that is off
+items such as commitments, tasks and open loops. A thread plan is never an
+inbox item; it stays in the chat work panel. Items of a module that is off
 are not counted. Clients list the same items, in the same order, from
 `GET /api/v1/queue`, and `GET /api/v1/home` returns the count and the first
 three of them as `needs_you`. The Needs you page still lists only proposals and
@@ -970,6 +1007,17 @@ profile. Private spaces restrict their content to that space, and nightly
 dreaming skips their threads. Nightly dreaming can write unconfirmed records
 within its spending limits. Records imported from Notion keep their origin;
 Notion itself is no longer connected. There is no skills feature.
+
+A knowledge page's Links list the links stored with `knowledge.link` and, as
+`see_also` links marked `cited`, the records its text cites as `[K<id>]` or
+links to as `/knowledge/<id>` (a relative path, or an absolute address on the
+host's `public_url`). The page a record cites also lists it under What links
+here. Cited links are read from the current text, so an edit changes them at
+once; they have no remove button, and a stored link between the same two
+records replaces the cited one. Retracted records, unknown ids and citations
+inside code are ignored. In rendered Markdown, a `[K<id>]` token outside code
+is a link to `/knowledge/<id>`, labeled with the record title when the page
+already has it and `K<id>` otherwise.
 
 Standing instructions are one pinned knowledge page, created at service start
 and opened with `GET /api/v1/knowledge/instructions`. The operator edits it with

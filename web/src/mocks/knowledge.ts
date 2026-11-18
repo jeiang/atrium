@@ -149,7 +149,7 @@ function seed(): { records: MockRecord[]; links: MockLink[]; history: Record<num
       kind: 'wiki',
       confirmed: false,
       writer: 'assistant',
-      body: 'A small station on the shed roof. It restarts on its own after a power cut.',
+      body: 'A small station on the shed roof. It restarts on its own after a power cut. Readings feed [K22] and the [frost dates](/knowledge/28). The old [K25] plan is gone. Write citations as `[K21]`.',
       updated_at: iso(12, 11),
       source: { thread_id: 402, run_id: 61, seq: 2 },
     }),
@@ -600,10 +600,50 @@ function wire(link: MockLink): KnowledgeLink {
     writer: link.writer,
     created_at: link.created_at,
     removed: link.removed,
+    cited: false,
     run_id: null,
     source: end('record', String(link.source)),
     target: end(link.target.kind, link.target.id),
   };
+}
+
+function cites(body: string): number[] {
+  const text = body.replace(/```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)|`[^`\n]*`/g, ' ');
+  const tokens = [...text.matchAll(/\[K([1-9][0-9]*)\](?!\()/g)];
+  const paths = [...text.matchAll(/\]\(\s*<?\/knowledge\/([1-9][0-9]*)\/?>?\s*\)/g)];
+  return [...new Set([...tokens, ...paths].map((match) => Number(match[1])))];
+}
+
+function citedLink(from: MockRecord, to: MockRecord): KnowledgeLink {
+  return {
+    id: 0,
+    relation: 'see_also',
+    writer: from.writer === 'operator' ? 'operator' : 'assistant',
+    created_at: from.updated_at,
+    removed: false,
+    cited: true,
+    run_id: null,
+    source: end('record', String(from.id)),
+    target: end('record', String(to.id)),
+  };
+}
+
+function citedLinks(item: MockRecord): { outgoing: KnowledgeLink[]; incoming: KnowledgeLink[] } {
+  if (item.retracted) return { outgoing: [], incoming: [] };
+  const stored = (from: number, to: number) =>
+    store.links.some(
+      (link) => !link.removed && link.source === from && link.target.kind === 'record' && link.target.id === String(to),
+    );
+  const outgoing = cites(item.body)
+    .map((id) => find(id))
+    .filter((other): other is MockRecord => !!other && !other.retracted && other.id !== item.id)
+    .filter((other) => !stored(item.id, other.id))
+    .map((other) => citedLink(item, other));
+  const incoming = store.records
+    .filter((other) => !other.retracted && other.id !== item.id && cites(other.body).includes(item.id))
+    .filter((other) => !stored(other.id, item.id))
+    .map((other) => citedLink(other, item));
+  return { outgoing, incoming };
 }
 
 function fact(item: MockRecord): KnowledgeFact {
@@ -1133,15 +1173,18 @@ export const knowledgeHandlers = [
     if (stop) return stop;
     if (scenario().failLinks) return refusal(500, 'internal', 'The link index did not answer.');
     const id = Number(params.id);
-    if (!find(id)) return refusal(404, 'not_found', 'No such knowledge record.');
+    const item = find(id);
+    if (!item) return refusal(404, 'not_found', 'No such knowledge record.');
+    const cited = citedLinks(item);
     return HttpResponse.json({
       revision: 1,
       data: {
         record_id: id,
-        outgoing: store.links.filter((link) => link.source === id).map(wire),
-        incoming: store.links
-          .filter((link) => link.target.kind === 'record' && link.target.id === String(id))
-          .map(wire),
+        outgoing: [...store.links.filter((link) => link.source === id).map(wire), ...cited.outgoing],
+        incoming: [
+          ...store.links.filter((link) => link.target.kind === 'record' && link.target.id === String(id)).map(wire),
+          ...cited.incoming,
+        ],
       },
     });
   }),

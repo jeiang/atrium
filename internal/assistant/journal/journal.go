@@ -732,7 +732,7 @@ type QueuedMessage struct {
 	Files      []json.RawMessage `json:"files"`
 }
 
-func QueueMessage(ctx context.Context, d *db.DB, threadID int64, text string, now float64, files []json.RawMessage) (id int64, queued bool, err error) {
+func QueueMessage(ctx context.Context, d *db.DB, threadID int64, text string, now float64, files []json.RawMessage, urgent bool) (id int64, queued bool, err error) {
 	body, err := dumps(append([]json.RawMessage{}, files...))
 	if err != nil {
 		return 0, false, err
@@ -742,7 +742,11 @@ func QueueMessage(ctx context.Context, d *db.DB, threadID int64, text string, no
 		if err != nil || active == nil || active.State != Running {
 			return err
 		}
-		res, err := tx.ExecContext(ctx, "INSERT INTO thread_queue (thread_id, text, created_at, files_json) VALUES (?, ?, ?, ?)", threadID, text, now, body)
+		var target *int64
+		if urgent {
+			target = &active.ID
+		}
+		res, err := tx.ExecContext(ctx, "INSERT INTO thread_queue (thread_id, text, created_at, files_json, run_id) VALUES (?, ?, ?, ?, ?)", threadID, text, now, body, target)
 		if err != nil {
 			return err
 		}
@@ -750,7 +754,50 @@ func QueueMessage(ctx context.Context, d *db.DB, threadID int64, text string, no
 		id, err = res.LastInsertId()
 		return err
 	})
+	if queued && err == nil && urgent {
+		progress.Notify()
+	}
 	return id, queued && err == nil, err
+}
+
+var (
+	ErrUnknownQueued  = errors.New("journal: no such queued message")
+	ErrQueuedConsumed = errors.New("journal: the queued message was already taken by a run")
+)
+
+func Unsend(ctx context.Context, d *db.DB, threadID, id int64) (QueuedMessage, error) {
+	var out QueuedMessage
+	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+		var consumed *float64
+		err := tx.QueryRowContext(ctx, "SELECT consumed_at FROM thread_queue WHERE id = ? AND thread_id = ?", id, threadID).Scan(&consumed)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrUnknownQueued
+		}
+		if err != nil {
+			return err
+		}
+		if consumed != nil {
+			return ErrQueuedConsumed
+		}
+		open, err := Queued(ctx, tx, threadID)
+		if err != nil {
+			return err
+		}
+		for _, m := range open {
+			if m.ID == id {
+				out = m
+			}
+		}
+		_, err = tx.ExecContext(ctx, "DELETE FROM thread_queue WHERE id = ? AND consumed_at IS NULL", id)
+		return err
+	})
+	return out, err
+}
+
+func Urgent(ctx context.Context, q db.Querier, threadID, runID int64) (bool, error) {
+	var urgent bool
+	err := q.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM thread_queue WHERE thread_id = ? AND consumed_at IS NULL AND run_id = ?)", threadID, runID).Scan(&urgent)
+	return urgent, err
 }
 
 func Queued(ctx context.Context, q db.Querier, threadID int64) ([]QueuedMessage, error) {

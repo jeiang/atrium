@@ -80,6 +80,13 @@
   const subject = $derived(data?.subject);
   const outgoing = $derived(liveLinks(links.data?.outgoing));
   const incoming = $derived(liveLinks(links.data?.incoming));
+  const citeTitles = $derived(
+    new Map(
+      [...outgoing.map((link) => link.target), ...incoming.map((link) => link.source)]
+        .filter((end) => end.kind === 'record' && end.title)
+        .map((end): [number, string] => [Number(end.id), end.title]),
+    ),
+  );
   const offline = $derived(unreachable(page));
   const missing = $derived(page.error instanceof ApiError && page.error.status === 404);
   const sameRun = $derived(history.data?.same_run ?? []);
@@ -135,7 +142,7 @@
       end.kind === 'record' ? (KINDS[end.record_kind ?? ''] ?? 'Knowledge') : end.kind,
     ];
     if (end.state !== 'live') parts.push(end.state);
-    parts.push(`added by ${writerLabel(link.writer)}`);
+    parts.push(link.cited ? 'cited in the text' : `added by ${writerLabel(link.writer)}`);
     return parts.join(' · ');
   }
 
@@ -414,22 +421,24 @@
     label: string,
   )}
   <List {label}>
-    {#each list as link (link.id)}
+    {#each list as link (`${link.id}:${link[side].kind}:${link[side].id}`)}
       <ListRow
         title={link[side].title || 'Untitled'}
         meta={linkMeta(link, link[side])}
         href={endHref(link[side])}
-        pending={removing === link.id}
+        pending={!link.cited && removing === link.id}
       >
         {#snippet end()}
-          <Button
-            variant="quiet"
-            size="sm"
-            icon="close"
-            label="Remove the link to {link[side].title || 'Untitled'}"
-            pending={removing === link.id}
-            onclick={() => handleRemove(link, link[side])}
-          />
+          {#if !link.cited}
+            <Button
+              variant="quiet"
+              size="sm"
+              icon="close"
+              label="Remove the link to {link[side].title || 'Untitled'}"
+              pending={removing === link.id}
+              onclick={() => handleRemove(link, link[side])}
+            />
+          {/if}
         {/snippet}
       </ListRow>
     {/each}
@@ -548,7 +557,7 @@
           </div>
         </form>
       {:else if subject.body.trim()}
-        <div class="kpage__body prose"><Markdown text={subject.body} /></div>
+        <div class="kpage__body prose"><Markdown text={subject.body} titles={citeTitles} /></div>
       {:else}
         <p class="kpage__blank">This page has no text yet.</p>
       {/if}

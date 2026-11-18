@@ -4,7 +4,7 @@
   import './markdown.css';
   import type { Block, Inline } from './tree';
 
-  let { text }: { text: string } = $props();
+  let { text, titles }: { text: string; titles?: ReadonlyMap<number, string> } = $props();
 
   let parse = $state(loadedParser());
   if (!loadedParser()) {
@@ -40,7 +40,13 @@
         >{@render inlines(node.c)}<Icon name="external" /><span class="visually-hidden"> (new tab)</span></a
       >
     {:else if node.t === 'link'}
-      <a href={node.href} title={node.title} rel="noopener noreferrer">{@render inlines(node.c)}</a>
+      <a href={node.href} title={node.title} rel="noopener noreferrer"
+        >{#if node.cite && titles?.get(node.cite)}
+          {titles.get(node.cite)}
+        {:else}
+          {@render inlines(node.c)}
+        {/if}</a
+      >
     {/if}
   {/each}
 {/snippet}

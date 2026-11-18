@@ -89,6 +89,37 @@ test.describe('knowledge', () => {
     expect(writes[0]?.key).not.toBe(writes[1]?.key);
   });
 
+  test('records cited in the text link both ways and render as links', async ({ page }) => {
+    await gotoShell(page, '/knowledge/23');
+    await expect(page.getByRole('heading', { level: 1, name: 'Garden weather station' })).toBeVisible();
+    const body = page.locator('.kpage__body');
+    await expect(body.getByRole('link', { name: 'Shared garden project', exact: true })).toHaveAttribute(
+      'href',
+      '/knowledge/22',
+    );
+    await expect(body.getByRole('link', { name: 'frost dates' })).toHaveAttribute('href', '/knowledge/28');
+    await expect(body.getByRole('link', { name: 'K25', exact: true })).toHaveAttribute('href', '/knowledge/25');
+    await expect(body.locator('code', { hasText: '[K21]' })).toBeVisible();
+    await expect(body.getByRole('link', { name: /K21|Ilse/ })).toHaveCount(0);
+    const links = page.getByRole('region', { name: 'Links' });
+    const from = links.getByRole('list', { name: 'Links from this page' });
+    await expect(from.getByRole('listitem')).toHaveCount(3);
+    await expect(from.getByRole('link', { name: /Shared garden project/ })).toContainText('cited in the text');
+    await expect(from.getByRole('link', { name: /Frost dates/ })).toContainText('cited in the text');
+    await expect(from.getByRole('link', { name: /Ilse de Wit/ })).toContainText('added by');
+    await expect(from.getByRole('link', { name: /Old compost plan/ })).toHaveCount(0);
+    await expect(links.getByRole('button', { name: /Remove the link/ })).toHaveCount(1);
+    await expect(links.getByRole('button', { name: 'Remove the link to Ilse de Wit' })).toBeVisible();
+    await body.getByRole('link', { name: 'Shared garden project', exact: true }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Shared garden project' })).toBeVisible();
+    await expect(
+      page
+        .getByRole('region', { name: 'Links' })
+        .getByRole('list', { name: 'What links here' })
+        .getByRole('link', { name: /Garden weather station/ }),
+    ).toContainText('cited in the text');
+  });
+
   test('adding a link sends one request and shows it on the page', async ({ page }) => {
     await openIlse(page);
     await page.getByRole('button', { name: 'Add a link' }).click();
@@ -215,7 +246,7 @@ test.describe('knowledge', () => {
   for (const layout of layouts) {
     test(`design checks at ${layout.name}`, async ({ page }) => {
       await page.setViewportSize({ width: layout.width, height: layout.height });
-      for (const path of ['/knowledge', '/knowledge/subjects']) {
+      for (const path of ['/knowledge', '/knowledge/subjects', '/knowledge/23']) {
         await gotoShell(page, path);
         await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
         await expectNoHorizontalScroll(page);

@@ -103,6 +103,7 @@ type apiQueued struct {
 	ID        int64   `json:"id"`
 	Text      string  `json:"text"`
 	CreatedAt float64 `json:"created_at"`
+	Now       bool    `json:"now"`
 }
 
 type apiQuestion struct {
@@ -158,6 +159,7 @@ type apiMessage struct {
 	Uploads []files.UploadedFile `json:"-"`
 	Text    string               `json:"text"`
 	Edit    bool                 `json:"edit,omitempty"`
+	Now     bool                 `json:"now,omitempty"`
 }
 
 type apiAnswer struct {
@@ -305,6 +307,16 @@ type apiThreadRequest struct {
 type apiRunRequest struct {
 	ThreadID int64 `path:"thread_id" json:"-"`
 	RunID    int64 `path:"run_id" json:"-"`
+}
+
+type apiQueuedRequest struct {
+	ThreadID int64 `path:"thread_id" json:"-"`
+	QueuedID int64 `path:"queued_id" json:"-"`
+}
+
+type apiUnsent struct {
+	ID   int64  `json:"id"`
+	Text string `json:"text"`
 }
 
 type apiHistoryRequest struct {
@@ -677,13 +689,18 @@ func apiBindings(p *apiPages) []application.Binding {
 				if in.Edit {
 					send = svc.MessageEdit
 				}
-				change, err := send(ctx, asstapp.SendInput{ThreadID: in.ThreadID, Text: text, Files: in.Uploads, Operator: true})
+				change, err := send(ctx, asstapp.SendInput{ThreadID: in.ThreadID, Text: text, Files: in.Uploads, Operator: true, Now: in.Now && !in.Edit})
 				return changeAs(change, err, func(s asstapp.Sent) apiSent {
 					if !in.Edit && s.QueuedID != 0 {
 						return apiSent{QueuedID: &s.QueuedID}
 					}
 					return apiSent{RunID: &s.RunID}
 				})
+			}),
+		apiCommand(p, asstapp.DescribeMessageUnsend(), bodiless(threadsArea(application.NotFound, application.Conflict)), "DELETE /threads/{thread_id}/queued/{queued_id}",
+			func(ctx context.Context, svc *asstapp.Service, in apiQueuedRequest) (application.Change[apiUnsent], error) {
+				change, err := svc.MessageUnsend(ctx, asstapp.UnsendInput{ThreadID: in.ThreadID, QueuedID: in.QueuedID})
+				return changeAs(change, err, func(u asstapp.Unsent) apiUnsent { return apiUnsent{ID: u.ID, Text: u.Text} })
 			}),
 		apiCommand(p, asstapp.DescribeMessageEdit(), multipartJSONShape("threads", 202, sends...), "PATCH /threads/{thread_id}/messages/latest",
 			func(ctx context.Context, svc *asstapp.Service, in apiEditRequest) (application.Change[apiRunStarted], error) {
@@ -837,7 +854,7 @@ func transcriptOut(v asstapp.Transcript, cursor api.Cursor) apiTranscript {
 		out.Items = append(out.Items, itemOut(item))
 	}
 	for _, q := range v.Queued {
-		out.Queued = append(out.Queued, apiQueued{ID: q.ID, Text: q.Text, CreatedAt: q.CreatedAt})
+		out.Queued = append(out.Queued, apiQueued{ID: q.ID, Text: q.Text, CreatedAt: q.CreatedAt, Now: q.RunID != nil})
 	}
 	if v.Question != nil {
 		out.Question = &apiQuestion{RunID: v.Question.RunID, Text: v.Question.Text}

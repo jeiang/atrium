@@ -225,6 +225,16 @@ claims about the running application. Operator contracts are in
   the relation. Purging a record deletes the links from and to it; a
   deleted task or contact leaves its links showing as missing. Links are
   never read by retrieval and the assistant has no link tool.
+- The links read and the subject page also derive `see_also` links from
+  record text at read time: a live record's body citing `[K<id>]` or
+  linking to `/knowledge/<id>` (relative, or absolute on the `public_url`
+  host) links to that live record, outside code spans and blocks. Incoming
+  citations are found through `kb_fts` and confirmed by the same parser.
+  Derived links carry `cited: true`, `id` 0 and no `link_id`; a stored link
+  between the same pair wins. Nothing is written or backfilled, and a body
+  edit bumps the `knowledge` revision the links ETag covers. The client
+  renders `[K<id>]` outside code as a link to `/knowledge/<id>` titled from
+  the links it already loaded, else `K<id>`.
 - Isolated research and worker runs receive neither the operator profile
   nor the project prompt block.
 - A space is a `projects` row presented in Knowledge; the table, its
@@ -271,7 +281,7 @@ claims about the running application. Operator contracts are in
   deletes the subscription; other failures are counted per device, and a
   device with three consecutive failures raises a banner.
 - The attention query covers the enabled queues: proposals, drafts, open
-  loops, commitments, thread plans, packages, tasks and
+  loops, commitments, packages, tasks and
   unanswered `ask_operator` questions, listed until the operator answers.
   Packages (when the Packages app is on) come from shipping emails; a
   package the operator registers with `track_package` is polled through
@@ -482,6 +492,29 @@ claims about the running application. Operator contracts are in
   result one (`loop.CloseAbandoned`), never running it: a stored result, the
   stored error, `unknown` with the same verify text for a started call, or
   "did not run" for a call that never started.
+  `POST /threads/{id}/messages` takes additive `now`: while the run is
+  `running` the message is queued with `thread_queue.run_id` set to that run
+  and `consumed_at` empty (the send-now mark; a normal queued row leaves
+  `run_id` empty until a run consumes it), and the transcript's queued items
+  carry additive `now`. The run checks for such a row before each tool call
+  of a step and, while a `read` effect call runs, on every progress notify
+  and once a second; it cancels that call's context and records an error
+  result naming the tool and `tool_use_id` ("interrupted by the operator"),
+  and gives later uses of the step the same result without running them.
+  Calls of any other effect class are never cancelled. A subagent run whose
+  starting call was cancelled this way fails as stopped. The next step
+  consumes the queue as before, so the tool results lead the user turn and
+  the operator's text follows. With `now` on a `parked` run, a pending
+  `ask_operator` question is answered with the text (`Service.Answer`);
+  otherwise `Service.TakeParked` closes the pending uses in one transaction
+  while the run is still parked (`loop.InterruptParked`: started or unstarted
+  calls get the interrupted error, settled calls their stored result),
+  appends the message, dismisses the run's pending permission requests and
+  withdraws their pushes, then resumes the run through the operator resume
+  claim, answering `run_id`. `DELETE /threads/{id}/queued/{queued_id}`
+  (`assistant.message.unsend`, both prefixes) deletes an unconsumed queued
+  row and returns its `id` and `text`; a consumed one answers 409 `conflict`,
+  an unknown one 404.
   An action that changed state and then failed is audited `failed`.
   Space file uploads and deletes, and agent `file_write`, each write one
   `operation_audit` row (`knowledge.space.file.upload|delete`,
@@ -1238,7 +1271,7 @@ claims about the running application. Operator contracts are in
   location settings (keys and their `assistant` settings module unchanged;
   the `weather` group now sits on the app's own settings page), the
   `weather` tool (operation `weather.forecast`) and the Home weather card.
-  It is tool-only: no page, job or table. With Weather off the tool leaves
+  It has a page at `/apps/weather` but no job or table. With Weather off the tool leaves
   the catalog, `/home` answers the card as `off` without reading settings
   or starting a refresh, and the built-in `service/weather` row is disabled
   by the row lifecycle with the reason "its app is off" (never deleted);
@@ -2028,7 +2061,20 @@ claims about the running application. Operator contracts are in
   Weather app off the card is `off` and no refresh starts. A finished
   refresh bumps the `assistant` app-event topic so the client refetches. A
   location change discards the held reading, so the next `/home` answers
-  `loading` and refreshes for the new place.
+  `loading` and refreshes for the new place. A reading holds the current
+  conditions, 24 hourly steps and 7 days. `GET /weather` (operation
+  `weather.page`, the Weather app's page) serves the same held reading with
+  the same states, its `hours` and all `days` (temperatures in degrees
+  Celsius, wind in km/h), never waits for the weather service, and answers
+  an ETag. `GET /ops` (operation `ops.overview`, the Server ops page) reads
+  only the database and the Grafana connection record, never Grafana: the
+  latest sampler pass of each host (up, CPU, memory, root disk, failed
+  units and the firing alert names from `alerts_firing`), up to 20 live
+  ops findings (`kb_records` with scope `ops` and origin `ops:<fact>`, not
+  retracted or expired, newest first, severity and fact split from the
+  body) and `grafana_url`, the connection URL without credentials, query
+  or fragment, or null. It answers an ETag. Both routes answer 404 while
+  their app is off.
 - The embedded web client is served at `/` on every listener, the
   emergency listener included. A GET or HEAD that no route matches and that
   accepts HTML gets the client's `index.html` (`no-cache`). Files under

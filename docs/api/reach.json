@@ -108,10 +108,12 @@
         "connections.test",
         "connections.test-save",
         "contacts.lookup",
-        "contacts.sync"
+        "contacts.sync",
+        "ops.overview",
+        "weather.page"
       ],
-      "required": 15,
-      "bound": 15
+      "required": 17,
+      "bound": 17
     },
     {
       "area": "knowledge",
@@ -355,6 +357,7 @@
       "operations": [
         "assistant.message.edit",
         "assistant.message.send",
+        "assistant.message.unsend",
         "assistant.reply.regenerate",
         "assistant.run.answer",
         "assistant.run.detail",
@@ -372,8 +375,8 @@
         "assistant.thread.transcript",
         "assistant.thread.work"
       ],
-      "required": 18,
-      "bound": 18
+      "required": 19,
+      "bound": 19
     },
     {
       "area": "usage",
@@ -427,7 +430,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 254,
-  "total_bound": 254,
+  "total_required": 257,
+  "total_bound": 257,
   "total_approval_reached": 10
 }
