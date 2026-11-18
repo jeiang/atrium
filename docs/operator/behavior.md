@@ -882,6 +882,25 @@ message. Each queued message has Unsend until a run takes it: it is
 withdrawn and its text returns to the composer. Once a run took it, Unsend
 says so and nothing changes.
 
+When a run stops on one of its own limits (the step cap, the same tool call
+repeated three times with the same result, a spending limit, or a
+conversation past the model's context window), the chat keeps a line saying
+why in plain words. The latest such line offers Continue, which sends
+"Continue." as your message and starts a new run in the same chat; the
+stopped run's turns are then folded into the memory view.
+
+New chats get the model's default context limit: 200K tokens on Haiku and
+500K on Sonnet and Opus. Choosing a different limit in the assistant
+defaults applies it to every model; choosing the model's own default goes
+back to following the model. Switching a chat's model keeps its limit.
+Within a chat, the model service clears older tool results (keeping the
+last five; the assistant can read a cleared one again with `recall`) and
+summarizes the conversation as it nears the limit: for a 200K chat it
+clears from 100K and summarizes at 200K, for a 500K chat from 300K and at
+400K, for a 90K chat from 50K and at 80K, and for a 1M chat from 600K and
+at 800K. The chat shows "Earlier messages were summarized" where that
+happened.
+
 ## Assistant and daily work
 
 Home is `/chat`, with Needs you, the agenda, and recent activity in the initial

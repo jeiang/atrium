@@ -58,8 +58,8 @@ func TestMemoryViewReplacesCompaction(t *testing.T) {
 		t.Fatal("no model request")
 	}
 	body := requests[len(requests)-1].JSON(t)
-	if body["context_management"] != nil {
-		t.Errorf("request still carries context_management: %v", body["context_management"])
+	if got := editTriggers(t, body); got != [4]int64{50_000, 5, 9_000, 80_000} {
+		t.Errorf("90K thread triggers %v, want clear at 50000 keeping 5 (at least 9000), compact at 80000", got)
 	}
 	raw, err := json.Marshal(body["messages"])
 	if err != nil {

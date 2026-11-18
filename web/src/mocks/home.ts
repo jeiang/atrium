@@ -131,7 +131,14 @@ function homeBody(state: HomeScenario): Home {
     digest: lines.length > 0 ? lines : null,
     agenda: true,
     about: null,
-    defaults: { model: 'mock-model', effort: 'medium', context_limit: 0, thinking: 'off', web_search: true },
+    defaults: {
+      model: 'mock-model',
+      effort: 'medium',
+      context_limit: 0,
+      context_override: false,
+      thinking: 'off',
+      web_search: true,
+    },
     composer,
     weather: weatherBody(state.weather ?? 'ok'),
   };

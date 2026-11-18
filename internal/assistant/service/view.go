@@ -12,6 +12,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/progress"
@@ -36,6 +37,7 @@ const (
 	ItemAssistant  = "assistant"
 	ItemProposal   = "proposal"
 	ItemCompaction = "compaction"
+	ItemStop       = "stop"
 )
 
 const (
@@ -395,6 +397,11 @@ func Items(messages []journal.Message, calls []journal.ToolCall, rows map[string
 				item := base
 				item.Kind = ItemCompaction
 				items = append(items, &item)
+			case b.Kind == block.Stop:
+				activity = nil
+				item := base
+				item.Kind, item.Text = ItemStop, b.String("text")
+				items = append(items, &item)
 			}
 		}
 	}
@@ -448,7 +455,7 @@ func MeterOf(ctx context.Context, q db.Querier, thread threads.Thread) (Meter, e
 	if limit != 0 {
 		share = min(float64(tokens)/float64(limit), 1.0)
 	}
-	return Meter{Tokens: tokens, CompactAt: limit, Limit: limit, Share: share}, nil
+	return Meter{Tokens: tokens, CompactAt: assistant.TriggersFor(limit).Compact, Limit: limit, Share: share}, nil
 }
 
 func CostOfThread(ctx context.Context, q db.Querier, threadID int64) (float64, error) {

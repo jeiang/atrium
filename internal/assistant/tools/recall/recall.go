@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/application"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
@@ -14,7 +15,10 @@ type Service func(*tool.Context) *asstapp.Service
 
 func recall(svc Service) tool.Handler {
 	return func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-		resultID, _, err := tool.IntArg(args, "result_id", true)
+		raw, _ := args.Get("tool_use_id")
+		toolUseID, _ := raw.(string)
+		toolUseID = strings.TrimSpace(toolUseID)
+		resultID, _, err := tool.IntArg(args, "result_id", toolUseID == "")
 		if err != nil {
 			return nil, err
 		}
@@ -26,7 +30,7 @@ func recall(svc Service) tool.Handler {
 		if err != nil {
 			return nil, err
 		}
-		got, err := svc(tc).ResultRecall(ctx, asstapp.RecallInput{ThreadID: tc.ThreadID, ResultID: resultID, Offset: offset, Limit: limit})
+		got, err := svc(tc).ResultRecall(ctx, asstapp.RecallInput{ThreadID: tc.ThreadID, ResultID: resultID, ToolUseID: toolUseID, Offset: offset, Limit: limit})
 		var e *application.Error
 		if errors.As(err, &e) {
 			return nil, tool.Error(e.Message)
@@ -38,15 +42,22 @@ func recall(svc Service) tool.Handler {
 		if got.Data.Next != nil {
 			next = *got.Data.Next
 		}
-		return map[string]any{"result_id": resultID, "offset": offset, "total_chars": got.Data.Total, "text": got.Data.Text, "next_offset": next}, nil
+		out := map[string]any{"offset": offset, "total_chars": got.Data.Total, "text": got.Data.Text, "next_offset": next}
+		if toolUseID != "" {
+			out["tool_use_id"] = toolUseID
+		} else {
+			out["result_id"] = resultID
+		}
+		return out, nil
 	}
 }
 
 func Tools(svc Service) []tool.Tool {
 	return []tool.Tool{{
-		Name:        "recall",
-		Description: "Page through a stored tool result that was replaced by a stub. Returns `limit` characters from `offset` and `next_offset` when more remain.",
-		InputSchema: json.RawMessage(`{"type": "object", "properties": {"result_id": {"type": "integer"}, "offset": {"type": "integer", "minimum": 0}, "limit": ` + asstapp.RecallLimit.Schema() + `}, "required": ["result_id"], "additionalProperties": false}`),
+		Name: "recall",
+		Description: "Page through a stored tool result: one replaced by a stub (pass its result_id) or one cleared from the context " +
+			"(pass the tool_use_id of its call). Returns `limit` characters from `offset` and `next_offset` when more remain.",
+		InputSchema: json.RawMessage(`{"type": "object", "properties": {"result_id": {"type": "integer"}, "tool_use_id": {"type": "string"}, "offset": {"type": "integer", "minimum": 0}, "limit": ` + asstapp.RecallLimit.Schema() + `}, "additionalProperties": false}`),
 		Handler:     recall(svc),
 		Effect:      tool.Read,
 		Annotated:   true,

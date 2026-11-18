@@ -124,7 +124,7 @@ func SnapContextLimit(model pricing.Model, limit int64) int64 {
 		}
 	}
 	if best == 0 {
-		return assistant.DefaultContextLimit
+		return assistant.ContextLimits[0]
 	}
 	return best
 }
@@ -167,12 +167,13 @@ func CleanContextLimit(value any) (int64, error) {
 }
 
 type Options struct {
-	Model        string   `json:"model"`
-	Effort       string   `json:"effort"`
-	ContextLimit int64    `json:"context_limit"`
-	Thinking     string   `json:"thinking"`
-	WebSearch    bool     `json:"web_search"`
-	CostCapUSD   *float64 `json:"cost_cap_usd"`
+	Model           string   `json:"model"`
+	Effort          string   `json:"effort"`
+	ContextLimit    int64    `json:"context_limit"`
+	ContextOverride bool     `json:"context_override"`
+	Thinking        string   `json:"thinking"`
+	WebSearch       bool     `json:"web_search"`
+	CostCapUSD      *float64 `json:"cost_cap_usd"`
 }
 
 func (o Options) Validate() (Options, error) {
@@ -199,10 +200,7 @@ func (o Options) Validate() (Options, error) {
 }
 
 func Defaults(ctx context.Context, q db.Querier) (Options, error) {
-	out := Options{Model: pricing.DefaultModel, Effort: pricing.XHigh, ContextLimit: assistant.DefaultContextLimit, WebSearch: true}
-	if m, err := CleanModel(out.Model); err == nil {
-		out.Thinking = m.DefaultThinking()
-	}
+	out := Options{Model: pricing.DefaultModel, Effort: pricing.XHigh, WebSearch: true}
 	found, err := settings.From(ctx).Resolve(ctx, q, assistant.KeyDefaultEffort)
 	if err != nil {
 		return Options{}, err
@@ -217,12 +215,17 @@ func Defaults(ctx context.Context, q db.Querier) (Options, error) {
 	if _, err := CleanModel(found.Value); err == nil {
 		out.Model = found.Value
 	}
+	m, err := CleanModel(out.Model)
+	if err != nil {
+		return out, err
+	}
+	out.Thinking, out.ContextLimit = m.DefaultThinking(), m.DefaultContext
 	found, err = settings.From(ctx).Resolve(ctx, q, assistant.KeyDefaultContextLimit)
 	if err != nil {
 		return out, err
 	}
-	if n, ok := numx.ParseInt(found.Value); ok && slices.Contains(assistant.ContextLimits, n) {
-		out.ContextLimit = n
+	if n, ok := numx.ParseInt(found.Value); ok && found.Origin != settings.FromDefault && slices.Contains(assistant.ContextLimits, n) {
+		out.ContextLimit, out.ContextOverride = n, true
 	}
 	return out, nil
 }
@@ -250,11 +253,17 @@ func WriteDefaults(ctx context.Context, tx *sql.Tx, o Options) error {
 	if err := setPinSafe(ctx, tx, assistant.KeyDefaultEffort, o.Effort); err != nil {
 		return err
 	}
+	if m, err := CleanModel(o.Model); err == nil && o.ContextLimit == m.DefaultContext {
+		return pinSafe(settings.From(ctx).Unset(ctx, tx, assistant.KeyDefaultContextLimit))
+	}
 	return setPinSafe(ctx, tx, assistant.KeyDefaultContextLimit, strconv.FormatInt(o.ContextLimit, 10))
 }
 
 func setPinSafe(ctx context.Context, q db.Querier, key, value string) error {
-	err := settings.From(ctx).Set(ctx, q, key, value)
+	return pinSafe(settings.From(ctx).Set(ctx, q, key, value))
+}
+
+func pinSafe(err error) error {
 	var pinned *settings.PinnedError
 	if errors.As(err, &pinned) {
 		return OptionError(pinned.Error())
@@ -356,8 +365,11 @@ func resolve(ctx context.Context, q db.Querier, kind Kind, projectID *int64, exp
 	if projectEffort {
 		chosen.Effort = SnapEffort(m, chosen.Effort)
 	}
-	if projectLimit {
+	switch {
+	case projectLimit:
 		chosen.ContextLimit = SnapContextLimit(m, chosen.ContextLimit)
+	case explicit.ContextLimit == 0 && !chosen.ContextOverride:
+		chosen.ContextLimit = m.DefaultContext
 	}
 	return chosen.Validate()
 }
@@ -577,7 +589,7 @@ func SwitchModel(ctx context.Context, q db.Querier, threadID int64, model, effor
 		if current.limit != nil {
 			contextLimit = *current.limit
 		} else {
-			contextLimit = assistant.DefaultContextLimit
+			contextLimit = m.DefaultContext
 		}
 	}
 	limit, err := CleanModelContextLimit(m, contextLimit)
@@ -754,10 +766,13 @@ func KindsOf(ctx context.Context, q db.Querier, threadIDs []int64) (map[int64]Ki
 }
 
 func ContextLimitOf(t Thread) int64 {
-	if t.ContextLimit == nil || *t.ContextLimit == 0 {
-		return assistant.DefaultContextLimit
+	if t.ContextLimit != nil && *t.ContextLimit != 0 {
+		return *t.ContextLimit
 	}
-	return *t.ContextLimit
+	if m, err := pricing.Lookup(t.Model); err == nil {
+		return m.DefaultContext
+	}
+	return assistant.ContextLimits[0]
 }
 
 func SetTitle(ctx context.Context, q db.Querier, threadID int64, title string) error {

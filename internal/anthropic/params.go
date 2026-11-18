@@ -8,6 +8,9 @@ import (
 const (
 	BetaContextManagement = "context-management-2025-06-27"
 	BetaCompaction        = "compact-2026-01-12"
+
+	EditClearToolUses = "clear_tool_uses_20250919"
+	EditCompact       = "compact_20260112"
 )
 
 const (

@@ -538,9 +538,34 @@ claims about the running application. Operator contracts are in
   to Sonnet and Opus without it. The loop ends a run with a clear thread
   message and run error on refusal (with the `stop_details` category),
   `max_tokens`, `model_context_window_exceeded`, an empty `pause_turn` or
-  `end_turn`, a repeated identical tool call and result (three in a row) and
-  the per-run-kind step cap (24 for chat; subagents 12); both bounds are
-  compiled constants. The nightly dreaming run also has its own caps
+  `end_turn`. A run that ends on a loop stop (the request would exceed the
+  model's context window, a repeated identical tool call and result three
+  in a row, the per-run-kind step cap of 24 for chat and 12 for subagents,
+  or a run, chat, monthly, source or account spending limit) keeps its
+  technical `runs.error` and also leaves a `run_stop` block in a user-role
+  thread message naming the reason in plain words: the transcript shows it
+  as a `stop` item, the chat offers Continue on the latest one (it sends
+  "Continue." as a normal message, so the new run folds the stopped run
+  into the memory view), and later requests carry it as an
+  "atrium note:" text block. The stream's `run_error` carries the run's
+  error text instead of a generic one. Both step and repeat bounds are
+  compiled constants.
+  Every loop request carries server-side context management
+  (`context-management-2025-06-27`, `compact-2026-01-12`): it clears older
+  tool results, keeping the last 5 tool uses, and compacts at triggers set
+  by the thread's context limit (90K: clear at 50K, at least 9K, compact at
+  80K; 200K: 100K, 20K, 200K; 500K: 300K, 50K, 400K; 1M: 600K, 100K,
+  800K). A cleared result stays readable with `recall(tool_use_id)`.
+  Compaction blocks are stored with the assistant message and replayed
+  verbatim on later steps and runs; atrium's size estimate counts only from
+  the last compaction block, and the pre-request check stops only past the
+  model's context window. The chat meter's `compact_at` is the compaction
+  trigger. Each catalog model has a default context limit (Haiku 200K,
+  Sonnet and Opus 500K): a new thread gets the model's default unless the
+  operator stored `default_context_limit`, which then overrides it for
+  every model; saving the defaults with the model's own default removes the
+  stored value. A thread with no stored limit uses its model's default;
+  switching a thread's model keeps a stored limit. The nightly dreaming run also has its own caps
   (`dreaming_max_cost_usd`, default $0.30 per night, and
   `dreaming_monthly_usd`, default $3 per
   calendar month). A server fallback is shown in the thread

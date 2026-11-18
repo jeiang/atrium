@@ -178,6 +178,8 @@ func render(m journal.Message) (string, []int64, error) {
 			}
 		case block.Attachment:
 			parts = append(parts, "[attachment]")
+		case block.Stop:
+			parts = append(parts, "[run stopped] "+b.String("text"))
 		case references.Type:
 			parts = append(parts, referenceLine(b.Value))
 		case kb.Type:

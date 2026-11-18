@@ -63,6 +63,7 @@ export const models: Model[] = [
     id: 'claude-sonnet-5-5',
     name: 'Sonnet 5.5',
     context_window: 1_000_000,
+    default_context: 200_000,
     efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
     forced_tools: false,
     max_output: 64_000,
@@ -77,6 +78,7 @@ export const models: Model[] = [
     id: 'claude-opus-5-5',
     name: 'Opus 5.5',
     context_window: 1_000_000,
+    default_context: 200_000,
     efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
     forced_tools: false,
     max_output: 64_000,
@@ -88,6 +90,7 @@ export const models: Model[] = [
     id: 'claude-haiku-5-5',
     name: 'Haiku 5.5',
     context_window: 1_000_000,
+    default_context: 200_000,
     efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
     forced_tools: false,
     max_output: 32_000,
@@ -480,7 +483,7 @@ function bump(item: ScheduleJob): void {
 }
 
 export function configuration(): ModelConfiguration {
-  const defaults = { ...store.defaults, thinking: 'adaptive', web_search: true };
+  const defaults = { ...store.defaults, context_override: false, thinking: 'adaptive', web_search: true };
   return {
     models,
     defaults,

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/jsonx"
@@ -21,7 +22,34 @@ const (
 	WebSearchResult  = "web_search_tool_result"
 	Fallback         = "fallback"
 	Digest           = "digest"
+	Stop             = "run_stop"
 )
+
+func StopBlock(text string) json.RawMessage {
+	body, _ := json.Marshal(map[string]any{"type": Stop, "text": text})
+	return body
+}
+
+func ExpandStop(content []json.RawMessage) ([]json.RawMessage, error) {
+	var out []json.RawMessage
+	for i, raw := range content {
+		b, err := Decode(raw)
+		if err != nil {
+			return nil, err
+		}
+		if b.Kind != Stop {
+			continue
+		}
+		if out == nil {
+			out = slices.Clone(content)
+		}
+		out[i] = DigestText("atrium note: " + b.String("text"))
+	}
+	if out == nil {
+		return content, nil
+	}
+	return out, nil
+}
 
 type DigestLine struct {
 	Text string `json:"text"`

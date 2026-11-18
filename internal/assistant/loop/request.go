@@ -1,6 +1,7 @@
 package loop
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -380,13 +381,20 @@ func messageTokens(m actx.Message) (int64, error) {
 }
 
 func (req request) estimate(active []actx.Message, a *anchor) (int64, error) {
+	from, at, err := lastCompaction(active)
+	if err != nil {
+		return 0, err
+	}
 	total := req.fixedTokens
 	if a != nil {
 		total = a.tokens
 	}
-	for _, m := range active {
+	for i, m := range active[from:] {
 		if a != nil && (m.Seq == nil || *m.Seq <= a.seq) {
 			continue
+		}
+		if i == 0 {
+			m.Content = m.Content[at:]
 		}
 		n, err := messageTokens(m)
 		if err != nil {
@@ -395,6 +403,30 @@ func (req request) estimate(active []actx.Message, a *anchor) (int64, error) {
 		total += n
 	}
 	return total, nil
+}
+
+var compactionTag = []byte(`"` + block.Compaction + `"`)
+
+func lastCompaction(active []actx.Message) (message, at int, err error) {
+	for i := len(active) - 1; i >= 0; i-- {
+		if active[i].Role != journal.Assistant {
+			continue
+		}
+		content := active[i].Content
+		for j := len(content) - 1; j >= 0; j-- {
+			if !bytes.Contains(content[j], compactionTag) {
+				continue
+			}
+			b, err := block.Decode(content[j])
+			if err != nil {
+				return 0, 0, err
+			}
+			if b.Kind == block.Compaction {
+				return i, j, nil
+			}
+		}
+	}
+	return 0, 0, nil
 }
 
 func (req request) buildMessages(ctx context.Context, q db.Querier, scope files.Scope, messages []actx.Message) ([]json.RawMessage, error) {
@@ -413,6 +445,9 @@ func (req request) buildMessages(ctx context.Context, q db.Querier, scope files.
 		}
 		content, err := block.ExpandDigest(content)
 		if err != nil {
+			return nil, err
+		}
+		if content, err = block.ExpandStop(content); err != nil {
 			return nil, err
 		}
 		expanded, err := files.Expand(ctx, q, scope, content)

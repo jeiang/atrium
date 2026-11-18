@@ -112,6 +112,10 @@ func Thinking(value, signature string) json.RawMessage {
 	return mustJSON(map[string]string{"type": "thinking", "thinking": value, "signature": signature})
 }
 
+func Compaction(summary, encrypted string) json.RawMessage {
+	return mustJSON(map[string]string{"type": "compaction", "content": summary, "encrypted_content": encrypted})
+}
+
 type SearchResult struct {
 	URL   string
 	Title string
