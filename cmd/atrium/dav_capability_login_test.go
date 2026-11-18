@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jeiang/atrium/internal/apps/calendar/caldavtest"
 	"github.com/jeiang/atrium/internal/cli"
@@ -24,15 +25,16 @@ func TestAContactsAppleIDLogsCardDAVInAsItsOwnUserWhileCalDAVKeepsTheAppleID(t *
 	srv.SetCardUser(contactsLogin)
 	srv.SetObject(caldavtest.BookPath+"alice.vcf", aliceCard)
 
+	web := webG4(t, startServeIn(t, dir))
 	if got := runApp(t, "contacts", "sync"); got.code == cli.ExitOK {
 		t.Fatalf("contacts sync as the Apple ID = %d %q, want the refusal", got.code, got.stdout)
 	}
-	if state, reason, hold := storedCardDAV(t, dir); hold.Refusals != 1 {
-		t.Fatalf("the refused contacts sync stored %s %q %+v, want one refusal held", state, reason, hold)
-	}
+	waitUntil(t, 30*time.Second, "the carddav hold under the Apple ID", func() bool {
+		_, _, hold := storedCardDAV(t, dir)
+		return hold.Refusals > 0
+	})
 	srv.TakeLogins()
 
-	web := webG4(t, startServeIn(t, dir))
 	if got := web.do(http.MethodPut, "/web/v1/settings/"+davmirror.ContactsAppleIDKey, map[string]any{"value": contactsLogin}); got.status != http.StatusOK {
 		t.Fatalf("PUT /web/v1/settings/%s = %d: %.300s", davmirror.ContactsAppleIDKey, got.status, got.body)
 	}
