@@ -1,6 +1,7 @@
 import { HttpResponse, http } from 'msw';
 import type { ModuleStateState, Shell, State, WebSession, WebSignIn } from '../contract';
 import { API_BASE } from '../contract';
+import { appPageHandlers, type ServerOpsScenario, type WeatherScenario } from './appPages';
 import { type AppsScenario, appHandlers } from './apps';
 import { type AssistantScenario, assistantHandlers } from './assistant';
 import { type CalendarScenario, calendarHandlers } from './calendar';
@@ -38,6 +39,8 @@ export interface MockScenario {
   mailManage?: MailManageScenario;
   pause?: State;
   apps?: AppsScenario;
+  weather?: WeatherScenario;
+  serverOps?: ServerOpsScenario;
   calendar?: CalendarScenario;
   media?: MediaScenario;
   packages?: PackagesScenario;
@@ -230,6 +233,7 @@ export const handlers = [
   ...notificationHandlers(scenario),
   ...connectionHandlers(scenario),
   ...appHandlers(scenario),
+  ...appPageHandlers(scenario),
   ...calendarHandlers(scenario),
   ...mediaHandlers(scenario),
   ...packageHandlers(scenario),

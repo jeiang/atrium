@@ -46,6 +46,7 @@ func TestQueueListsEverythingThatNeedsTheOperatorWithOneCount(t *testing.T) {
 	exec("INSERT INTO open_loops (thread_key, account, state, last_message_id, since, counterpart, subject, updated_ts) VALUES ('k2', 'a', 'waiting_on_them', 2, 120, 'sam', 'Contract', 120)")
 	exec("INSERT INTO commitments (id, message_id, text, owner, due, status, created_ts) VALUES (2, 1, 'Book the room', 'me', ?, 'open', 301)", today.AddDate(0, 0, -3).Format("2006-01-02"))
 	exec("INSERT INTO packages (id, merchant, status, status_text, tracking_number, source_message_id, last_message_id, updated_ts, first_seen) VALUES (1, 'Bookshop', 'transit', 'In transit', 'TRACK', 1, 1, 500, 500)")
+	exec(`INSERT INTO thread_plans (thread_id, items_json, updated_at) VALUES (?, '[{"text":"Pick a calendar","done":false}]', 400)`, threadID)
 	added := s.do(http.MethodPost, "/api/v1/tasks", s.token, map[string]any{"title": "Renew the library card", "due": today.AddDate(0, 0, 3).Format("2006-01-02")})
 	if added.status != http.StatusCreated {
 		t.Fatalf("add task: %d %s", added.status, added.body)
@@ -101,7 +102,7 @@ func TestQueueListsEverythingThatNeedsTheOperatorWithOneCount(t *testing.T) {
 	all := queue("")
 	got := ids(all.Items)
 	inOrder(got, permission, question, "commitment:2", "task:"+taskID, proposal, "loop:k1", "draft:1")
-	for _, absent := range []string{"loop:k2", "package:1"} {
+	for _, absent := range []string{"loop:k2", "package:1", "plan:" + strconv.FormatInt(threadID, 10)} {
 		if slices.Contains(got, absent) {
 			t.Fatalf("queue lists %s, which does not need the operator: %v", absent, got)
 		}

@@ -29,7 +29,17 @@ func Samples(ctx context.Context, q db.Querier, since float64, host, metric stri
 	}
 	query += " ORDER BY ts DESC, id DESC LIMIT ?"
 	params = append(params, limit)
-	rows, err := q.QueryContext(ctx, query, params...)
+	return collectSamples(q.QueryContext(ctx, query, params...))
+}
+
+func LatestSamples(ctx context.Context, q db.Querier) ([]SampleRow, error) {
+	return collectSamples(q.QueryContext(ctx,
+		"SELECT s.ts, s.host, s.metric, s.value, s.state, s.detail FROM ops_samples s "+
+			"JOIN (SELECT host, MAX(ts) AS ts FROM ops_samples GROUP BY host) l ON l.host = s.host AND l.ts = s.ts "+
+			"ORDER BY s.host, s.metric, s.id DESC"))
+}
+
+func collectSamples(rows *sql.Rows, err error) ([]SampleRow, error) {
 	if err != nil {
 		return nil, err
 	}
