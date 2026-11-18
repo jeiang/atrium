@@ -44,3 +44,22 @@ func CountPendingKind(ctx context.Context, q db.Querier, kind string) (int, erro
 	err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM proposals WHERE kind = ? AND status = ?", kind, Pending).Scan(&n)
 	return n, err
 }
+
+func OtherPendingForRun(ctx context.Context, q db.Querier, kind string, id, run int64) (int, error) {
+	var n int
+	err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM proposals WHERE kind = ? AND status = ? AND id <> ? "+
+		"AND json_extract(payload, '$.run_id') = ?", kind, Pending, id, run).Scan(&n)
+	return n, err
+}
+
+func ForRunSince(ctx context.Context, q db.Querier, kind string, run int64, since float64) ([]int64, error) {
+	rows, err := q.QueryContext(ctx, "SELECT id FROM proposals WHERE kind = ? AND json_extract(payload, '$.run_id') = ? "+
+		"AND (status = ? OR decided_ts >= ?) ORDER BY created_ts, id", kind, run, Pending, since)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (int64, error) {
+		var id int64
+		return id, r.Scan(&id)
+	})
+}

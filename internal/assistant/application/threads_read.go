@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"math/bits"
 	"strings"
@@ -343,17 +342,10 @@ func asks(ctx context.Context, q db.Querier, active *journal.Run) ([]Ask, error)
 	if active.EndedAt != nil {
 		parked = *active.EndedAt
 	}
-	rows, err := q.QueryContext(ctx, "SELECT id FROM proposals WHERE kind = ? AND json_extract(payload, '$.run_id') = ? "+
-		"AND (status = ? OR decided_ts >= ?) ORDER BY created_ts, id", permission.Kind, active.ID, proposals.Pending, parked)
-	if err != nil {
-		return nil, err
-	}
-	out, err := db.Collect(rows, func(r *sql.Rows) (Ask, error) {
-		a := Ask{RunID: active.ID}
-		return a, r.Scan(&a.ProposalID)
-	})
-	if out == nil {
-		out = []Ask{}
+	ids, err := proposals.ForRunSince(ctx, q, permission.Kind, active.ID, parked)
+	out := make([]Ask, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, Ask{ProposalID: id, RunID: active.ID})
 	}
 	return out, err
 }

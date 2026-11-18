@@ -21,9 +21,8 @@ func permissionProposals(d *db.DB, resume func(context.Context, int64) error) []
 		if err := json.Unmarshal(p.Payload, &payload); err != nil {
 			return 0, false, err
 		}
-		var open int
-		if err := d.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM proposals WHERE kind = ? AND status = ? AND id <> ? "+
-			"AND json_extract(payload, '$.run_id') = ?", permission.Kind, proposals.Pending, p.ID, payload.RunID).Scan(&open); err != nil {
+		open, err := proposals.OtherPendingForRun(ctx, d.Read, permission.Kind, p.ID, payload.RunID)
+		if err != nil {
 			return 0, false, err
 		}
 		return payload.RunID, open == 0, nil
