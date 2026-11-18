@@ -149,17 +149,16 @@ emergency bypass.
   shows comes from `/web/v1`, which keeps the rules above. Host validation
   applies. Client responses carry a stricter CSP with Trusted Types; server
   responses such as `/healthz`, sign-in and the APIs keep the server CSP.
-- Old addresses still work: every `/next/...` path answers 301 to the same
-  path at root, and old server page paths redirect to their client page
-  through the moved table in `internal/urlx/moved.go` (for example `/about`
-  to `/settings/general`). `/static/*` answers 404. About (version and build)
-  is a block in Settings > General, and third-party notices are plain text at
+- Bookmarks to moved addresses redirect to their client page: `/next/...`
+  to the same path at root, and moved page paths through
+  `internal/urlx/moved.go` (for example `/about` to `/settings/general`).
+  About (version and build) is a block in Settings > General, and
+  third-party notices for the server and the client are plain text at
   `/third-party-notices.txt` once signed in.
-- A browser that registered notifications under `/next/` moves them to the
-  root worker on its next signed-in visit, with no prompt, and the old
-  registration removes itself. A registration from `/static/sw.js` is updated
-  in place and keeps its subscription. If push stops on a device, turn
-  notifications on again in Settings > Notifications.
+- A browser that still has notifications registered under `/next/` moves
+  them to the root worker on its next signed-in visit, with no prompt. If
+  push stops on a device, turn notifications on again in Settings >
+  Notifications.
 - API tokens are issued and revoked in Settings > Sign-in. A chat cannot be
   started about an item from the item, and the Downloads app adds torrents
   only by magnet link.
@@ -664,7 +663,7 @@ it through `atrium settings set mail_mode shadow|live`; the change is audited.
 Pause/resume does not change the mode or grant
 go-live eligibility.
 
-The Mail status page (`/live`, tab Status; API `GET /api/v1/mail/status`)
+The Mail Mode screen (`/apps/mail/mode`; API `GET /api/v1/mail/status`)
 shows the mode, go-live eligibility with each unmet reason (`already_live`,
 `no_accounts`, `unresolved_writes`), the baseline count and when it was taken,
 automatic action counts, the last replay summary (messages and how many
@@ -686,9 +685,10 @@ the job also runs weekly on Sunday at 04:30, because the scheduler has no
 manual-only declared job. Only the counts are kept; the per-message lines
 stay with `atrium replay` and `POST /mail/replay`.
 
-Mail is one sidebar entry. Its tabs are Decisions (`/triage`, which links each
-message page), Rules (`/rules`) and Status (`/live`); Mail settings stay at `/settings/mail`.
-With the Mail module off, the entry, its tabs and its pages are gone.
+Mail is one app. Its screens are Messages (`/apps/mail`), Decisions (`/apps/mail/decisions`,
+which links each message page), Rules (`/apps/mail/rules`), Mode (`/apps/mail/mode`) and Accounts
+(`/apps/mail/accounts`); Mail settings stay at `/settings/mail`.
+With the Mail module off, the app and its screens are gone.
 
 Rules and decisions link both ways. A decision made by an operator rule names
 that rule: its id, a plain title such as "File into Bills", and a link to the

@@ -51,7 +51,6 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				return err
 			})
 		}, Nav: []web.NavItem{
-			{Section: "review", Label: "Inbox", URL: "/inbox", Icon: "inbox", Page: "inbox", Order: 50},
 			{Label: "Notifications", URL: "/settings/notifications", Page: "notifications", Settings: true, Primary: true, Order: 40},
 		}}},
 		Tools:       ToolDefinitions(),

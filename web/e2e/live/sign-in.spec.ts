@@ -2,7 +2,7 @@ import { expect, type Page, test } from '@playwright/test';
 
 const live = process.env.ATRIUM_LIVE_URL ?? '';
 const elsewhere = process.env.ATRIUM_LIVE_ELSEWHERE ?? '';
-const target = '/settings/auth?from=mail';
+const target = '/third-party-notices.txt?from=mail';
 
 function documents(page: Page): string[] {
   const seen: string[] = [];
@@ -14,7 +14,7 @@ function documents(page: Page): string[] {
 
 async function expectSignedInAt(page: Page): Promise<void> {
   await expect(page).toHaveURL(live + target);
-  await expect(page.locator('body')).toContainText('Sign-in');
+  await expect(page.locator('body')).toContainText('================');
   await expect(page.getByText('Continue to Atrium')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /^Sign in/ })).toHaveCount(0);
 }

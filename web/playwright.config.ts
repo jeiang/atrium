@@ -7,6 +7,7 @@ const engines: Engine[] = JSON.parse(readFileSync(new URL('./e2e/engines.json', 
 
 export default defineConfig({
   testDir: 'e2e',
+  testIgnore: 'live/**',
   globalSetup: './e2e/global-setup.ts',
   outputDir: 'test-results',
   forbidOnly: true,

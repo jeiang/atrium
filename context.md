@@ -259,10 +259,10 @@ claims about the running application. Operator contracts are in
   which the notifications module requires. A push carries the title, a body of at most 240 characters and a
   client path for its subject; it has no action buttons and opening it writes nothing. The notifier maps the
   stored link at send time: `/proposals/{id}`, `/drafts/{id}`, `/chat/{id}`, the Inbox and the Connections page keep
-  their path, a link under the old `/next` prefix drops it, an old server page path follows the moved table in
-  `internal/urlx/moved.go` (`/scheduled` opens Routines), and anything else opens the Inbox. Stored notification rows keep their
+  their path, the `/next` prefix is dropped, a moved path follows `internal/urlx/moved.go` (`/scheduled` opens
+  Routines), and anything else opens the Inbox. Stored notification rows keep their
   original link, and a resend maps it again. A click focuses a window already on that address, else navigates the
-  worker's open window there, else opens one; the worker also moves a target under `/next` to the same root path.
+  worker's open window there, else opens one; the worker also drops a `/next` prefix from the target.
   A decided or unknown item opens the Inbox saying nothing waits there; signed out, sign-in
   returns to the card. It is encrypted per
   RFC 8291 and sent only over HTTPS to public addresses. A 404 or 410
@@ -1835,7 +1835,8 @@ claims about the running application. Operator contracts are in
   mail or other sites and the return after sign-in land signed in instead of
   looping through `/login`. Real-browser coverage is
   `TestGuardBrowserSignInReturnsAcrossSites`, which runs
-  `web/e2e-live` in the engines named by `ATRIUM_E2E_BROWSERS`.
+  `web/e2e/live` in the engines named by `ATRIUM_E2E_BROWSERS`; `just web-test`
+  sets it from `web/e2e/engines.json`.
 - The public web service accepts an authenticating reverse proxy
   (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Proxy
   identity headers count only when the socket peer is in the trusted proxy
@@ -1990,15 +1991,15 @@ claims about the running application. Operator contracts are in
   style, no eval, nonce or remote source, and `require-trusted-types-for
   'script'; trusted-types atrium-md atrium-sw svelte-trusted-html`. Server
   responses (`/healthz`, sign-in, the APIs) keep the server CSP.
-- Old addresses: `/next/sw.js` serves the client worker, and every other
-  `/next/...` path answers 301 to the same path at root. `/static/*` answers
-  404. Old server page paths answer 301 through the moved table in
-  `internal/urlx/moved.go` (`/about` to `/settings/general`,
+- Moved addresses: `/next/sw.js` serves the client worker, every other
+  `/next/...` path answers 301 to the same path at root, and moved page paths
+  answer 301 through `internal/urlx/moved.go` (`/about` to `/settings/general`,
   `/library/knowledge?state=unconfirmed` to `/knowledge/review`, and so on).
   OIDC `/login`, `/auth/callback` and `/logout`, `/apps/media/file/*`, the
   legacy `/media/*` redirects and `/healthz` stay server routes. About
   (version and build) is a block in Settings > General that reads
-  `/web/v1/about`, and third-party notices are plain text at
+  `/web/v1/about`, and third-party notices for the Go modules, SQLCipher,
+  OpenSSL and the npm packages in the client bundle are plain text at
   `/third-party-notices.txt` for a signed-in operator.
 - The client registers `/sw.js` at scope `/` (production build only,
   through the `atrium-sw` Trusted Types policy). The worker precaches the
@@ -2012,11 +2013,8 @@ claims about the running application. Operator contracts are in
   full load. Activation deletes older `shell-*`, `next-shell-*` and
   `atrium-*` caches. A registration at scope `/next/` gets the same worker
   bytes from `/next/sw.js`; once the operator is signed in, the client moves
-  its push subscription to the root registration with the same key (the new
-  device is registered with the server and the old one deleted), and the
-  old worker unregisters itself and moves its windows to root, with no
-  prompt. A registration of `/static/sw.js` at scope `/` is updated in
-  place to `/sw.js` and keeps its subscription.
+  its push subscription to the root registration with the same key and the
+  `/next/` worker unregisters itself and moves its windows to root.
 - Read models from queries that declare `meta.topics` or `meta.persist: true`
   are kept for 7 days in the IndexedDB database `atrium-read-cache`, keyed to
   the signed-in subject, with the session's identity but never its CSRF

@@ -37,7 +37,7 @@ func (classificationBudget) Items(ctx context.Context, q db.Querier, now float64
 		Kind:     ClassificationBudgetKind,
 		SourceID: strconv.FormatFloat(found.MonthStart, 'f', -1, 64),
 		Title:    "Model decisions are waiting for the monthly budget",
-		Detail: fmt.Sprintf("Mail and server-ops classifications are paused with $%.2f of the $%.2f monthly budget left. First refused %s, last refused %s (%s). Raise the budget at /settings/usage or wait until %s.",
+		Detail: fmt.Sprintf("Mail and server-ops classifications are paused with $%.2f of the $%.2f monthly budget left. First refused %s, last refused %s (%s). Raise the budget at /assistant/spend or wait until %s.",
 			found.RemainingUSD, found.BudgetUSD, at(found.FirstAt), at(found.LastAt), found.LastCaller, at(found.NextMonth)),
 		Created: found.FirstAt,
 		Group:   attention.NeedsDecision,

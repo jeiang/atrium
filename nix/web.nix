@@ -66,6 +66,7 @@
           esac
         done < <(find $out -type f | LC_ALL=C sort)
         test -s $out/index.html
+        test -s $out/third-party-notices.txt
         runHook postInstall
       '';
       passthru = {inherit stub;};
