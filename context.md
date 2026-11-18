@@ -225,6 +225,16 @@ claims about the running application. Operator contracts are in
   the relation. Purging a record deletes the links from and to it; a
   deleted task or contact leaves its links showing as missing. Links are
   never read by retrieval and the assistant has no link tool.
+- The links read and the subject page also derive `see_also` links from
+  record text at read time: a live record's body citing `[K<id>]` or
+  linking to `/knowledge/<id>` (relative, or absolute on the `public_url`
+  host) links to that live record, outside code spans and blocks. Incoming
+  citations are found through `kb_fts` and confirmed by the same parser.
+  Derived links carry `cited: true`, `id` 0 and no `link_id`; a stored link
+  between the same pair wins. Nothing is written or backfilled, and a body
+  edit bumps the `knowledge` revision the links ETag covers. The client
+  renders `[K<id>]` outside code as a link to `/knowledge/<id>` titled from
+  the links it already loaded, else `K<id>`.
 - Isolated research and worker runs receive neither the operator profile
   nor the project prompt block.
 - A space is a `projects` row presented in Knowledge; the table, its
@@ -271,7 +281,7 @@ claims about the running application. Operator contracts are in
   deletes the subscription; other failures are counted per device, and a
   device with three consecutive failures raises a banner.
 - The attention query covers the enabled queues: proposals, drafts, open
-  loops, commitments, thread plans, packages, tasks and
+  loops, commitments, packages, tasks and
   unanswered `ask_operator` questions, listed until the operator answers.
   Packages (when the Packages app is on) come from shipping emails; a
   package the operator registers with `track_package` is polled through

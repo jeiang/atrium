@@ -64,6 +64,7 @@ type Related struct {
 	TargetID   string
 	Direction  string
 	LinkID     int64
+	Cited      bool
 	State      string
 	Address    string
 }
@@ -192,7 +193,7 @@ func typedRelated(links []Link, direction string) []Related {
 			id = 0
 		}
 		out[i] = Related{ID: id, Title: other.Title, Kind: other.RecordKind, Relation: l.Relation, TargetKind: other.Kind, TargetID: other.ID,
-			Direction: direction, LinkID: l.ID, State: other.State, Address: other.Address}
+			Direction: direction, LinkID: l.ID, Cited: l.Cited, State: other.State, Address: other.Address}
 	}
 	return out
 }
@@ -214,7 +215,7 @@ func (s *Service) Subject(ctx context.Context, in SubjectInput) (application.Rea
 		for i, f := range page.Facts {
 			out.Facts[i] = Fact{Record: recordOf(f), Kind: kb.KindOf(f), CreatedAt: f.CreatedAt, Retracted: f.RetractedAt}
 		}
-		typed, err := linksOf(ctx, q, in.ID)
+		typed, err := linksOf(ctx, q, subject, origin(ctx))
 		if err != nil {
 			return err
 		}

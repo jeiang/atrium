@@ -160,10 +160,6 @@
             <a class="btn btn--quiet" href={p('/chat/:id', { params: { id: target.id } })}>Open the chat</a>
           </div>
         </form>
-      {:else if target.type === 'plan'}
-        <div class="ask__actions">
-          <a class="btn btn--primary" href={p('/chat/:id', { params: { id: target.id } })}>Open the chat</a>
-        </div>
       {:else if item}
         <div class="ask__actions">
           {#each verbs as verb (verb)}

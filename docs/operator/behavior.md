@@ -880,7 +880,8 @@ is configured. Full page navigations are not conditional fragment responses.
 The Needs you count is the size of the one inbox: questions the assistant is
 waiting on, permission requests, pending proposals and those with an unknown
 outcome, drafts to send or resolve, and overdue, due-soon or needs-decision
-items such as commitments, tasks and open loops. Items of a module that is off
+items such as commitments, tasks and open loops. A thread plan is never an
+inbox item; it stays in the chat work panel. Items of a module that is off
 are not counted. Clients list the same items, in the same order, from
 `GET /api/v1/queue`, and `GET /api/v1/home` returns the count and the first
 three of them as `needs_you`. The Needs you page still lists only proposals and
@@ -971,6 +972,17 @@ profile. Private spaces restrict their content to that space, and nightly
 dreaming skips their threads. Nightly dreaming can write unconfirmed records
 within its spending limits. Records imported from Notion keep their origin;
 Notion itself is no longer connected. There is no skills feature.
+
+A knowledge page's Links list the links stored with `knowledge.link` and, as
+`see_also` links marked `cited`, the records its text cites as `[K<id>]` or
+links to as `/knowledge/<id>` (a relative path, or an absolute address on the
+host's `public_url`). The page a record cites also lists it under What links
+here. Cited links are read from the current text, so an edit changes them at
+once; they have no remove button, and a stored link between the same two
+records replaces the cited one. Retracted records, unknown ids and citations
+inside code are ignored. In rendered Markdown, a `[K<id>]` token outside code
+is a link to `/knowledge/<id>`, labeled with the record title when the page
+already has it and `K<id>` otherwise.
 
 Standing instructions are one pinned knowledge page, created at service start
 and opened with `GET /api/v1/knowledge/instructions`. The operator edits it with
