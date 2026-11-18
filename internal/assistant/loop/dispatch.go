@@ -85,6 +85,17 @@ func toolErrorText(err error) (string, bool) {
 	return "", false
 }
 
+var errInterrupted = errors.New("interrupted by the operator")
+
+const interruptPoll = time.Second
+
+func interruptedText(use ToolUse, started bool) string {
+	if started {
+		return fmt.Sprintf("%s call %s was interrupted by the operator before it finished; it returned no result. The operator's message follows.", use.Name, use.ID)
+	}
+	return fmt.Sprintf("%s call %s was interrupted by the operator before it started; it did not run. The operator's message follows.", use.Name, use.ID)
+}
+
 type dispatcher struct {
 	d         *db.DB
 	tc        *tool.Context
@@ -94,6 +105,7 @@ type dispatcher struct {
 	tuning    actx.Tuning
 	guard     func(ctx context.Context) error
 	drain     func(ctx context.Context) error
+	urgent    func(ctx context.Context) (bool, error)
 	registry  *registry.Registry
 	source    registry.Source
 	allow     registry.Allow
@@ -167,6 +179,9 @@ func (x *dispatcher) invoke(ctx context.Context, use ToolUse) (errText *string, 
 		}
 	}
 	value, err = x.call(progress.WithTool(ctx, x.tc.RunID, use.ID), &authorized, args)
+	if errors.Is(err, errInterrupted) {
+		return fail(interruptedText(use, true))
+	}
 	if err == nil {
 		marks := authorized.Marks
 		if marked, ok := value.(tool.Marked); ok {
@@ -241,12 +256,53 @@ func (x *dispatcher) call(ctx context.Context, t *tool.Tool, args tool.Args) (va
 			err = fmt.Errorf("panic: %v\n%s", p, debug.Stack())
 		}
 	}()
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	defer context.AfterFunc(x.lost, cancel)()
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	defer context.AfterFunc(x.lost, func() { cancel(nil) })()
+	if t.Effect == tool.Read && x.urgent != nil {
+		defer x.watch(ctx, cancel)()
+	}
 	ctx = application.WithInvocation(ctx, application.Invocation{ThreadID: x.tc.ThreadID, RunID: x.tc.RunID})
 	ctx = audit.With(ctx, "assistant", audit.Tool)
-	return t.Handler(ctx, x.tc, args)
+	value, err = t.Handler(ctx, x.tc, args)
+	if errors.Is(context.Cause(ctx), errInterrupted) {
+		return nil, errInterrupted
+	}
+	return value, err
+}
+
+func (x *dispatcher) watch(ctx context.Context, cancel context.CancelCauseFunc) func() {
+	wake, unsubscribe := progress.Subscribe()
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		defer unsubscribe()
+		tick := time.NewTicker(interruptPoll)
+		defer tick.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			case <-wake:
+			case <-tick.C:
+			}
+			urgent, err := x.urgent(ctx)
+			if err != nil {
+				if ctx.Err() == nil {
+					log.Warn("could not check for a message sent now", logx.RunID, x.tc.RunID, logx.Err, err)
+				}
+				continue
+			}
+			if urgent {
+				cancel(errInterrupted)
+				return
+			}
+		}
+	}()
+	return func() { close(done); <-stopped }
 }
 
 func (x *dispatcher) finish(ctx context.Context, callID int64, use ToolUse, errText *string, value any) (json.RawMessage, error) {
@@ -339,10 +395,31 @@ func (x *dispatcher) execute(ctx context.Context, use ToolUse) (json.RawMessage,
 	return x.perform(ctx, x.lookup(use.Name), callID, use)
 }
 
+func (x *dispatcher) skip(ctx context.Context, use ToolUse) (json.RawMessage, error) {
+	callID, err := x.startCall(ctx, use)
+	if err != nil {
+		return nil, err
+	}
+	return x.finish(ctx, callID, use, new(interruptedText(use, false)), nil)
+}
+
 func (x *dispatcher) executeAll(ctx context.Context, uses []ToolUse) ([]json.RawMessage, error) {
 	results := make([]json.RawMessage, len(uses))
+	interrupted := false
 	for i, use := range uses {
-		r, err := x.execute(ctx, use)
+		if !interrupted && x.urgent != nil {
+			var err error
+			if interrupted, err = x.urgent(ctx); err != nil {
+				return nil, err
+			}
+		}
+		var r json.RawMessage
+		var err error
+		if interrupted {
+			r, err = x.skip(ctx, use)
+		} else {
+			r, err = x.execute(ctx, use)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -396,10 +473,10 @@ func (x *dispatcher) settle(ctx context.Context, use ToolUse, call *journal.Tool
 		}
 		return x.perform(ctx, x.lookup(use.Name), call.ID, use)
 	}
-	return closeCall(ctx, x.d, use, call, x.now())
+	return closeCall(ctx, x.d.Write, use, call, x.now())
 }
 
-func closeCall(ctx context.Context, d *db.DB, use ToolUse, call *journal.ToolCall, now float64) (json.RawMessage, error) {
+func closeCall(ctx context.Context, q db.Querier, use ToolUse, call *journal.ToolCall, now float64) (json.RawMessage, error) {
 	switch call.State {
 	case journal.Error:
 		text := "failed"
@@ -413,7 +490,7 @@ func closeCall(ctx context.Context, d *db.DB, use ToolUse, call *journal.ToolCal
 		}
 		return toolResult(use.ID, CompletedUncaptured, true), nil
 	}
-	if err := journal.FinishToolCall(ctx, d.Write, call.ID, journal.Unknown, now, new(Verify), nil, nil); err != nil {
+	if err := journal.FinishToolCall(ctx, q, call.ID, journal.Unknown, now, new(Verify), nil, nil); err != nil {
 		return nil, err
 	}
 	return toolResult(use.ID, Verify, true), nil

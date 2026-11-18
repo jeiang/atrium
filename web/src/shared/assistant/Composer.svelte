@@ -12,6 +12,7 @@
     stopping?: boolean;
     scope?: Snippet;
     onsubmit: (text: string) => void | Promise<void>;
+    onsendnow?: (text: string) => void | Promise<void>;
     onstop?: () => void | Promise<void>;
   }
 
@@ -25,6 +26,7 @@
     stopping = false,
     scope,
     onsubmit,
+    onsendnow,
     onstop,
   }: Props = $props();
 
@@ -34,9 +36,11 @@
   let touch = $state(false);
   let sending = $state(false);
   let failed = $state<string>();
+  let retryNow = false;
   const grows = typeof CSS !== 'undefined' && CSS.supports('field-sizing', 'content');
   const empty = $derived(value.trim() === '');
   const blocked = $derived(disabled || empty || sending || busy);
+  const queues = $derived(running && onsendnow !== undefined);
 
   $effect(() => {
     const query = matchMedia(touchQuery);
@@ -55,19 +59,24 @@
     area.style.height = `${area.scrollHeight + area.offsetHeight - area.clientHeight}px`;
   });
 
-  async function handleSend(): Promise<void> {
+  async function handleSend(now = false): Promise<void> {
     if (blocked) return;
     const text = value.trim();
     sending = true;
+    retryNow = now;
     failed = undefined;
     try {
-      await onsubmit(text);
+      await (now && onsendnow ? onsendnow(text) : onsubmit(text));
       value = '';
     } catch (error) {
       failed = error instanceof Error && error.message ? error.message : 'The message was not sent.';
     } finally {
       sending = false;
     }
+  }
+
+  function onSendNow(): void {
+    void handleSend(true);
   }
 
   function onSubmit(event: SubmitEvent): void {
@@ -109,25 +118,30 @@
     {#if onstop && running}
       <Button variant="secondary" pending={stopping} onclick={onStop}>Stop run</Button>
     {/if}
+    {#if queues && touch}
+      <Button variant="secondary" icon="forward" label="Send now" disabled={blocked} onclick={onSendNow} />
+    {:else if queues}
+      <Button variant="secondary" disabled={blocked} onclick={onSendNow}>Send now</Button>
+    {/if}
     {#if touch}
       <Button
         type="submit"
         variant="primary"
         icon="arrow"
-        label="Send"
+        label={queues ? 'Queue' : 'Send'}
         disabled={blocked && !sending}
         pending={sending}
       />
     {:else}
       <Button type="submit" variant="primary" icon="arrow" disabled={blocked && !sending} pending={sending}
-        >Send</Button
+        >{queues ? 'Queue' : 'Send'}</Button
       >
     {/if}
   </div>
   {#if failed}
     <p class="composer__error" id="{id}-error" role="alert">
       <span>{failed}</span>
-      <Button size="sm" onclick={handleSend}>Retry</Button>
+      <Button size="sm" onclick={() => handleSend(retryNow)}>Retry</Button>
     </p>
   {/if}
 </form>

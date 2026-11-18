@@ -482,6 +482,29 @@ claims about the running application. Operator contracts are in
   result one (`loop.CloseAbandoned`), never running it: a stored result, the
   stored error, `unknown` with the same verify text for a started call, or
   "did not run" for a call that never started.
+  `POST /threads/{id}/messages` takes additive `now`: while the run is
+  `running` the message is queued with `thread_queue.run_id` set to that run
+  and `consumed_at` empty (the send-now mark; a normal queued row leaves
+  `run_id` empty until a run consumes it), and the transcript's queued items
+  carry additive `now`. The run checks for such a row before each tool call
+  of a step and, while a `read` effect call runs, on every progress notify
+  and once a second; it cancels that call's context and records an error
+  result naming the tool and `tool_use_id` ("interrupted by the operator"),
+  and gives later uses of the step the same result without running them.
+  Calls of any other effect class are never cancelled. A subagent run whose
+  starting call was cancelled this way fails as stopped. The next step
+  consumes the queue as before, so the tool results lead the user turn and
+  the operator's text follows. With `now` on a `parked` run, a pending
+  `ask_operator` question is answered with the text (`Service.Answer`);
+  otherwise `Service.TakeParked` closes the pending uses in one transaction
+  while the run is still parked (`loop.InterruptParked`: started or unstarted
+  calls get the interrupted error, settled calls their stored result),
+  appends the message, dismisses the run's pending permission requests and
+  withdraws their pushes, then resumes the run through the operator resume
+  claim, answering `run_id`. `DELETE /threads/{id}/queued/{queued_id}`
+  (`assistant.message.unsend`, both prefixes) deletes an unconsumed queued
+  row and returns its `id` and `text`; a consumed one answers 409 `conflict`,
+  an unknown one 404.
   An action that changed state and then failed is audited `failed`.
   Space file uploads and deletes, and agent `file_write`, each write one
   `operation_audit` row (`knowledge.space.file.upload|delete`,
