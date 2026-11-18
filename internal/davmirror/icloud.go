@@ -157,6 +157,9 @@ func DAVClient(ctx context.Context, login Login, endpoint, capability string) (*
 	}
 	client.cache, client.credential = cacheKey(capability, endpoint, creds.AppleID, creds.Password), connections.CredentialTag(creds.Password)
 	client.connection, client.capability = ICloudID(login.Account), capability
+	if login.DAV != nil {
+		client.connection = login.DAV.ID()
+	}
 	return client, nil
 }
 
