@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -257,5 +258,139 @@ func TestDAVRefusalBacksOffAcrossARestartAndASuccessResetsIt(t *testing.T) {
 	sync()
 	if _, _, hold := storedCardDAV(t, dir); hold.Refusals != 1 || !near(hold.Until, time.Now().Add(5*time.Hour)) {
 		t.Errorf("a refusal after a success with Retry-After 5 hours stored %+v, want 1 refusal and 5 hours", hold)
+	}
+}
+
+func TestADAVRefusalHoldSurvivesTheHostDroppingAndDeclaringTheConnectionAgain(t *testing.T) {
+	dir, dav := partitionedICloud(t)
+	base, logs, _ := startServeWith(t, dir, true)
+	token := localAPIToken(t, "api")
+	site := &apiSite{t: t, base: base}
+	sync := func() apiReply { return site.do(http.MethodPost, "/api/v1/contacts/sync", token, nil) }
+	if state, _ := capabilityResult(testICloudConnection(t), davmirror.CapabilityCardDAV); state != "ok" {
+		t.Fatalf("carddav before the refusal = %s", state)
+	}
+	dav.set(func(p *partitionedDAV) { p.partitionRefuses = true })
+	sync()
+	_, reason, hold := storedCardDAV(t, dir)
+	if hold.Refusals != 1 {
+		t.Fatalf("after the refusal %q %+v, want one refusal held", reason, hold)
+	}
+	for _, want := range []string{"dav request failed", "dav requests paused after a refusal"} {
+		line := ""
+		for l := range strings.SplitSeq(logs.String(), "\n") {
+			if strings.Contains(l, want) {
+				line = l
+			}
+		}
+		if !strings.Contains(line, "INTEGRATION=icloud/icloud") || !strings.Contains(line, "CAPABILITY=carddav") {
+			t.Errorf("the %q log line %q does not name the connection and the capability", want, line)
+		}
+	}
+
+	host := filepath.Join(dir, "host.toml")
+	declared, err := os.ReadFile(host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.Index(string(declared), "\n[connections.\"icloud/icloud\"]")
+	if cut < 0 {
+		t.Fatalf("the host file declares no icloud connection:\n%s", declared)
+	}
+	if err := os.WriteFile(host, declared[:cut], 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runApp(t, "connections", "list")
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	var state, rowReason string
+	if err := d.Read.QueryRow("SELECT state, reason FROM connections WHERE id = 'icloud/icloud'").Scan(&state, &rowReason); err != nil {
+		t.Fatal(err)
+	}
+	if state != "disabled" || rowReason != "removed from host configuration" {
+		t.Fatalf("the dropped connection is %s %q, want disabled as removed from the host", state, rowReason)
+	}
+	if err := os.WriteFile(host, declared, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dav.drain()
+	runApp(t, "connections", "check")
+	sync()
+	if got := dav.drain(); len(got) != 0 {
+		t.Errorf("declaring the held connection again sent %q", got)
+	}
+	if after, afterReason, afterHold := storedCardDAV(t, dir); after != "failing" || afterHold != hold || afterReason != reason {
+		t.Errorf("declaring the held connection again stored %s %q %+v, want the held %q %+v", after, afterReason, afterHold, reason, hold)
+	}
+}
+
+func TestAChallengeLessCardDAVRefusalFailsWithoutBlamingThePasswordAndLeavesCalDAVRunning(t *testing.T) {
+	requireCipher(t)
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	dir, srv := davFixture(t)
+	sharedICloudHost(t, dir, davPassword)
+	t.Setenv(davmirror.CalDAVEnv, srv.URL+"/")
+	t.Setenv(davmirror.CardDAVEnv, srv.URL+"/")
+	srv.RefuseCards.Store(true)
+	view := testICloudConnection(t)
+	card, cardReason := capabilityResult(view, davmirror.CapabilityCardDAV)
+	if card != "failing" || !strings.Contains(cardReason, "iCloud refused the root request on the configured host (HTTP 401, no WWW-Authenticate challenge) without asking for a password again") ||
+		strings.Contains(cardReason, "app password") {
+		t.Errorf("a challenge-less carddav root refusal = %s %q, want failing without a word on the app password", card, cardReason)
+	}
+	if cal, calReason := capabilityResult(view, davmirror.CapabilityCalDAV); cal != "ok" {
+		t.Errorf("caldav beside the carddav refusal = %s %q, want ok", cal, calReason)
+	}
+	if view.State != "failing" {
+		t.Errorf("the connection beside one refused capability is %s %q, want failing, not needs_reauth", view.State, view.Reason)
+	}
+	if _, _, hold := storedCardDAV(t, dir); hold.Refusals != 1 {
+		t.Fatalf("the carddav refusal stored %+v, want one refusal held", hold)
+	}
+
+	cards := srv.CardRequests.Load()
+	if got := runApp(t, "contacts", "sync"); got.code == cli.ExitOK || !strings.Contains(got.stderr, "skipped, backing off until ") {
+		t.Errorf("contacts sync during the carddav hold = %d %q %q, want the skip", got.code, got.stdout, got.stderr)
+	}
+	if got := runApp(t, "calendar", "sync"); got.code != cli.ExitOK {
+		t.Errorf("calendar sync during the carddav hold = %d %q %q, want it to run", got.code, got.stdout, got.stderr)
+	}
+	runApp(t, "connections", "check")
+	if got := srv.CardRequests.Load() - cards; got != 0 {
+		t.Errorf("syncs and a check during the carddav hold sent %d carddav requests", got)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	var calState string
+	if err := d.Read.QueryRow(`SELECT json_extract(value, '$.state') FROM connections, json_each(results_json)
+		WHERE connections.id = 'icloud/icloud' AND json_extract(value, '$.capability') = 'caldav'`).Scan(&calState); err != nil {
+		t.Fatal(err)
+	}
+	if after, _, hold := storedCardDAV(t, dir); calState != "ok" || after != "failing" || hold.Refusals != 1 {
+		t.Errorf("after the syncs and the check caldav is %s and carddav %s %+v, want ok beside the held failing carddav", calState, after, hold)
+	}
+}
+
+func TestAPassingConnectionTestEndsADAVHoldWhileAPassingTraceSavesNothing(t *testing.T) {
+	dir, dav := partitionedICloud(t)
+	dav.set(func(p *partitionedDAV) { p.partitionRefuses = true })
+	testICloudConnection(t)
+	state, reason, hold := storedCardDAV(t, dir)
+	if state != "failing" || hold.Refusals != 1 {
+		t.Fatalf("the refused test stored %s %q %+v, want one refusal held", state, reason, hold)
+	}
+	dav.set(func(p *partitionedDAV) { p.partitionRefuses = false })
+
+	if got := runApp(t, "connections", "test", "icloud/icloud", "--trace", "carddav"); got.code != cli.ExitOK {
+		t.Fatalf("traced test after the refusal cleared = %d %q %q, want a pass", got.code, got.stdout, got.stderr)
+	}
+	if after, afterReason, afterHold := storedCardDAV(t, dir); after != state || afterReason != reason || afterHold != hold {
+		t.Errorf("a passing trace stored %s %q %+v, want the held %s %q %+v kept", after, afterReason, afterHold, state, reason, hold)
+	}
+
+	view := testICloudConnection(t)
+	if card, cardReason := capabilityResult(view, davmirror.CapabilityCardDAV); card != "ok" {
+		t.Errorf("connections test after the refusal cleared = %s %q, want ok", card, cardReason)
+	}
+	if after, afterReason, afterHold := storedCardDAV(t, dir); after != "ok" || afterHold.Refusals != 0 {
+		t.Errorf("a passing connections test stored %s %q %+v, want ok with no hold", after, afterReason, afterHold)
 	}
 }

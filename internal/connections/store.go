@@ -395,7 +395,8 @@ func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.H
 		takeover := currentSource == SourceOperator
 		hostOwns := currentSource == SourceHost || takeover
 		redeclared := currentSource == SourceHost && currentEnabled == 0 && currentState == Disabled && currentReason == reasonRemovedFromHost
-		changed := takeover || redeclared || currentTransport != string(transportJSON) || hostOwns && currentConfig != string(configJSON)
+		reset := takeover || currentTransport != string(transportJSON) || hostOwns && currentConfig != string(configJSON)
+		changed := reset || redeclared
 		if takeover {
 			if err := s.refuseCredentialMove(ctx, tx, id, currentConfig, string(configJSON), hc.CredentialFiles); err != nil {
 				return err
@@ -412,9 +413,9 @@ func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.H
 				"reason = CASE WHEN ? THEN '' ELSE reason END, "+
 				"checked_at = CASE WHEN ? THEN NULL ELSE checked_at END, "+
 				"last_ok_at = CASE WHEN ? THEN NULL ELSE last_ok_at END, "+
-				"results_json = CASE WHEN ? THEN '{}' ELSE results_json END, updated_at = ? "+
+				"results_json = CASE WHEN ? THEN '{}' WHEN ? THEN "+keptHolds+" ELSE results_json END, updated_at = ? "+
 				"WHERE id = ?",
-			labelOr(hc.Label, string(id)), string(transportJSON), revision, redeclared, changed, changed, changed, changed, changed, s.stamp(), id); err != nil {
+			labelOr(hc.Label, string(id)), string(transportJSON), revision, redeclared, changed, changed, changed, changed, reset, redeclared, s.stamp(), id); err != nil {
 			return err
 		}
 		if hostOwns && changed {

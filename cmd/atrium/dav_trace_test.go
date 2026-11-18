@@ -77,7 +77,7 @@ func TestConnectionTraceShowsEachDAVExchangeWithoutSecretsOrSaving(t *testing.T)
 		"< X-Apple-User-Partition: 7\n",
 		"< HTTP/1.1 401 Unauthorized\n",
 		"< Www-Authenticate: X-MobileMe-AuthToken realm=\"Newcastle\", Basic realm=\"Newcastle\"\n",
-		"result: carddav ok 1 collection\n",
+		"result: carddav ok 1 collection\nsaved: nothing, the connection keeps its earlier state; run atrium connections test icloud/icloud to record a result\n",
 	)
 	traceMatch(t, "carddav", card.stdout, `user: <user:[a-p]{6}>, from the icloud_apple_id setting; the same as the mail login: yes\n`)
 	traceMatch(t, "carddav", card.stdout, `< time: [0-9]+ ms\n`)
@@ -100,6 +100,7 @@ func TestConnectionTraceShowsEachDAVExchangeWithoutSecretsOrSaving(t *testing.T)
 	traceSecretFree(t, "refused carddav", refused.stdout)
 	traceContains(t, "refused carddav", refused.stdout,
 		"result: carddav failing iCloud accepted the app password but refused the home set request on the partition host",
+		"\nsaved: nothing, the connection keeps its earlier state; run atrium connections test icloud/icloud to record a result\n",
 		" repeat 1 of 2 of the home set step\n> PROPFIND https://"+partitionHost+":"+dav.port+"/<n:",
 		" repeat 2 of 2 of the home set step\n",
 		"\nrepeat: the home set request failed 2 of 2 times\n",

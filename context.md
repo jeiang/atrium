@@ -580,7 +580,8 @@ claims about the running application. Operator contracts are in
   keeps the explicit test. `connections test <id> --trace <capability>` runs a
   kind's `Trace` hook (iCloud `caldav`/`carddav`) on a read-only lease: the
   same discovery printed request by request with ids, users and addresses
-  masked to keyed six-letter tags, response times, and nothing saved;
+  masked to keyed six-letter tags, response times, and nothing saved (its
+  last line says so and names the plain test that records a result);
   `--repeat <n>` (at most 5, 3 s apart) resends the last refused request.
   `internal/davmirror` keeps an in-memory discovery cache per capability,
   endpoint and credential hash (home set, collections, relisted hourly,

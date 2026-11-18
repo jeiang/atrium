@@ -193,7 +193,7 @@ func (l *Lease) refused(ctx context.Context, status int, retryAfter time.Duratio
 	}
 	h := prev.Next(tag, retryAfter, now)
 	holds.Store(l.holdKey(capability), h)
-	log.Warn("requests paused after a refusal", logx.Integration, string(l.id), "capability", capability, "status", status, "refusals", h.Refusals, "until", h.Ends())
+	log.Warn("requests paused after a refusal", logx.Integration, string(l.id), logx.Capability, capability, "status", status, "refusals", h.Refusals, "until", h.Ends())
 	report(l.store.reg, outcome{ID: l.id, Revision: l.revision, Capability: capability, Held: &h, Refused: refused})
 	return h
 }
@@ -250,6 +250,9 @@ func (s *Store) RecordHold(ctx context.Context, o outcome) error {
 	}
 	return nil
 }
+
+const keptHolds = "CASE WHEN EXISTS (SELECT 1 FROM json_each(connections.results_json) WHERE json_extract(value, '$.data.refusals') > 0) " +
+	"THEN (SELECT json_group_array(json(value)) FROM json_each(connections.results_json) WHERE json_extract(value, '$.data.refusals') > 0) ELSE '{}' END"
 
 func carryHolds(results, prior []Result) {
 	for i := range results {

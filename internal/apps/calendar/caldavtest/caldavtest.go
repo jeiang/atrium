@@ -27,6 +27,8 @@ type Server struct {
 	User         string
 	Password     string
 	Unavailable  atomic.Bool
+	RefuseCards  atomic.Bool
+	CardRequests atomic.Int64
 	cardUser     string
 	logins       []string
 }
@@ -112,9 +114,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	if kind == "carddav" && cardUser != "" && user != cardUser && r.URL.Path != "/" {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
+	if kind == "carddav" {
+		s.CardRequests.Add(1)
+		if s.RefuseCards.Load() || cardUser != "" && user != cardUser && r.URL.Path != "/" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

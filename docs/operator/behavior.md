@@ -380,7 +380,8 @@ the host file is disabled with the reason `removed from host configuration`,
 keeps its row and credentials, and is announced once, at the next start of
 `atrium serve` even when a CLI command opened the database first. Declaring it again
 enables it as `untested` with its earlier results cleared, so the next check
-tests it. A host connection the operator disconnected stays disconnected:
+tests it, except that a capability paused after a refusal keeps its pause until
+it ends or the credential changes. A host connection the operator disconnected stays disconnected:
 removing it from the host file or declaring it again does not enable or
 announce it. Connection notices open the Connections settings page,
 `/settings/connections`. A failing or needs-reauth notice ends with
@@ -406,7 +407,8 @@ A built-in connection that atrium creates itself (Open-Meteo, Web fetch, TMDB,
 EZTV, Embedding) follows the apps that need it while it is still
 operator-owned. When every app that needs it is off, it is disabled with the
 reason `its app is off`; when one of those apps is turned on again, it is
-enabled as `untested` with its results cleared and tested on the next pass. A
+enabled as `untested` with its results cleared and tested on the next pass,
+again keeping any refusal pause. A
 connection the operator or the host file created is never written this way.
 While no app that is on needs it, its view shows `idle: "its app is off"` and it
 gets no scheduled test, no state-change notice, and no repair; it keeps its
@@ -419,7 +421,7 @@ and reported.
 `POST /api/v1/connections/{kind}/{name}/disable` (`connections.disable`) turns
 an operator-owned connection off with the reason `turned off by the operator`;
 `.../enable` (`connections.enable`) turns it back on as `untested`, or
-`unconfigured` when it was never configured. Both are operator-only, take no
+`unconfigured` when it was never configured, keeping any refusal pause. Both are operator-only, take no
 body, return the connection view, and succeed without a change when the row is
 already in that state. A host-declared connection, a connection whose kind
 this version does not support, and a built-in connection that is off because
@@ -483,9 +485,12 @@ path segments and numbers of five or more digits are masked as `<user:…>`,
 value under the same app password, so two masked ids can be compared across
 traces; the app password itself shows as `<password>`. `--repeat <n>` (1 to 5)
 then sends the last refused request again `n` times, 3 seconds apart, and ends
-with `repeat: the <step> request failed <k> of <n> times`. The last line is
-`result: <capability> <state> <reason>`, and the command exits 1 when that state
-is failing or needs reauth. `--trace` with `--all` or `--json`, and `--repeat`
+with `repeat: the <step> request failed <k> of <n> times`. It ends with
+`result: <capability> <state> <reason>` and then
+`saved: nothing, the connection keeps its earlier state; run atrium connections test <id> to record a result`:
+a trace never records a result or a pause, so the row keeps the state it had.
+The command exits 1 when the traced result is failing or needs reauth.
+`--trace` with `--all` or `--json`, and `--repeat`
 without `--trace` or outside 1 to 5, are usage errors.
 
 Mail and iCloud connections also learn from real use while `serve` runs. An
@@ -494,11 +499,16 @@ capability failing, and a login the server refuses marks it as needing reauth,
 as the scheduled check does. An SMTP session that cannot connect or greet marks
 `smtp` failing, and a refused login (codes 530 to 535) marks it as needing
 reauth. A
-contacts or calendar mirror sync whose first request the server refuses (401
-or 403) marks `carddav` or `caldav` as needing reauth. A refusal after that
-first request accepted the password, a server error, a network error, a TLS
+contacts or calendar mirror sync or check refused (401 or 403) with a
+`WWW-Authenticate` challenge before any request of that run accepted the
+password marks `carddav` or `caldav` as needing reauth. A refusal with no
+challenge before then marks it failing as `iCloud refused the <step> request
+... without asking for a password again`, which says nothing about the
+password. A refusal after an earlier request of the run accepted the password
+reads `iCloud accepted the app password but refused ...`. These, a server
+error, a network error, a TLS
 error, or a discovery step that points at a host the credential may not go to
-marks it failing, and the reason names the step. A refusal or server error
+mark it failing, and the reason names the step. A refusal or server error
 also names the host class (the configured host, the partition host the root
 named, or a sibling host) without the request address, and a refusal says
 whether it carried a `WWW-Authenticate` challenge and lists the other

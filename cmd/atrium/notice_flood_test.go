@@ -31,6 +31,7 @@ func TestAFlappingScheduledSyncSendsOneNoticePerCauseAndABoundedNumberWhileItFla
 	forward := httputil.NewSingleHostReverseProxy(upstream)
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if refuse.Load() {
+			w.Header().Set("WWW-Authenticate", `Basic realm="caldavtest"`)
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
