@@ -70,7 +70,7 @@ test.describe('chat list', () => {
     );
     await expect(list.getByRole('listitem')).toHaveCount(30);
     await page.getByRole('button', { name: 'Show more chats' }).click();
-    await expect(list.getByRole('listitem')).toHaveCount(41);
+    await expect(list.getByRole('listitem')).toHaveCount(42);
     await expect(page.getByRole('button', { name: 'Show more chats' })).toHaveCount(0);
     await list.getByRole('link', { name: /Winter tyre sizes/ }).click();
     await expect(page).toHaveURL(/\/chat\/9$/);
