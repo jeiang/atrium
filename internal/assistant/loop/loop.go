@@ -226,7 +226,7 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 		if o.Now != nil {
 			now = o.Now()
 		}
-		watched := progress.Watched(runID)
+		watched := progress.Watched(d.Write, runID)
 		if ferr := journal.FinishRun(ctx, d.Write, runID, journal.Failed, now, new(err.Error())); ferr == nil && o.Settled != nil {
 			if failed, gerr := journal.GetRun(ctx, d.Read, runID); gerr == nil && failed != nil {
 				o.Settled(ctx, failed, err, watched)
@@ -245,7 +245,7 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 	stopBeat := s.heartbeat(ctx)
 	err = s.body(ctx)
 	stopBeat()
-	watched := progress.Watched(runID)
+	watched := progress.Watched(d.Write, runID)
 	var api *anthropic.APIError
 	if errors.As(err, &api) && api.SpendCapped() {
 		err = inference.SpendCap()
