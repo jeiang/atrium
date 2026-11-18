@@ -38,6 +38,7 @@
     gap: var(--s-1);
     justify-self: start;
     min-block-size: var(--target);
+    min-inline-size: var(--target);
     font-size: var(--t-sm);
   }
 
@@ -156,6 +157,7 @@
     align-items: center;
     gap: var(--s-1);
     min-block-size: var(--target);
+    min-inline-size: var(--target);
     padding: 0 var(--s-4);
     font: inherit;
     font-size: var(--t-sm);

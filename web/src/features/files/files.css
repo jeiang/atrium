@@ -13,6 +13,7 @@
     gap: var(--s-1);
     justify-self: start;
     min-block-size: var(--target);
+    min-inline-size: var(--target);
     font-size: var(--t-sm);
   }
 
