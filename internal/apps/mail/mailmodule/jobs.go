@@ -2,6 +2,7 @@ package mailmodule
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	mailapp "github.com/jeiang/atrium/internal/apps/mail/application"
@@ -10,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/apps/mail/run"
 	"github.com/jeiang/atrium/internal/apps/mail/scans"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/scheduler"
@@ -35,6 +37,9 @@ func (m Module) syncJob(env config.Env) scheduler.Definition {
 				return scheduler.Result{}, err
 			}
 			if _, err := mailapp.New(d, cfg, env, mail.WallClock).WithOpen(m.Clients(cfg)).WithClassifiers(m.classifiers).Sync(ctx, mailapp.SyncInput{Accounts: accounts}); err != nil {
+				if unmet, ok := errors.AsType[*connections.Unmet](err); ok {
+					return scheduler.Result{Status: scheduler.StatusSkippedDependency, Error: new(unmet.Error())}, nil
+				}
 				return scheduler.Result{}, err
 			}
 			return scheduler.Result{Status: scheduler.StatusOK}, nil

@@ -25,6 +25,7 @@ const (
 	StatusRequested           Status = "requested"
 	StatusRefused             Status = "refused"
 	workerLost                       = "worker lost"
+	interruptedOwner                 = "interrupted"
 )
 
 func (s Status) Terminal() bool { return s != StatusRunning }

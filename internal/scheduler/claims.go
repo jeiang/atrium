@@ -348,6 +348,17 @@ func (s *Scheduler) release(ctx context.Context, c Claim) error {
 	})
 }
 
+func (s *Scheduler) interrupt(ctx context.Context, c Claim) error {
+	return s.db.WithTx(ctx, func(tx *sql.Tx) error {
+		if err := clearClaim(ctx, tx, c, "lease_until = 0"); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, "UPDATE job_runs SET owner = ? WHERE id = ? AND owner = ? AND status = ?",
+			interruptedOwner, c.JobRunID, c.Owner, StatusRunning)
+		return err
+	})
+}
+
 func clearClaim(ctx context.Context, tx *sql.Tx, c Claim, set string) error {
 	ok, err := db.Changed(tx.ExecContext(ctx, "UPDATE jobs SET "+set+" WHERE id = ? AND lease_owner = ? AND last_run_id = ?",
 		c.Job.ID, c.Owner, c.JobRunID))

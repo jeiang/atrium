@@ -1038,7 +1038,9 @@ claims about the running application. Operator contracts are in
   is recorded on its release and is not an add failure). The run error names
   the capability, the connection and the repair id. These rows do not
   coalesce. The `atrium packages poll` CLI and the channels poll API keep their
-  results.
+  results. The `mail/sync` job records `skipped_dependency` when an account's
+  connection is unavailable, such as an IMAP capability held after refusals
+  with no request sent.
   Nightly
   dreaming creates and associates every child thread in one transaction and
   prepares every child run with no spend allowance before the first
@@ -1071,8 +1073,10 @@ claims about the running application. Operator contracts are in
   the old one; the assistant recovery adapter then interrupts only those of
   the job's runs whose own journal lease expired or whose owner is the
   previous claimant's process when that process is gone, resumes them
-  synchronously and settles the run from their outcome (no threads is
-  `worker lost`). A run another live process executes, such as one the
+  synchronously and settles the run from their outcome. A run with no
+  threads is `worker lost`, except one the drain released: the release marks
+  its owner `interrupted`, and the claimant that takes it over runs the job
+  again from the start. A run another live process executes, such as one the
   operator approved and `serve` resumed, stays running and the job stays
   released until it ends. The global interrupted-run resume
   skips threads of running job runs.

@@ -58,6 +58,11 @@ SIGTERM starts a bounded drain. New work and streams stop, running work has a
 105-second window, and effect/interrupted-run settlement has another 15 seconds.
 An assistant run stopped by the drain is marked interrupted and resumes as soon
 as serve starts again; after a crash it resumes once its 30-minute lease expires.
+A scheduled job run the drain stops stays running and runs again from the
+start when serve starts, with no failure notice; a scheduled run left by a
+crash with no assistant thread ends as an error, `worker lost`. Mail writes
+already done keep their ledger rows, and a write with an unknown outcome stays
+blocked; the new run does not repeat it.
 The database is checkpointed and closed before the serve lock is released.
 A stop that cannot finish cleanly is a failure, not a successful restart point.
 

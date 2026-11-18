@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/apps/mail/mailtest"
 	mailrun "github.com/jeiang/atrium/internal/apps/mail/run"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/passrun"
 )
 
 func TestServeWatchWaitsAnHourAfterARefusedLogin(t *testing.T) {
@@ -75,5 +77,41 @@ func TestServeWatchWaitsAnHourAfterARefusedLogin(t *testing.T) {
 	}
 	if home := watchHealth(t, opsBase())["mail-watch/home"]; home.Status != "backoff" || home.Restarts != 1 {
 		t.Fatalf("home watch after the restart %+v, want one restart held in backoff", home)
+	}
+}
+
+func TestAScheduledSyncInsideALoginHoldIsSkippedNotFailed(t *testing.T) {
+	dir, embed := keyedMailFixture(t)
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, embed, filepath.Join(testRoot, "host", "anthropic.key"),
+		mailAccount{"home", "icloud", "me@home.test", "home-pass", false}))
+	var dials atomic.Int32
+	t.Cleanup(imapclient.UseDialer(func(context.Context, config.AccountSpec, string) (mail.Conn, error) {
+		dials.Add(1)
+		return nil, fmt.Errorf("%w: AUTHENTICATIONFAILED Invalid credentials", mail.ErrLoginRefused)
+	}))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	declareJobsAndParkThem(t, d)
+	tick := func() {
+		t.Helper()
+		asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE declaration_key = ?", float64(time.Now().Unix())-1, mailrun.SyncJobKey)
+		runApp(t, "agent", "tick")
+	}
+
+	tick()
+	if status, text := schedulerStatus(t, d, passrun.Sync); status != "error" || dials.Load() == 0 {
+		t.Fatalf("the refused sync = %s %q after %d dials, want an error from the refused login", status, text, dials.Load())
+	}
+	dialed, failed := dials.Load(), titledNotices(t, d, "Failed: "+passrun.Sync)
+	asstExec(t, d, "UPDATE job_runs SET status = 'ok', error = NULL")
+
+	tick()
+	if status, text := schedulerStatus(t, d, passrun.Sync); status != "skipped_dependency" || !strings.Contains(text, "no request was sent") {
+		t.Fatalf("the sync inside the login hold = %s %q, want skipped_dependency naming the hold", status, text)
+	}
+	if n := dials.Load(); n != dialed {
+		t.Fatalf("the sync inside the login hold dialed %d times", n-dialed)
+	}
+	if n := titledNotices(t, d, "Failed: "+passrun.Sync); n != failed {
+		t.Fatalf("the skipped sync sent %d failure notices", n-failed)
 	}
 }

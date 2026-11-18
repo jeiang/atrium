@@ -217,6 +217,9 @@ func (s *Scheduler) recovery(ctx context.Context, run Run) (Result, error) {
 		return Result{}, err
 	}
 	if len(threads) == 0 {
+		if run.Claim.Previous == interruptedOwner {
+			return s.work(run.Claim.Job)(ctx, run)
+		}
 		lost := workerLost
 		return Result{Status: StatusError, Error: &lost}, nil
 	}
@@ -354,7 +357,7 @@ func (s *Scheduler) execute(ctx context.Context, claim Claim, fn func(context.Co
 		if err := s.handOver(done, claim); err != nil {
 			log.Error(fmt.Sprintf("job %d: interrupting its runs failed", id), logx.Job, id, logx.Err, err)
 		}
-		released := s.release(done, claim)
+		released := s.interrupt(done, claim)
 		s.settle(done, claim, released)
 		return released
 	case err != nil && errors.Is(context.Cause(limited), errTimedOut):

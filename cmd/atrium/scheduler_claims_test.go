@@ -297,8 +297,8 @@ func TestSchedulerResumesAnInterruptedJobRunUnderANewClaim(t *testing.T) {
 		t.Fatalf("first serve exit %d: %s", ran.code, ran.stderr)
 	}
 	l := weeklyLeaseOf(t, d)
-	if l.run != held.run || l.owner == nil || *l.owner != *held.owner || l.leaseUntil == nil || *l.leaseUntil != 0 {
-		t.Errorf("after the signal: run %d owner %v lease until %v, want run %d still owned by %s with its lease released", l.run, l.owner, l.leaseUntil, held.run, *held.owner)
+	if l.run != held.run || l.owner == nil || *l.owner != "interrupted" || l.leaseUntil == nil || *l.leaseUntil != 0 {
+		t.Errorf("after the signal: run %d owner %v lease until %v, want run %d marked interrupted with its lease released", l.run, l.owner, l.leaseUntil, held.run)
 	}
 	if n := asstCount(t, d, weeklyRunning); n != 1 {
 		t.Errorf("weekly review running runs = %d, want the interrupted one", n)
