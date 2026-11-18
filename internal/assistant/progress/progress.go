@@ -8,7 +8,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/textx"
 
@@ -136,7 +135,7 @@ func WithTool(ctx context.Context, runID int64, id string) context.Context {
 }
 
 type Writer struct {
-	q         db.Querier
+	q         *sql.DB
 	runID     int64
 	now       func() float64
 	kind      string
@@ -147,7 +146,7 @@ type Writer struct {
 	parent    parentTool
 }
 
-func NewWriter(ctx context.Context, q db.Querier, runID int64, now func() float64, stop <-chan struct{}) *Writer {
+func NewWriter(ctx context.Context, q *sql.DB, runID int64, now func() float64, stop <-chan struct{}) *Writer {
 	parent, _ := ctx.Value(parentToolKey{}).(parentTool)
 	return &Writer{q: q, runID: runID, now: now, stop: stop, parent: parent}
 }
