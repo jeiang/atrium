@@ -91,11 +91,31 @@ func TestDailyNudgesDigestPostsWithoutAModel(t *testing.T) {
 	}
 	exec("UPDATE ntfy_channels SET content = 'title' WHERE name = 'assistant'")
 	exec("UPDATE jobs SET state = 'active', next_due = ?, lease_owner = NULL, lease_until = NULL WHERE name = 'daily-nudges'", now)
+	before := push.count()
 	cancel, done = start()
-	second := browser.decrypt(t, push.wait(t, 2).body)
+	waitFor(t, func() bool {
+		var delivered int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM notifications WHERE channel = 'assistant' AND title = 'Morning digest' AND delivered = 1").Scan(&delivered); err != nil {
+			t.Fatal(err)
+		}
+		return delivered == 2
+	})
 	cancel()
 	<-done
-	if strings.Contains(fmt.Sprint(second), "Call the dentist") || strings.Contains(fmt.Sprint(second), "Send invoice") {
-		t.Fatalf("private digest leaked titles: %v", second)
+	push.mu.Lock()
+	later := append([]pushRequest(nil), push.received[before:]...)
+	push.mu.Unlock()
+	private := 0
+	for _, p := range later {
+		got := browser.decrypt(t, p.body)
+		if strings.Contains(fmt.Sprint(got), "Call the dentist") || strings.Contains(fmt.Sprint(got), "Send invoice") {
+			t.Fatalf("private digest leaked titles: %v", got)
+		}
+		if got["title"] == "atrium" {
+			private++
+		}
+	}
+	if private != 1 {
+		t.Fatalf("title-only digest pushes = %d, want 1", private)
 	}
 }
