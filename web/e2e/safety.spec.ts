@@ -391,7 +391,7 @@ const commands: Command[] = [
     method: 'PUT',
     path: '/apps/[^/]+/enabled',
     open: '/apps/directory',
-    press: (page) => page.getByRole('switch', { name: /^Grafana(\s|$)/ }).click(),
+    press: (page) => page.getByRole('switch', { name: /^Server ops(\s|$)/ }).click(),
   },
   {
     name: 'backup now',
