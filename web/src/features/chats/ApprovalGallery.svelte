@@ -22,7 +22,7 @@
     return queryClient.getQueryData<ProposalDetail>(['proposal', id])?.status === 'pending';
   }
 
-  async function decideAll(decision: 'approve' | 'deny'): Promise<void> {
+  async function onDecideAll(decision: 'approve' | 'deny'): Promise<void> {
     if (busy) return;
     busy = decision;
     const todo = ids.filter(open);
@@ -51,12 +51,16 @@
         variant="primary"
         pending={busy === 'approve'}
         disabled={busy === 'deny'}
-        onclick={() => decideAll('approve')}>Approve all</Button
+        onclick={() => onDecideAll('approve')}
+        >Approve all</Button
       >
-      <Button pending={busy === 'deny'} disabled={busy === 'approve'} onclick={() => decideAll('deny')}>Deny all</Button>
+      <Button pending={busy === 'deny'} disabled={busy === 'approve'} onclick={() => onDecideAll('deny')}
+        >Deny all</Button
+      >
     </div>
   </div>
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <!-- biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling gallery needs keyboard access -->
   <ul class="asks__track" aria-labelledby="{uid}-title" tabindex="0">
     {#each ids as id (id)}
       <li class="asks__card">

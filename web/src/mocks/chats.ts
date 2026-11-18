@@ -357,36 +357,34 @@ const proposals = new Map<number, ProposalDetail>([
       [602, 'Bin day', 'Tuesday.', 'Wednesday.'],
       [603, 'Gate code', '1234.', '4321.'],
     ] as const
-  ).map(
-    ([id, subject, before, after]): [number, ProposalDetail] => [
+  ).map(([id, subject, before, after]): [number, ProposalDetail] => [
+    id,
+    {
       id,
-      {
-        id,
+      kind: 'permission',
+      title: `Edit K${id - 500}`,
+      status: 'pending',
+      actions: [],
+      blocked: false,
+      undoable: false,
+      created_at: BASE - 200,
+      link_thread_id: 15,
+      payload: {
         kind: 'permission',
-        title: `Edit K${id - 500}`,
-        status: 'pending',
-        actions: [],
-        blocked: false,
-        undoable: false,
-        created_at: BASE - 200,
-        link_thread_id: 15,
-        payload: {
-          kind: 'permission',
-          args: [],
-          thread_id: 15,
-          run_id: 109,
-          change: {
-            kind: 'guarded_change',
-            title: `Edit K${id - 500}`,
-            subject,
-            rule: `K${id - 500} is operator-owned`,
-            fields: [{ name: 'Body', before, after }],
-            note: '',
-          },
+        args: [],
+        thread_id: 15,
+        run_id: 109,
+        change: {
+          kind: 'guarded_change',
+          title: `Edit K${id - 500}`,
+          subject,
+          rule: `K${id - 500} is operator-owned`,
+          fields: [{ name: 'Body', before, after }],
+          note: '',
         },
       },
-    ],
-  ),
+    },
+  ]),
 ]);
 
 let connections = 0;

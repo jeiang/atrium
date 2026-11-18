@@ -1068,7 +1068,8 @@ test.describe('asks from one step', () => {
     await openChat(page, '/chat/15');
     const approvals: string[] = [];
     page.on('request', (request) => {
-      if (request.method() === 'POST' && /\/approvals\/\d+\/approve$/.test(request.url())) approvals.push(request.url());
+      if (request.method() === 'POST' && /\/approvals\/\d+\/approve$/.test(request.url()))
+        approvals.push(request.url());
     });
     await gallery(page).getByRole('button', { name: 'Approve all' }).click();
     await expect(page.getByText('Sent the reminder to 6 people.')).toHaveCount(1);
