@@ -817,6 +817,18 @@ command instead, and scheduled runs use the scheduled run push above.
 These pushes follow the notifications module and each channel's content
 setting and are not limited by the caps on the assistant's own notify tool.
 
+When atrium restarts while a chat run is in the middle of a change (a tool
+call that writes, such as a knowledge record or a task), the run waits for
+you instead of continuing on its own. The chat names the call and its
+arguments, keeps your queued messages visible, and offers Continue. Continue
+does not repeat the call unless it is one you approved in the chat: the
+assistant is told it may or may not have happened and checks before it does
+anything else, and it reads your queued messages in the same run. A stop you
+asked for before Continue does not end the continued run. Messages still
+queued when a run stops or fails are sent with your next message, ahead of
+it; the chat labels them that way. Tool calls such a run left unfinished are
+not run again: the assistant is told whether each one had started.
+
 ## Assistant and daily work
 
 Home is `/chat`, with Needs you, the agenda, and recent activity in the initial

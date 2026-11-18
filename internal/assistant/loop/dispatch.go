@@ -396,6 +396,10 @@ func (x *dispatcher) settle(ctx context.Context, use ToolUse, call *journal.Tool
 		}
 		return x.perform(ctx, x.lookup(use.Name), call.ID, use)
 	}
+	return closeCall(ctx, x.d, use, call, x.now())
+}
+
+func closeCall(ctx context.Context, d *db.DB, use ToolUse, call *journal.ToolCall, now float64) (json.RawMessage, error) {
 	switch call.State {
 	case journal.Error:
 		text := "failed"
@@ -404,9 +408,12 @@ func (x *dispatcher) settle(ctx context.Context, use ToolUse, call *journal.Tool
 		}
 		return toolResult(use.ID, text, true), nil
 	case journal.OK:
+		if call.Result != nil {
+			return toolResult(use.ID, *call.Result, false), nil
+		}
 		return toolResult(use.ID, CompletedUncaptured, true), nil
 	}
-	if err := journal.FinishToolCall(ctx, x.d.Write, call.ID, journal.Unknown, x.now(), new(Verify), nil, nil); err != nil {
+	if err := journal.FinishToolCall(ctx, d.Write, call.ID, journal.Unknown, now, new(Verify), nil, nil); err != nil {
 		return nil, err
 	}
 	return toolResult(use.ID, Verify, true), nil

@@ -529,6 +529,29 @@ type ThreadView struct {
 	LastOperatorSeq *int64
 	BranchedFrom    *threads.Thread
 	Question        *Question
+	Held            *Held
+}
+
+type Held struct {
+	RunID     int64  `json:"run_id"`
+	ToolUseID string `json:"tool_use_id"`
+	Tool      string `json:"tool"`
+	Args      string `json:"args"`
+}
+
+func heldOf(ctx context.Context, q db.Querier, active *journal.Run) (*Held, error) {
+	if active == nil || active.State != journal.Interrupted {
+		return nil, nil
+	}
+	call, err := HeldCall(ctx, q, *active)
+	if err != nil || call == nil {
+		return nil, err
+	}
+	args, err := progress.ShortArgs(json.RawMessage(call.ArgsJSON))
+	if err != nil {
+		return nil, err
+	}
+	return &Held{RunID: active.ID, ToolUseID: call.ToolUseID, Tool: call.Name, Args: args}, nil
 }
 
 func View(ctx context.Context, q db.Querier, threadID int64) (*ThreadView, error) {
@@ -571,6 +594,9 @@ func View(ctx context.Context, q db.Querier, threadID int64) (*ThreadView, error
 		v.LastOperatorSeq = &last.Seq
 	}
 	if v.Question, err = PendingQuestion(ctx, q, threadID); err != nil {
+		return nil, err
+	}
+	if v.Held, err = heldOf(ctx, q, v.Active); err != nil {
 		return nil, err
 	}
 	if thread.BranchedFromThreadID != nil && *thread.BranchedFromThreadID != 0 {

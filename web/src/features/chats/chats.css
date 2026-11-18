@@ -128,6 +128,14 @@
     font-size: var(--t-xs);
   }
 
+  .held__call {
+    display: block;
+    margin-block-end: var(--s-2);
+    font-family: var(--font-mono);
+    font-size: var(--t-sm);
+    overflow-wrap: anywhere;
+  }
+
   .tools {
     display: grid;
     gap: var(--s-2);

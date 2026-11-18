@@ -292,10 +292,41 @@ func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now 
 			content = append(content, block)
 		}
 	}
+	if err := loop.CloseAbandoned(ctx, s.DB, threadID, runID, now); err != nil {
+		return fail(err)
+	}
+	if err := s.takeQueued(ctx, threadID, runID, now); err != nil {
+		return fail(err)
+	}
 	if _, err := journal.AppendMessage(ctx, s.DB, threadID, &runID, journal.User, content, now, nil); err != nil {
 		return fail(err)
 	}
 	return runID, nil
+}
+
+func (s *Service) takeQueued(ctx context.Context, threadID, runID int64, now float64) error {
+	queued, err := journal.Queued(ctx, s.DB.Read, threadID)
+	if err != nil || len(queued) == 0 {
+		return err
+	}
+	for _, row := range queued {
+		if err := threads.AddAllowedURLs(ctx, s.DB, threadID, threads.URLsIn(row.Text)); err != nil {
+			return err
+		}
+	}
+	_, err = journal.ConsumeQueued(ctx, s.DB, threadID, runID, now, func(q db.Querier, row journal.QueuedMessage) error {
+		marks, err := references.Marks(row.Files)
+		if err != nil {
+			return err
+		}
+		if err := threads.AddMarks(ctx, q, threadID, now, marks); err != nil {
+			return err
+		}
+		content := append(append([]json.RawMessage{}, row.Files...), actx.TextBlock(row.Text))
+		_, err = journal.AppendMessageTx(ctx, q, threadID, &runID, journal.User, content, now, nil)
+		return err
+	})
+	return err
 }
 
 func (s *Service) knowledge(ctx context.Context, thread *threads.Thread, text string, now float64) (json.RawMessage, error) {
@@ -571,9 +602,14 @@ func (s *Service) DiscardUnused(ctx context.Context, threadID int64) (bool, erro
 }
 
 func NeedsOperator(ctx context.Context, q db.Querier, run journal.Run) (bool, error) {
+	call, err := HeldCall(ctx, q, run)
+	return call != nil, err
+}
+
+func HeldCall(ctx context.Context, q db.Querier, run journal.Run) (*journal.ToolCall, error) {
 	last, pending, err := loop.PendingUses(ctx, q, run.ThreadID)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	for _, use := range pending {
 		var runID int64
@@ -582,20 +618,20 @@ func NeedsOperator(ctx context.Context, q db.Querier, run journal.Run) (bool, er
 		}
 		call, err := journal.GetToolCall(ctx, q, runID, use.ID)
 		if err != nil {
-			return false, err
+			return nil, err
 		}
 		if call != nil && call.ReplayClass == journal.Write && call.State == journal.Started {
-			return true, nil
+			return call, nil
 		}
 	}
-	return false, nil
+	return nil, nil
 }
 
 func (s *Service) claim(ctx context.Context, runID int64) error {
 	if err := ledger.CheckAdmission(ctx); err != nil {
 		return err
 	}
-	ok, err := journal.ClaimResume(ctx, s.DB.Write, runID, journal.NewOwner(), s.now())
+	ok, err := journal.ClaimOperatorResume(ctx, s.DB.Write, runID, journal.NewOwner(), s.now())
 	if err != nil {
 		return err
 	}
