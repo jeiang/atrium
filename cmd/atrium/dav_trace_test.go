@@ -79,7 +79,7 @@ func TestConnectionTraceShowsEachDAVExchangeWithoutSecretsOrSaving(t *testing.T)
 		"< Www-Authenticate: X-MobileMe-AuthToken realm=\"Newcastle\", Basic realm=\"Newcastle\"\n",
 		"result: carddav ok 1 collection\nsaved: nothing, the connection keeps its earlier state; run atrium connections test icloud/icloud to record a result\n",
 	)
-	traceMatch(t, "carddav", card.stdout, `user: <user:[a-p]{6}>, from the mail account login; the same as the mail login: yes\n`)
+	traceMatch(t, "carddav", card.stdout, `user: <user:[a-p]{6}>, from the icloud_apple_id setting; the same as the mail login: yes\n`)
 	traceMatch(t, "carddav", card.stdout, `< time: [0-9]+ ms\n`)
 	traceMatch(t, "carddav", card.stdout, `account <n:[a-p]{6}> for <user:[a-p]{6}>`)
 	principal := traceMatch(t, "carddav", card.stdout, `<D:href>/<n:([a-p]{6})>/principal/</D:href>`)

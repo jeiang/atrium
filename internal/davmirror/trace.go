@@ -61,18 +61,19 @@ func traceICloud(ctx context.Context, lease *connections.Lease, req connections.
 	}
 	t.key = []byte(session.password)
 	t.password = regexp.MustCompile(regexp.QuoteMeta(session.password))
-	for _, secret := range []string{session.user, session.login} {
+	user, source := session.user(req.Capability)
+	for _, secret := range []string{user, session.account.Login} {
 		if secret = strings.TrimSpace(secret); secret != "" {
 			t.secrets = append(t.secrets, regexp.MustCompile(`(?i)`+regexp.QuoteMeta(secret)))
 		}
 	}
 	_, endpoint, _ := session.kind(req.Capability)
 	same := "no"
-	if strings.EqualFold(session.user, session.login) {
+	if strings.EqualFold(user, session.account.Login) {
 		same = "yes"
 	}
 	_, _ = fmt.Fprintf(t.out, "capability: %s\nendpoint: %s\nuser: %s, from %s; the same as the mail login: %s\n",
-		req.Capability, t.maskURL(endpoint), t.mask(session.user), session.source, same)
+		req.Capability, t.maskURL(endpoint), t.mask(user), source, same)
 	result, _ := session.check(ctx, req.Capability, "", 1)
 	t.repeat(ctx, min(req.Repeat, traceRepeatMost))
 	return result, nil

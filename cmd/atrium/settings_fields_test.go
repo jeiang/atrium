@@ -35,6 +35,7 @@ func TestSettingsFieldsSaveFromTheirTabs(t *testing.T) {
 	cases := []settingsFieldCase{
 		{"calendar_account", "home"},
 		{"icloud_apple_id", "operator@icloud.invalid"},
+		{"icloud_contacts_apple_id", "contacts@icloud.invalid"},
 		{"icloud_calendar", "Home"},
 		{"default_event_minutes", "30"},
 		{"work_hours", "08:00-18:00"},
