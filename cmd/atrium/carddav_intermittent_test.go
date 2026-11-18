@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -257,5 +258,67 @@ func TestDAVRefusalBacksOffAcrossARestartAndASuccessResetsIt(t *testing.T) {
 	sync()
 	if _, _, hold := storedCardDAV(t, dir); hold.Refusals != 1 || !near(hold.Until, time.Now().Add(5*time.Hour)) {
 		t.Errorf("a refusal after a success with Retry-After 5 hours stored %+v, want 1 refusal and 5 hours", hold)
+	}
+}
+
+func TestADAVRefusalHoldSurvivesTheHostDroppingAndDeclaringTheConnectionAgain(t *testing.T) {
+	dir, dav := partitionedICloud(t)
+	base, logs, _ := startServeWith(t, dir, true)
+	token := localAPIToken(t, "api")
+	site := &apiSite{t: t, base: base}
+	sync := func() apiReply { return site.do(http.MethodPost, "/api/v1/contacts/sync", token, nil) }
+	if state, _ := capabilityResult(testICloudConnection(t), davmirror.CapabilityCardDAV); state != "ok" {
+		t.Fatalf("carddav before the refusal = %s", state)
+	}
+	dav.set(func(p *partitionedDAV) { p.partitionRefuses = true })
+	sync()
+	_, reason, hold := storedCardDAV(t, dir)
+	if hold.Refusals != 1 {
+		t.Fatalf("after the refusal %q %+v, want one refusal held", reason, hold)
+	}
+	for _, want := range []string{"dav request failed", "dav requests paused after a refusal"} {
+		line := ""
+		for l := range strings.SplitSeq(logs.String(), "\n") {
+			if strings.Contains(l, want) {
+				line = l
+			}
+		}
+		if !strings.Contains(line, "INTEGRATION=icloud/icloud") || !strings.Contains(line, "CAPABILITY=carddav") {
+			t.Errorf("the %q log line %q does not name the connection and the capability", want, line)
+		}
+	}
+
+	host := filepath.Join(dir, "host.toml")
+	declared, err := os.ReadFile(host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cut := strings.Index(string(declared), "\n[connections.\"icloud/icloud\"]")
+	if cut < 0 {
+		t.Fatalf("the host file declares no icloud connection:\n%s", declared)
+	}
+	if err := os.WriteFile(host, declared[:cut], 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runApp(t, "connections", "list")
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	var state, rowReason string
+	if err := d.Read.QueryRow("SELECT state, reason FROM connections WHERE id = 'icloud/icloud'").Scan(&state, &rowReason); err != nil {
+		t.Fatal(err)
+	}
+	if state != "disabled" || rowReason != "removed from host configuration" {
+		t.Fatalf("the dropped connection is %s %q, want disabled as removed from the host", state, rowReason)
+	}
+	if err := os.WriteFile(host, declared, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dav.drain()
+	runApp(t, "connections", "check")
+	sync()
+	if got := dav.drain(); len(got) != 0 {
+		t.Errorf("declaring the held connection again sent %q", got)
+	}
+	if after, afterReason, afterHold := storedCardDAV(t, dir); after != "failing" || afterHold != hold || afterReason != reason {
+		t.Errorf("declaring the held connection again stored %s %q %+v, want the held %q %+v", after, afterReason, afterHold, reason, hold)
 	}
 }

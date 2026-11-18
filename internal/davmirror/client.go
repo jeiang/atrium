@@ -223,6 +223,8 @@ type Client struct {
 	retries    int
 	retryCap   int
 	credential string
+	connection connections.ID
+	capability string
 }
 
 func (c *Client) reset() {
@@ -316,7 +318,7 @@ func (c *Client) do(ctx context.Context, step, method string, target *url.URL, d
 		}
 		wait := jittered(transientWait)
 		c.retries++
-		log.Warn("dav request refused without a challenge after the password was accepted; retrying", "step", step, "method", method, "host", status.Host, "attempt", c.retries, "wait", wait.Round(time.Millisecond).String())
+		log.Warn("dav request refused without a challenge after the password was accepted; retrying", logx.Integration, string(c.connection), logx.Capability, c.capability, "step", step, "method", method, "host", status.Host, "attempt", c.retries, "wait", wait.Round(time.Millisecond).String())
 		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
@@ -338,7 +340,7 @@ func (c *Client) send(ctx context.Context, step, method string, target *url.URL,
 	resp, err := c.http.Do(req)
 	if untrusted, ok := errors.AsType[*UntrustedError](err); ok {
 		untrusted.Step = step
-		log.Warn("dav request refused", "step", step, "host", untrusted.Host)
+		log.Warn("dav request refused", logx.Integration, string(c.connection), logx.Capability, c.capability, "step", step, "host", untrusted.Host)
 		return nil, untrusted
 	}
 	if err != nil {
@@ -352,7 +354,7 @@ func (c *Client) send(ctx context.Context, step, method string, target *url.URL,
 	if resp.StatusCode != http.StatusMultiStatus {
 		status := &StatusError{Method: method, URL: maskedURL(target), Status: resp.StatusCode, Step: step,
 			Host: c.hostClass(target), Challenge: resp.Header.Get("WWW-Authenticate") != "", RetryAfter: connections.RetryAfter(resp.Header.Get("Retry-After"), time.Now()), empty: len(bytes.TrimSpace(raw)) == 0}
-		log.Warn("dav request failed", "step", step, "method", method, "status", resp.StatusCode, "host", status.Host, "challenge", status.Challenge)
+		log.Warn("dav request failed", logx.Integration, string(c.connection), logx.Capability, c.capability, "step", step, "method", method, "status", resp.StatusCode, "host", status.Host, "challenge", status.Challenge)
 		if location := resp.Header.Get("Location"); location != "" {
 			status.location, _ = resolve(target, location)
 		}

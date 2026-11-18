@@ -381,7 +381,8 @@ the host file is disabled with the reason `removed from host configuration`,
 keeps its row and credentials, and is announced once, at the next start of
 `atrium serve` even when a CLI command opened the database first. Declaring it again
 enables it as `untested` with its earlier results cleared, so the next check
-tests it. A host connection the operator disconnected stays disconnected:
+tests it, except that a capability paused after a refusal keeps its pause until
+it ends or the credential changes. A host connection the operator disconnected stays disconnected:
 removing it from the host file or declaring it again does not enable or
 announce it. Connection notices open the Connections settings page,
 `/settings/connections`. A failing or needs-reauth notice ends with
@@ -407,7 +408,8 @@ A built-in connection that atrium creates itself (Open-Meteo, Web fetch, TMDB,
 EZTV, Embedding) follows the apps that need it while it is still
 operator-owned. When every app that needs it is off, it is disabled with the
 reason `its app is off`; when one of those apps is turned on again, it is
-enabled as `untested` with its results cleared and tested on the next pass. A
+enabled as `untested` with its results cleared and tested on the next pass,
+again keeping any refusal pause. A
 connection the operator or the host file created is never written this way.
 While no app that is on needs it, its view shows `idle: "its app is off"` and it
 gets no scheduled test, no state-change notice, and no repair; it keeps its
@@ -420,7 +422,7 @@ and reported.
 `POST /api/v1/connections/{kind}/{name}/disable` (`connections.disable`) turns
 an operator-owned connection off with the reason `turned off by the operator`;
 `.../enable` (`connections.enable`) turns it back on as `untested`, or
-`unconfigured` when it was never configured. Both are operator-only, take no
+`unconfigured` when it was never configured, keeping any refusal pause. Both are operator-only, take no
 body, return the connection view, and succeed without a change when the row is
 already in that state. A host-declared connection, a connection whose kind
 this version does not support, and a built-in connection that is off because

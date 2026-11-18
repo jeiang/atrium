@@ -28,6 +28,7 @@ const (
 	SettingKey   = "SETTING"
 	SettingValue = "VALUE"
 	Integration  = "INTEGRATION"
+	Capability   = "CAPABILITY"
 	TraceID      = "TRACE_ID"
 	SpanID       = "SPAN_ID"
 )

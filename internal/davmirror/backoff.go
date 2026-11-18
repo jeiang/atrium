@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/connections"
+	"github.com/jeiang/atrium/internal/logx"
 )
 
 func retries(h connections.Hold) int {
@@ -27,14 +28,14 @@ func throttled(err error) (*StatusError, bool) {
 	return nil, false
 }
 
-func settle(result connections.Result, err error, prev connections.Hold, tag string, now time.Time) connections.Result {
+func settle(id connections.ID, result connections.Result, err error, prev connections.Hold, tag string, now time.Time) connections.Result {
 	if err == nil {
 		return result
 	}
 	h := prev
 	if status, ok := throttled(err); ok {
 		h = prev.Next(tag, status.RetryAfter, now)
-		log.Warn("dav requests paused after a refusal", "status", status.Status, "step", status.Step, "refusals", h.Refusals, "until", h.Ends())
+		log.Warn("dav requests paused after a refusal", logx.Integration, string(id), logx.Capability, result.Capability, "status", status.Status, "step", status.Step, "refusals", h.Refusals, "until", h.Ends())
 	}
 	if h.Refusals == 0 {
 		return result

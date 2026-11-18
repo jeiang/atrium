@@ -103,7 +103,7 @@ func (s *Store) SyncUnits(ctx context.Context) error {
 				ReasonUnitOff, s.stamp(), v.ID)
 		case !off && !v.Enabled && v.State == Disabled && v.Reason == ReasonUnitOff:
 			res, err = s.d.Write.ExecContext(ctx,
-				"UPDATE connections SET enabled = 1, state = 'untested', reason = '', checked_at = NULL, results_json = '{}', "+
+				"UPDATE connections SET enabled = 1, state = 'untested', reason = '', checked_at = NULL, results_json = "+keptHolds+", "+
 					"revision = revision + 1, updated_at = ? WHERE id = ? AND enabled = 0 AND state = 'disabled' AND reason = ? AND config_source = 'operator'",
 				s.stamp(), v.ID, ReasonUnitOff)
 		default:
@@ -158,7 +158,7 @@ func (s *Store) SetEnabled(ctx context.Context, id ID, enabled bool, commits ...
 		if enabled {
 			res, err = tx.ExecContext(ctx,
 				"UPDATE connections SET enabled = 1, state = CASE WHEN state = 'unconfigured' THEN 'unconfigured' ELSE 'untested' END, reason = '', "+
-					"checked_at = NULL, results_json = '{}', revision = revision + 1, updated_at = ? WHERE id = ? AND enabled = 0",
+					"checked_at = NULL, results_json = "+keptHolds+", revision = revision + 1, updated_at = ? WHERE id = ? AND enabled = 0",
 				s.stamp(), id)
 		} else {
 			res, err = tx.ExecContext(ctx,

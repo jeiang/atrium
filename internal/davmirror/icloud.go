@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -155,6 +156,7 @@ func DAVClient(ctx context.Context, login Login, endpoint, capability string) (*
 		return nil, err
 	}
 	client.cache, client.credential = cacheKey(capability, endpoint, creds.AppleID, creds.Password), connections.CredentialTag(creds.Password)
+	client.connection, client.capability = ICloudID(login.Account), capability
 	return client, nil
 }
 
@@ -188,7 +190,7 @@ func mirror(ctx context.Context, login Login, endpoint, dir string, k Kind, capa
 			prev = connections.HeldBy(stored, client.credential)
 		}
 		if prev.Active(time.Now()) {
-			log.Info("dav sync skipped while backing off", "capability", capability, "until", prev.Ends())
+			log.Info("dav sync skipped while backing off", logx.Integration, string(login.DAV.ID()), logx.Capability, capability, "until", prev.Ends())
 			return Stats{}, prev.Skipped(login.DAV.ID(), capability)
 		}
 	}
@@ -198,11 +200,11 @@ func mirror(ctx context.Context, login Login, endpoint, dir string, k Kind, capa
 	collections, err := client.Fetch(ctx, k)
 	syncing.Delete(client.cache)
 	if result, ok := outcome(capability, err); ok && ctx.Err() == nil {
-		result = settle(result, err, prev, client.credential, time.Now())
+		result = settle(client.connection, result, err, prev, client.credential, time.Now())
 		rememberSync(client.cache, result)
 		if login.DAV != nil {
 			if serr := login.DAV.Settle(ctx, result); serr != nil {
-				log.Warn("recording the dav sync outcome failed", "capability", capability, "error", serr.Error())
+				log.Warn("recording the dav sync outcome failed", logx.Integration, string(login.DAV.ID()), logx.Capability, capability, "error", serr.Error())
 			}
 		}
 	}
@@ -349,7 +351,7 @@ func checkICloud(ctx context.Context, lease *connections.Lease, caps []connectio
 			discoveries.Delete(key)
 		}
 		result, err := session.check(ctx, cap.Name, key, retries(prev))
-		result = settle(result, err, prev, connections.CredentialTag(session.password), time.Now())
+		result = settle(session.id, result, err, prev, connections.CredentialTag(session.password), time.Now())
 		if !reuse && prev.Active(now) {
 			result.Reason = "tested at the operator's request during a backoff that was to end " + prev.Ends() + ": " + result.Reason
 		}
@@ -369,6 +371,7 @@ func resultList(r *connections.Result) []connections.Result {
 }
 
 type icloudSession struct {
+	id        connections.ID
 	http      *http.Client
 	user      string
 	source    string
@@ -389,7 +392,7 @@ func openICloud(ctx context.Context, lease *connections.Lease, wrap func(http.Ro
 	}
 	var cfg map[string]string
 	_ = json.Unmarshal(lease.Config(), &cfg)
-	s := icloudSession{user: strings.TrimSpace(cfg["apple_id"]), source: "the connection's apple_id", login: spec.Login, password: password, endpoints: EndpointsFrom(config.OS)}
+	s := icloudSession{id: lease.ID(), user: strings.TrimSpace(cfg["apple_id"]), source: "the connection's apple_id", login: spec.Login, password: password, endpoints: EndpointsFrom(config.OS)}
 	if s.user == "" {
 		s.user, s.source = spec.Login, "the mail account login"
 	}
@@ -431,6 +434,7 @@ func (s icloudSession) check(ctx context.Context, capability, cache string, retr
 		return connections.Result{Capability: capability, State: connections.Failing, Reason: err.Error()}, nil
 	}
 	client.cache, client.verify, client.retryCap = cache, true, retries
+	client.connection, client.capability = s.id, capability
 	collections, err := client.Collections(ctx, kind)
 	if err != nil {
 		result, ok := failure(capability, err)
