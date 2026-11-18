@@ -3,15 +3,51 @@ package application
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 )
+
+const MessageUnsendName application.Name = "assistant.message.unsend"
+
+type UnsendInput struct {
+	ThreadID int64
+	QueuedID int64
+}
+
+type Unsent struct {
+	ThreadID int64             `json:"thread_id"`
+	ID       int64             `json:"id"`
+	Text     string            `json:"text"`
+	Files    []json.RawMessage `json:"files"`
+}
+
+func DescribeMessageUnsend() application.Definition {
+	return application.Describe[UnsendInput, Unsent](MessageUnsendName, application.Command,
+		[]application.Authority{application.Operator}, application.NoEffect, true)
+}
+
+func (s *Service) MessageUnsend(ctx context.Context, in UnsendInput) (application.Change[Unsent], error) {
+	m, err := journal.Unsend(ctx, s.db, in.ThreadID, in.QueuedID)
+	switch {
+	case errors.Is(err, journal.ErrUnknownQueued):
+		err = notFound("No such queued message in this thread.")
+	case errors.Is(err, journal.ErrQueuedConsumed):
+		err = &application.Error{Code: application.Conflict, Message: "The run already took this message.", Cause: err}
+	}
+	if err != nil {
+		return application.Change[Unsent]{}, s.reject(ctx, MessageUnsendName, target("thread", in.ThreadID), classify(err))
+	}
+	auditID, err := s.audit(ctx, nil, MessageUnsendName, target("thread", in.ThreadID), state.OK)
+	return application.Change[Unsent]{Data: Unsent{ThreadID: in.ThreadID, ID: m.ID, Text: m.Text, Files: m.Files}, AuditID: auditID}, err
+}
 
 type SendInput struct {
 	ThreadID   int64
@@ -21,6 +57,7 @@ type SendInput struct {
 	ToolChoice string
 	Operator   bool
 	Wait       bool
+	Now        bool
 }
 
 type Sent struct {
@@ -47,9 +84,15 @@ func (s *Service) MessageSend(ctx context.Context, in SendInput) (application.Ch
 		}
 		attached = append(attached, refs...)
 		if !in.Wait {
-			id, queued, err := journal.QueueMessage(ctx, s.db, thread.ID, text, s.now(), attached)
+			id, queued, err := journal.QueueMessage(ctx, s.db, thread.ID, text, s.now(), attached, in.Now)
 			if err != nil || queued {
 				return Sent{QueuedID: id}, err
+			}
+			if in.Now {
+				runID, taken, err := s.runs().TakeParked(ctx, thread.ID, text, attached)
+				if err != nil || taken {
+					return Sent{RunID: runID}, err
+				}
 			}
 		}
 		kind := thread.Kind

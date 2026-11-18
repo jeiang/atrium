@@ -29,6 +29,7 @@ type notifyPush struct {
 	status   int
 	drop     bool
 	block    bool
+	hold     chan struct{}
 	received int
 	bodies   [][]byte
 	arrived  chan struct{}
@@ -42,11 +43,18 @@ func newNotifyPush(t *testing.T) *notifyPush {
 		p.mu.Lock()
 		p.received++
 		p.bodies = append(p.bodies, body)
-		status, drop, block := p.status, p.drop, p.block
+		status, drop, block, hold := p.status, p.drop, p.block, p.hold
 		p.mu.Unlock()
 		select {
 		case p.arrived <- struct{}{}:
 		default:
+		}
+		if hold != nil {
+			select {
+			case <-hold:
+			case <-r.Context().Done():
+				return
+			}
 		}
 		if block {
 			<-r.Context().Done()
@@ -70,6 +78,15 @@ func (p *notifyPush) answer(status int, drop, block bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.status, p.drop, p.block = status, drop, block
+}
+
+func (p *notifyPush) holdUntil() func() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	hold := make(chan struct{})
+	p.hold = hold
+	var once sync.Once
+	return func() { once.Do(func() { close(hold) }) }
 }
 
 func (p *notifyPush) count() int {

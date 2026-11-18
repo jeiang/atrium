@@ -357,6 +357,7 @@
       "operations": [
         "assistant.message.edit",
         "assistant.message.send",
+        "assistant.message.unsend",
         "assistant.reply.regenerate",
         "assistant.run.answer",
         "assistant.run.detail",
@@ -374,8 +375,8 @@
         "assistant.thread.transcript",
         "assistant.thread.work"
       ],
-      "required": 18,
-      "bound": 18
+      "required": 19,
+      "bound": 19
     },
     {
       "area": "usage",
@@ -429,7 +430,7 @@
       "reached_via": "review.approve"
     }
   ],
-  "total_required": 256,
-  "total_bound": 256,
+  "total_required": 257,
+  "total_bound": 257,
   "total_approval_reached": 10
 }

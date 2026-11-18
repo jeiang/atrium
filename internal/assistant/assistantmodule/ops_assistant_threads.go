@@ -12,7 +12,7 @@ func threadOperations() ([]application.Definition, []application.Binding) {
 	return []application.Definition{
 			asstapp.DescribeThreadList(), asstapp.DescribeThreadTranscript(), asstapp.DescribeThreadWork(), asstapp.DescribeThreadHistory(),
 			asstapp.DescribeRunEvents(), asstapp.DescribeRunDetail(), asstapp.DescribeHome(), asstapp.DescribeAbout(), asstapp.DescribeTodayEnsure(),
-			asstapp.DescribeThreadStart(), asstapp.DescribeMessageSend(), asstapp.DescribeMessageEdit(),
+			asstapp.DescribeThreadStart(), asstapp.DescribeMessageSend(), asstapp.DescribeMessageUnsend(), asstapp.DescribeMessageEdit(),
 			asstapp.DescribeReplyRegenerate(), asstapp.DescribeThreadBranch(), asstapp.DescribeThreadDelete(), asstapp.DescribeThreadPin(),
 			asstapp.DescribeThreadArchive(), asstapp.DescribeThreadProject(), asstapp.DescribeThreadOptions(),
 			asstapp.DescribeRunStop(), asstapp.DescribeRunResume(), asstapp.DescribeRunAnswer(), asstapp.DescribeStreamRetention(),

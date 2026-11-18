@@ -866,6 +866,22 @@ queued when a run stops or fails are sent with your next message, ahead of
 it; the chat labels them that way. Tool calls such a run left unfinished are
 not run again: the assistant is told whether each one had started.
 
+While a chat run works, the composer offers Queue and Send now. Queue keeps
+the message until the run reaches its next step; running tool calls finish
+first. Send now asks the same run to take it at once: a running tool call
+that only reads is cancelled, and the assistant gets an error for it that
+says it was interrupted by you and names the call; a call that writes is
+never cut off, it finishes and its real result is kept. Calls the assistant
+had planned but not started do not run and get the same note. Then the run
+continues with your message as the next turn. When the model is still
+writing, the message joins at the next step. A run waiting for your answer
+to a question takes the message as the answer; a run waiting on a
+permission request takes it in place of a decision: the request is closed
+as dismissed, the held call does not run, and the run continues with your
+message. Each queued message has Unsend until a run takes it: it is
+withdrawn and its text returns to the composer. Once a run took it, Unsend
+says so and nothing changes.
+
 ## Assistant and daily work
 
 Home is `/chat`, with Needs you, the agenda, and recent activity in the initial
